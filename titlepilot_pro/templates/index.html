@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>G.C.G analysis — Viral Title Intelligence</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="app">
+  <nav class="sidebar">
+    <div class="logo">
+      <span class="logo-icon">🎯</span>
+      <span class="logo-text">G.C.G<span class="pro">analysis</span></span>
+    </div>
+    <div class="nav-items">
+      <button class="nav-btn active" data-page="analyzer" onclick="showPage('analyzer')">
+        <span>📊</span> Title Analyzer
+      </button>
+      <button class="nav-btn" data-page="generator" onclick="showPage('generator')">
+        <span>⚡</span> AI Generator
+      </button>
+      <button class="nav-btn" data-page="subniche" onclick="showPage('subniche')">
+        <span>🔥</span> Subniche Finder
+      </button>
+      <button class="nav-btn" data-page="trends" onclick="showPage('trends')">
+        <span>📈</span> Trend Scanner
+      </button>
+      <button class="nav-btn" data-page="strategy" onclick="showPage('strategy')">
+        <span>🏆</span> Channel Strategy
+      </button>
+      <button class="nav-btn" data-page="batch" onclick="showPage('batch')">
+        <span>📋</span> Batch Analysis
+      </button>
+      <button class="nav-btn" data-page="channels" onclick="showPage('channels')">
+        <span>📺</span> My Channels
+      </button>
+      <button class="nav-btn" data-page="youtube" onclick="showPage('youtube')">
+        <span>🔍</span> YouTube Scanner
+      </button>
+    </div>
+    <div class="sidebar-footer">
+      <div class="ai-badge">🤖 Gemini Pro AI</div>
+      <div class="version">v3.0 - AI Advanced Market Research</div>
+    </div>
+  </nav>
+
+  <main class="content">
+    <!-- ANALYZER PAGE -->
+    <div class="page active" id="page-analyzer">
+      <div class="page-header">
+        <h1>📊 Title Analyzer</h1>
+        <p>Analyze any YouTube title for viral potential with AI deep analysis</p>
+      </div>
+      <div class="input-group">
+        <input type="text" id="analyze-input" placeholder="Paste a YouTube title here..." maxlength="150">
+        <button class="btn-primary" onclick="analyzeTitle()">🔍 Analyze</button>
+        <button class="btn-secondary" onclick="deepAnalyze()">🧠 AI Deep Analysis</button>
+      </div>
+      <div id="analyze-result" class="result-area"></div>
+    </div>
+
+    <!-- GENERATOR PAGE -->
+    <div class="page" id="page-generator">
+      <div class="page-header">
+        <h1>⚡ AI Title Generator</h1>
+        <p>Generate 15 viral title variants using Gemini AI</p>
+      </div>
+      <div class="input-row">
+        <input type="text" id="gen-topic" placeholder="Topic (e.g., Dangerous Volcanoes)">
+        <select id="gen-lang">
+          <option>English</option><option>Portuguese</option><option>Spanish</option>
+        </select>
+      </div>
+      <input type="text" id="gen-niche" placeholder="(Optional) Niche context..." style="width:100%;margin-bottom:12px">
+      <button class="btn-primary btn-full" onclick="generateTitles()">⚡ GENERATE VIRAL TITLES</button>
+      <div id="gen-result" class="result-area"></div>
+    </div>
+
+    <!-- SUBNICHE PAGE -->
+    <div class="page" id="page-subniche">
+      <div class="page-header">
+        <h1>🔥 Subniche Finder</h1>
+        <p>Discover high-demand, low-competition subniches with AI</p>
+      </div>
+      <div class="input-row">
+        <input type="text" id="sub-theme" placeholder="Theme (e.g., Ocean, History, Health) or leave empty for all">
+        <select id="sub-lang"><option>English</option><option>Portuguese</option><option>Spanish</option></select>
+        <button class="btn-primary" onclick="findSubniches()">🔍 Find Subniches</button>
+      </div>
+      <div id="sub-result" class="result-area"></div>
+    </div>
+
+    <!-- TRENDS PAGE -->
+    <div class="page" id="page-trends">
+      <div class="page-header">
+        <h1>📈 Trend Scanner</h1>
+        <p>Scan YouTube trends, emerging niches, and viral mechanics</p>
+      </div>
+      <div class="input-row">
+        <select id="trend-cat">
+          <option value="all">All Categories</option>
+          <option value="documentary">Documentaries</option>
+          <option value="science">Science</option>
+          <option value="history">History</option>
+          <option value="nature">Nature</option>
+          <option value="health">Health</option>
+          <option value="technology">Technology</option>
+          <option value="true crime">True Crime</option>
+        </select>
+        <select id="trend-lang"><option>English</option><option>Portuguese</option><option>Spanish</option></select>
+        <button class="btn-primary" onclick="scanTrends()">📈 Scan Trends</button>
+      </div>
+      <div id="trend-result" class="result-area"></div>
+    </div>
+
+    <!-- STRATEGY PAGE -->
+    <div class="page" id="page-strategy">
+      <div class="page-header">
+        <h1>🏆 Channel Strategy</h1>
+        <p>Get a complete AI-powered strategy for your channel</p>
+      </div>
+      <input type="text" id="strat-type" placeholder="Channel type (e.g., Ocean Documentary, Health Tips)" style="width:100%;margin-bottom:8px">
+      <input type="text" id="strat-audience" placeholder="Target audience (e.g., 25-45 males interested in nature)" style="width:100%;margin-bottom:8px">
+      <select id="strat-lang" style="margin-bottom:8px"><option>English</option><option>Portuguese</option><option>Spanish</option></select>
+      <textarea id="strat-titles" placeholder="Paste your current video titles (one per line) for analysis..." rows="5" style="width:100%;margin-bottom:12px"></textarea>
+      <button class="btn-primary btn-full" onclick="getStrategy()">🏆 GENERATE STRATEGY</button>
+      <div id="strat-result" class="result-area"></div>
+    </div>
+
+    <!-- BATCH PAGE -->
+    <div class="page" id="page-batch">
+      <div class="page-header">
+        <h1>📋 Batch Title Analysis</h1>
+        <p>Analyze multiple titles at once — find patterns and top performers</p>
+      </div>
+      <textarea id="batch-input" placeholder="Paste titles here (one per line)..." rows="8" style="width:100%"></textarea>
+      <button class="btn-primary btn-full" onclick="batchAnalyze()" style="margin-top:12px">📊 ANALYZE ALL</button>
+      <div id="batch-result" class="result-area"></div>
+    </div>
+
+    <!-- MY CHANNELS PAGE -->
+    <div class="page" id="page-channels">
+      <div class="page-header">
+        <h1>📺 My Channels</h1>
+        <p>Save channels, track DNA, discover NEW subniches with AI-powered analysis</p>
+      </div>
+      
+      <!-- ADD CHANNEL -->
+      <div class="section" style="margin-bottom:16px">
+        <h3>➕ Add / Update Channel</h3>
+        <div class="input-row">
+          <input type="text" id="ch-name" placeholder="Channel name">
+          <input type="text" id="ch-url" placeholder="YouTube channel URL or @handle">
+        </div>
+        <div class="input-row">
+          <input type="text" id="ch-niche" placeholder="Niche (e.g., Construction, Ocean, History)">
+          <input type="text" id="ch-micro" placeholder="Micro-niche (e.g., Impossible Bridges)">
+        </div>
+        <div class="input-row">
+          <input type="text" id="ch-subniches" placeholder="Subniches you're using (comma-separated)">
+          <input type="text" id="ch-keywords" placeholder="Keywords (comma-separated)">
+          <select id="ch-lang"><option>English</option><option>Portuguese</option><option>Spanish</option></select>
+        </div>
+        <textarea id="ch-titles" placeholder="Your video titles (one per line) — for DNA analysis" rows="3" style="width:100%;margin:6px 0"></textarea>
+        <textarea id="ch-structures" placeholder="📐 Reference title structures from successful channels (one per line)&#10;Example: Why Nobody Lives In [place]&#10;Example: The Most [adjective] [topic] On Earth" rows="3" style="width:100%;margin:6px 0"></textarea>
+        <textarea id="ch-trends" placeholder="🔥 Trending themes you've identified (one per line)&#10;Example: Construction, Underground bunkers, Forbidden places" rows="2" style="width:100%;margin:6px 0"></textarea>
+        <button class="btn-primary" onclick="addChannel()">➕ Save Channel</button>
+      </div>
+
+      <!-- PERFORMANCE METRICS -->
+      <div class="section" style="margin-bottom:16px">
+        <h3>📊 Add Performance Metrics (weekly update)</h3>
+        <div class="input-row">
+          <select id="metric-channel" style="flex:2"><option value="">Select channel...</option></select>
+          <input type="text" id="metric-title" placeholder="Video title" style="flex:3">
+        </div>
+        <div class="input-row">
+          <input type="number" id="metric-views" placeholder="Views">
+          <input type="number" id="metric-ctr" placeholder="CTR %" step="0.1">
+          <input type="number" id="metric-likes" placeholder="Likes">
+          <input type="number" id="metric-comments" placeholder="Comments">
+          <button class="btn-primary" onclick="addMetrics()" style="white-space:nowrap">📊 Save</button>
+        </div>
+      </div>
+
+      <!-- CHANNELS LIST -->
+      <div id="channels-list"></div>
+      <div id="channel-analysis" class="result-area"></div>
+    </div>
+
+    <!-- YOUTUBE SCANNER PAGE -->
+    <div class="page" id="page-youtube">
+      <div class="page-header">
+        <h1>🔍 YouTube Scanner</h1>
+        <p>Real-time channel analysis, niche research, and trending videos with live VPH metrics</p>
+      </div>
+
+      <!-- YT API KEY -->
+      <div class="section" style="margin-bottom:12px;padding:12px;background:#0d1117;border-radius:8px;border:1px solid #30363d">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:11px;color:#888">🔑 YouTube API Key:</span>
+          <input type="password" id="yt-api-key" placeholder="Paste YouTube Data API key..." style="flex:1;font-size:12px">
+          <button class="btn-secondary" onclick="saveYtKey()" style="padding:6px 14px;font-size:11px">💾 Save</button>
+          <span id="yt-key-status" style="font-size:11px;color:#4ecca3"></span>
+        </div>
+      </div>
+
+      <!-- TAB BAR -->
+      <div style="display:flex;gap:4px;margin-bottom:16px">
+        <button class="btn-primary yt-tab active" data-yttab="yt-channel" onclick="showYtTab('yt-channel')">📊 Channel Analyzer</button>
+        <button class="btn-secondary yt-tab" data-yttab="yt-niche" onclick="showYtTab('yt-niche')">🎯 Niche Deep Dive</button>
+        <button class="btn-secondary yt-tab" data-yttab="yt-trending" onclick="showYtTab('yt-trending')">🔥 Trending Now</button>
+        <button class="btn-secondary yt-tab" data-yttab="yt-compare" onclick="showYtTab('yt-compare')">⚔️ Compare</button>
+      </div>
+
+      <!-- CHANNEL ANALYZER -->
+      <div class="yt-panel active" id="yt-channel">
+        <div class="input-row">
+          <input type="text" id="yt-ch-input" placeholder="Channel @handle, URL, or ID (e.g., @MrBeast)">
+          <button class="btn-primary" onclick="scanChannel()">🔍 Scan Channel</button>
+        </div>
+        <div id="yt-ch-result" class="result-area"></div>
+      </div>
+
+      <!-- NICHE DEEP DIVE -->
+      <div class="yt-panel" id="yt-niche">
+        <div class="input-row">
+          <input type="text" id="yt-niche-q" placeholder="Niche query (e.g., 'dangerous roads documentary')">
+          <select id="yt-niche-region">
+            <option value="US">🇺🇸 US</option><option value="BR">🇧🇷 BR</option>
+            <option value="GB">🇬🇧 UK</option><option value="ES">🇪🇸 ES</option>
+            <option value="MX">🇲🇽 MX</option><option value="DE">🇩🇪 DE</option>
+            <option value="FR">🇫🇷 FR</option><option value="IN">🇮🇳 IN</option>
+          </select>
+          <button class="btn-primary" onclick="scanNiche()">🎯 Analyze Niche</button>
+        </div>
+        <div id="yt-niche-result" class="result-area"></div>
+      </div>
+
+      <!-- TRENDING NOW -->
+      <div class="yt-panel" id="yt-trending">
+        <div class="input-row">
+          <input type="text" id="yt-trend-q" placeholder="Search query (leave empty for general trending)">
+          <select id="yt-trend-region">
+            <option value="US">🇺🇸 US</option><option value="BR">🇧🇷 BR</option>
+            <option value="GB">🇬🇧 UK</option><option value="ES">🇪🇸 ES</option>
+            <option value="MX">🇲🇽 MX</option>
+          </select>
+          <select id="yt-trend-cat">
+            <option value="">All Categories</option>
+            <option value="24">Entertainment</option>
+            <option value="27">Education</option>
+            <option value="28">Science & Tech</option>
+            <option value="25">News</option>
+            <option value="22">People & Blogs</option>
+            <option value="10">Music</option>
+            <option value="20">Gaming</option>
+          </select>
+          <button class="btn-primary" onclick="scanTrending()">🔥 Scan</button>
+        </div>
+        <div id="yt-trend-result" class="result-area"></div>
+      </div>
+
+      <!-- COMPARE CHANNELS -->
+      <div class="yt-panel" id="yt-compare">
+        <textarea id="yt-compare-input" placeholder="Enter channel @handles or IDs (one per line, max 5)&#10;Example:&#10;@MrBeast&#10;@PewDiePie&#10;@MarkRober" rows="4" style="width:100%;margin-bottom:8px"></textarea>
+        <button class="btn-primary btn-full" onclick="compareChannels()">⚔️ COMPARE CHANNELS</button>
+        <div id="yt-compare-result" class="result-area"></div>
+      </div>
+    </div>
+  </main>
+</div>
+<div class="loading-overlay" id="loading" style="display:none">
+  <div class="spinner"></div>
+  <p id="loading-text">Analyzing with Gemini AI...</p>
+</div>
+<script src="/static/app.js"></script>
+</body>
+</html>

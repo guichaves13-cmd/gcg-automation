@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AvatarPilot Pro — AI Talking Avatar</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <!-- SIDEBAR -->
+  <nav class="sidebar">
+    <div class="logo">
+      <div class="logo-icon">🎭</div>
+      <div class="logo-text">AvatarPilot<span>Pro</span></div>
+    </div>
+    <div class="nav-items">
+      <button class="nav-btn active" data-page="create" onclick="showPage('create')">🎬 Create Avatar</button>
+      <button class="nav-btn" data-page="voices" onclick="showPage('voices')">🎙️ Voices</button>
+      <button class="nav-btn" data-page="backgrounds" onclick="showPage('backgrounds')">🏞️ Backgrounds</button>
+      <button class="nav-btn" data-page="history" onclick="showPage('history')">📁 History</button>
+      <button class="nav-btn" data-page="settings" onclick="showPage('settings')">⚙️ Settings</button>
+    </div>
+    <div class="sidebar-footer">
+      <div class="model-status" id="model-status">⏳ Checking...</div>
+      <div class="version">v1.0 · RTX 4060</div>
+    </div>
+  </nav>
+
+  <!-- MAIN CONTENT -->
+  <main class="content">
+    <!-- LOADING OVERLAY -->
+    <div class="loading-overlay" id="loading" style="display:none">
+      <div class="loading-spinner"></div>
+      <div class="loading-text" id="loading-text">Processing...</div>
+    </div>
+
+    <!-- CREATE AVATAR PAGE -->
+    <div class="page active" id="page-create">
+      <div class="page-header">
+        <h1>🎬 Create Talking Avatar</h1>
+        <p>Upload a photo, write a script, choose a voice — get a realistic talking video</p>
+      </div>
+
+      <div class="create-grid">
+        <!-- LEFT: Avatar & Script -->
+        <div class="create-left">
+          <!-- Image Upload -->
+          <div class="card">
+            <h3>📸 Avatar Image</h3>
+            <p class="hint">Upload a clear front-facing photo or full body image</p>
+            <div class="upload-zone" id="upload-zone" onclick="document.getElementById('img-input').click()">
+              <input type="file" id="img-input" accept="image/*" hidden onchange="previewImage(this)">
+              <div class="upload-placeholder" id="upload-placeholder">
+                <div class="upload-icon">📷</div>
+                <div>Click to upload photo</div>
+                <div class="upload-hint">PNG, JPG — front face or full body</div>
+              </div>
+              <img id="img-preview" class="img-preview" style="display:none">
+            </div>
+            <div class="avatar-options">
+              <label>Mode:</label>
+              <select id="preprocess">
+                <option value="full">Full Frame (body visible)</option>
+                <option value="crop">Crop Face Only</option>
+                <option value="extfull">Extended Full (more body)</option>
+                <option value="extcrop">Extended Crop</option>
+                <option value="resize">Resize</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Script -->
+          <div class="card">
+            <h3>📝 Script</h3>
+            <textarea id="script" rows="6" placeholder="Type what the avatar should say...&#10;&#10;Example: Hello everyone! Welcome to my channel. Today we're going to talk about something incredible that scientists just discovered..."></textarea>
+            <div class="script-info">
+              <span id="char-count">0 chars</span>
+              <span id="word-count">0 words</span>
+              <span id="est-duration">~0s</span>
+            </div>
+          </div>
+
+          <!-- OR Upload Audio -->
+          <div class="card">
+            <h3>🎧 Or Upload Your Own Audio</h3>
+            <input type="file" id="audio-input" accept="audio/*">
+            <p class="hint">MP3, WAV — skip TTS and use your own voice recording</p>
+          </div>
+        </div>
+
+        <!-- RIGHT: Voice & Settings -->
+        <div class="create-right">
+          <!-- Voice Selection -->
+          <div class="card">
+            <h3>🎙️ Voice Engine</h3>
+            <div class="engine-tabs">
+              <button class="engine-tab active" onclick="setEngine('edge-tts',this)">🆓 Edge-TTS</button>
+              <button class="engine-tab" onclick="setEngine('elevenlabs',this)">⭐ ElevenLabs</button>
+            </div>
+
+            <!-- Edge-TTS Options -->
+            <div id="edge-options">
+              <label>Language:</label>
+              <select id="voice-lang" onchange="filterVoices()">
+                <option value="en-US">English (US)</option>
+                <option value="en-GB">English (UK)</option>
+                <option value="pt-BR">Português (BR)</option>
+                <option value="es-ES">Español</option>
+                <option value="fr-FR">Français</option>
+                <option value="de-DE">Deutsch</option>
+                <option value="it-IT">Italiano</option>
+                <option value="ja-JP">日本語</option>
+                <option value="ko-KR">한국어</option>
+                <option value="zh-CN">中文</option>
+                <option value="ar-SA">العربية</option>
+                <option value="hi-IN">हिन्दी</option>
+              </select>
+              <label>Voice:</label>
+              <select id="voice-select">
+                <option value="en-US-GuyNeural">Guy (Male, Professional)</option>
+                <option value="en-US-JennyNeural">Jenny (Female, Friendly)</option>
+                <option value="en-US-AriaNeural">Aria (Female, Expressive)</option>
+                <option value="en-US-DavisNeural">Davis (Male, Deep)</option>
+                <option value="en-US-TonyNeural">Tony (Male, Casual)</option>
+                <option value="pt-BR-AntonioNeural">Antonio (Male, BR)</option>
+                <option value="pt-BR-FranciscaNeural">Francisca (Female, BR)</option>
+              </select>
+            </div>
+
+            <!-- ElevenLabs Options -->
+            <div id="eleven-options" style="display:none">
+              <label>Voice ID:</label>
+              <input type="text" id="eleven-voice-id" placeholder="Paste ElevenLabs voice ID">
+              <p class="hint">Get voice IDs from elevenlabs.io/voices</p>
+            </div>
+
+            <button class="btn-secondary" onclick="previewAudio()" style="margin-top:12px">
+              🔊 Preview Voice
+            </button>
+            <audio id="audio-preview" controls style="width:100%;margin-top:8px;display:none"></audio>
+          </div>
+
+          <!-- Avatar Settings -->
+          <div class="card">
+            <h3>⚙️ Avatar Settings</h3>
+            <div class="setting-row">
+              <label>Expression Intensity:</label>
+              <input type="range" id="expression-scale" min="0.5" max="2.0" step="0.1" value="1.0">
+              <span id="exp-val">1.0</span>
+            </div>
+            <div class="setting-row">
+              <label>Quality Enhancer:</label>
+              <select id="enhancer">
+                <option value="gfpgan">GFPGAN (Recommended)</option>
+                <option value="RestoreFormer">RestoreFormer</option>
+              </select>
+            </div>
+            <div class="setting-row">
+              <label><input type="checkbox" id="still-mode"> Still Mode (less head movement)</label>
+            </div>
+          </div>
+
+          <!-- Background -->
+          <div class="card">
+            <h3>🏞️ Background Scene</h3>
+            <select id="bg-select">
+              <option value="">No background (transparent/original)</option>
+            </select>
+            <p class="hint">Upload backgrounds in the Backgrounds tab</p>
+          </div>
+
+          <!-- GENERATE BUTTON -->
+          <button class="btn-generate" onclick="generateAvatar()">
+            🎬 GENERATE AVATAR VIDEO
+          </button>
+        </div>
+      </div>
+
+      <!-- Result -->
+      <div id="result" class="result-area" style="display:none">
+        <div class="card">
+          <h3>🎬 Your Avatar Video</h3>
+          <video id="result-video" controls style="width:100%;border-radius:12px"></video>
+          <div style="margin-top:12px;text-align:center">
+            <a id="download-link" class="btn-primary" download>⬇️ Download Video</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Progress -->
+      <div id="progress-area" style="display:none">
+        <div class="card">
+          <h3 id="progress-status">⏳ Processing...</h3>
+          <div class="progress-bar">
+            <div class="progress-fill" id="progress-fill" style="width:0%"></div>
+          </div>
+          <div class="progress-text" id="progress-text">Starting...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VOICES PAGE -->
+    <div class="page" id="page-voices">
+      <div class="page-header">
+        <h1>🎙️ Voice Library</h1>
+        <p>Preview and select from 300+ voices in 40+ languages</p>
+      </div>
+      <div class="card">
+        <div style="display:flex;gap:12px;margin-bottom:16px">
+          <select id="voices-filter-lang" onchange="loadVoiceList()" style="flex:1">
+            <option value="">All Languages</option>
+            <option value="en">English</option>
+            <option value="pt">Portuguese</option>
+            <option value="es">Spanish</option>
+            <option value="fr">French</option>
+            <option value="de">German</option>
+          </select>
+          <button class="btn-primary" onclick="loadVoiceList()">🔄 Load Voices</button>
+        </div>
+        <div id="voices-list"></div>
+      </div>
+    </div>
+
+    <!-- BACKGROUNDS PAGE -->
+    <div class="page" id="page-backgrounds">
+      <div class="page-header">
+        <h1>🏞️ Background Scenes</h1>
+        <p>Upload backgrounds for your avatar — offices, studios, rooms, etc.</p>
+      </div>
+      <div class="card">
+        <div class="upload-zone" onclick="document.getElementById('bg-upload-input').click()" style="height:120px">
+          <input type="file" id="bg-upload-input" accept="image/*" hidden onchange="uploadBackground(this)">
+          <div class="upload-placeholder">
+            <div class="upload-icon">🖼️</div>
+            <div>Click to upload background image</div>
+          </div>
+        </div>
+      </div>
+      <div id="bg-gallery" class="bg-gallery"></div>
+    </div>
+
+    <!-- HISTORY PAGE -->
+    <div class="page" id="page-history">
+      <div class="page-header">
+        <h1>📁 Generation History</h1>
+        <p>All your generated avatar videos</p>
+      </div>
+      <div id="history-list"></div>
+    </div>
+
+    <!-- SETTINGS PAGE -->
+    <div class="page" id="page-settings">
+      <div class="page-header">
+        <h1>⚙️ Settings</h1>
+        <p>Configure API keys and model settings</p>
+      </div>
+      <div class="card">
+        <h3>🔑 ElevenLabs API Key</h3>
+        <div style="display:flex;gap:8px">
+          <input type="password" id="eleven-key" placeholder="Paste your ElevenLabs API key" style="flex:1">
+          <button class="btn-primary" onclick="saveElevenKey()">Save</button>
+        </div>
+        <p class="hint">Get your key at elevenlabs.io → Profile → API Key</p>
+      </div>
+      <div class="card">
+        <h3>🧠 Lip Sync Model</h3>
+        <div id="model-info"></div>
+        <button class="btn-primary" onclick="installSadTalker()" style="margin-top:12px">
+          📥 Install SadTalker (Lip Sync Model)
+        </button>
+        <p class="hint">Requires ~4GB download. NVIDIA GPU required.</p>
+      </div>
+    </div>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>G.C.G VideosMAX - Producao Autonoma</title>
+<link rel="stylesheet" href="/static/style.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+<nav class="sidebar">
+  <div class="sidebar-logo"><h1><span>G.C.G</span> <span class="badge">VideosMAX</span></h1></div>
+  <div class="sidebar-section">
+    <button class="nav-btn active" onclick="showPage('dashboard')"><span class="icon">&#x1F4CA;</span>Dashboard</button>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Producao VEO 3</div>
+    <button class="nav-btn" onclick="showPage('veo3')"><span class="icon">&#x26A1;</span>Gerador Veo 3<span class="version live">LIVE</span></button>
+    <button class="nav-btn" onclick="showPage('multiconta')"><span class="icon">&#x1F465;</span>Multi-Conta<span class="version ver">v9.0</span></button>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Automacao Total</div>
+    <button class="nav-btn" onclick="showPage('pipeline')"><span class="icon">&#x1F916;</span>Pipeline IA<span class="version ver">v9.0</span></button>
+    <button class="nav-btn" onclick="showPage('planner')"><span class="icon">&#x1F4CB;</span>Planner<span class="version new">NOVO</span></button>
+    <button class="nav-btn" onclick="showPage('research')"><span class="icon">&#x1F50D;</span>Video Research<span class="version ver">v9.0</span></button>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Ferramentas</div>
+    <button class="nav-btn" onclick="showPage('sync')"><span class="icon">&#x1F504;</span>Sincronizador</button>
+    <button class="nav-btn" onclick="showPage('narrator')"><span class="icon">&#x1F399;</span>Narrador IA</button>
+    <button class="nav-btn" onclick="showPage('gallery')"><span class="icon">&#x1F4C1;</span>Galeria de Midia</button>
+    <button class="nav-btn" onclick="showPage('settings')"><span class="icon">&#x2699;</span>Configuracoes</button>
+    <button class="nav-btn" onclick="showPage('diagnostic')"><span class="icon">&#x1FA7A;</span>Diagnostico IA</button>
+    <button class="nav-btn" onclick="showPage('radar')"><span class="icon">&#x1F4E1;</span>Radar YouTube</button>
+  </div>
+  <div class="sidebar-footer"><div class="lang">PT-BR</div></div>
+</nav>
+
+<div class="main"><div class="main-content">
+
+<!-- DASHBOARD -->
+<div id="page-dashboard" class="page active">
+  <div class="banner">
+    <div class="date" id="dash-date"></div><span class="version-tag">v9.0</span>
+    <h2>Boa tarde, Guilherme <span class="wave">&#x1F44B;</span></h2>
+    <p>Sua fabrica de videos IA - tudo em um so lugar</p>
+  </div>
+  <div class="stats-grid">
+    <div class="stat-card"><div class="stat-icon blue">&#x26A1;</div><div><div class="stat-label">Hoje</div><div class="stat-value" id="stat-today">0</div><div class="stat-label">videos gerados</div></div></div>
+    <div class="stat-card"><div class="stat-icon purple">&#x1F4CA;</div><div><div class="stat-label">Total</div><div class="stat-value" id="stat-total">0</div><div class="stat-label">videos criados</div></div></div>
+    <div class="stat-card"><div class="stat-icon green">&#x1F4CB;</div><div><div class="stat-label">Pipeline</div><div class="stat-value" id="stat-pipeline">0</div><div class="stat-label">itens no planner</div></div></div>
+    <div class="stat-card"><div class="stat-icon orange">&#x1F4BE;</div><div><div class="stat-label">Armazenamento</div><div class="stat-value" id="stat-storage">0 B</div><div class="stat-label">espaco usado</div></div></div>
+  </div>
+  <div class="content-grid">
+    <div class="section-card">
+      <h3>&#x26A1; Acoes Rapidas</h3>
+      <div class="quick-grid">
+        <div class="quick-btn" onclick="showPage('pipeline')"><span class="qi">&#x26A1;</span>Gerar Videos</div>
+        <div class="quick-btn" onclick="showPage('sync')"><span class="qi">&#x1F504;</span>Sincronizar</div>
+        <div class="quick-btn" onclick="showPage('narrator')"><span class="qi">&#x1F399;</span>Narrador IA</div>
+        <div class="quick-btn" onclick="showPage('planner')"><span class="qi">&#x1F4CB;</span>Planner</div>
+        <div class="quick-btn" onclick="showPage('pipeline')"><span class="qi">&#x1F916;</span>Pipeline</div>
+        <div class="quick-btn" onclick="showPage('research')"><span class="qi">&#x1F50D;</span>Research</div>
+      </div>
+    </div>
+    <div class="section-card">
+      <h3>&#x1F4CA; Pipeline Ativo</h3>
+      <div class="pipeline-status" style="margin-bottom:16px">
+        <div class="pipeline-dot"><span class="dot plan"></span>Planejamento <b id="pipe-plan">0</b></div>
+        <div class="pipeline-dot"><span class="dot prod"></span>Producao <b id="pipe-prod">0</b></div>
+        <div class="pipeline-dot"><span class="dot done"></span>Finalizado <b id="pipe-done">0</b></div>
+      </div>
+      <h3>&#x1F551; Atividade Recente</h3>
+      <div id="activity-list"><div class="activity-item"><span class="activity-text" style="color:var(--dim)">Nenhuma atividade ainda</span></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- SYNC -->
+<div id="page-sync" class="page">
+  <h2>&#x1F504; Sincronizador VeoSync Studio</h2>
+  <p style="color:var(--dim)">Motor de sincronizacao autonoma com 5 camadas de validacao IA</p>
+  <div class="section-card" style="margin-top:20px">
+    <h3>1. Upload do Avatar / Video Base</h3>
+    <div id="upload-zone" class="upload-zone" ondrop="handleDrop(event);event.preventDefault()" ondragover="event.preventDefault()" onclick="document.getElementById('file-input').click()">
+      <div style="font-size:48px;margin-bottom:12px">&#x1F4E4;</div>
+      <div>Arraste seu video aqui ou clique para selecionar</div>
+      <div style="font-size:12px;color:var(--dim);margin-top:8px">MP4, MKV, AVI (max 2GB)</div>
+    </div>
+    <input type="file" id="file-input" accept="video/*" style="display:none" onchange="uploadFile(this.files[0])">
+    <div id="upload-progress" style="display:none;margin-top:12px">
+      <div style="display:flex;justify-content:space-between"><span id="upload-name"></span><span id="upload-pct">0%</span></div>
+      <div style="background:var(--card);border-radius:8px;height:6px;margin-top:6px"><div id="upload-bar" style="background:var(--accent);height:100%;border-radius:8px;width:0;transition:width .3s"></div></div>
+    </div>
+    <h4 style="margin-top:16px">&#x1F4C1; Arquivos Carregados</h4>
+    <div id="uploaded-list"><span style="color:var(--dim)">Nenhum arquivo carregado ainda</span></div>
+  </div>
+  <div class="section-card" style="margin-top:16px">
+    <h3>&#x2699; 2. Configuracoes de Processamento</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
+      <div><label>RESOLUCAO</label><select id="sync-res" class="input"><option value="1080p">1080p (Full HD)</option><option value="720p">720p</option><option value="4k">4K</option></select></div>
+      <div><label>B-ROLL CLIPS (QUANTIDADE)</label><input type="number" id="sync-broll" class="input" value="37"></div>
+      <div><label>PIPELINE</label><select id="sync-pipe" class="input">
+        <option value="avatar_auto">Avatar AUTO + (recomendado)</option>
+        <option value="avatar_full_veo">Full Avatar + VEO3</option>
+        <option value="avatar_real">Avatar + Videos/Imagens Reais</option>
+        <option value="narration_real">Narracao + Videos/Imagens Reais</option>
+        <option value="narr_veo">Narracao VEO3 Fullscreen</option>
+      </select></div>
+    </div>
+    <div style="display:flex;gap:16px;margin-top:12px">
+      <label><input type="checkbox" id="sync-subs" checked> &#x1F4DD; Legendas frescas</label>
+      <label><input type="checkbox" id="sync-music"> &#x1F3B5; Musica de fundo</label>
+      <label><input type="checkbox" id="sync-ai" checked> &#x1F916; IA Intelligence</label>
+    </div>
+    <div style="margin-top:12px"><label>NOME DO OUTPUT</label><input type="text" id="sync-outname" class="input" placeholder="final_video.mp4" style="width:100%"></div>
+    <button class="btn btn-primary" style="width:100%;margin-top:16px;padding:14px;font-size:16px" onclick="startSync()">&#x26A1; INICIAR SINCRONIZACAO COM IA</button>
+  </div>
+  <div id="sync-status" style="display:none;margin-top:16px" class="section-card">
+    <h3>&#x1F50D; Monitoramento em Tempo Real</h3>
+    <div id="sync-msg" style="margin:12px 0;font-size:13px;color:var(--accent)">Aguardando...</div>
+    <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span id="sync-phase-label" style="font-size:12px;color:var(--dim)">Inicializando</span><span id="sync-pct" style="font-weight:700">0%</span></div>
+    <div style="background:var(--card);border-radius:8px;height:8px"><div id="sync-bar" style="background:var(--accent);height:100%;border-radius:8px;width:0;transition:width .4s"></div></div>
+
+    <!-- 8-phase AI status list -->
+    <div id="ai-phases" style="margin-top:16px;display:grid;grid-template-columns:1fr 1fr;gap:6px">
+      <div class="ai-phase-row" id="ai-ph-1"><span class="ai-ph-dot" id="dot-1">&#x25CF;</span><span class="ai-ph-name">IA Whisper + Video Intelligence</span></div>
+      <div class="ai-phase-row" id="ai-ph-2"><span class="ai-ph-dot" id="dot-2">&#x25CF;</span><span class="ai-ph-name">IA Validadora — Download B-roll</span></div>
+      <div class="ai-phase-row" id="ai-ph-3"><span class="ai-ph-dot" id="dot-3">&#x25CF;</span><span class="ai-ph-name">IA Gerente Geral — Auditoria</span></div>
+      <div class="ai-phase-row" id="ai-ph-4"><span class="ai-ph-dot" id="dot-4">&#x25CF;</span><span class="ai-ph-name">Timeline Builder</span></div>
+      <div class="ai-phase-row" id="ai-ph-5"><span class="ai-ph-dot" id="dot-5">&#x25CF;</span><span class="ai-ph-name">Processamento de Segmentos</span></div>
+      <div class="ai-phase-row" id="ai-ph-6"><span class="ai-ph-dot" id="dot-6">&#x25CF;</span><span class="ai-ph-name">IA Corretor — Inspecao Final</span></div>
+      <div class="ai-phase-row" id="ai-ph-7"><span class="ai-ph-dot" id="dot-7">&#x25CF;</span><span class="ai-ph-name">Concat + Legendas + SFX</span></div>
+      <div class="ai-phase-row" id="ai-ph-8"><span class="ai-ph-dot" id="dot-8">&#x25CF;</span><span class="ai-ph-name">IA Auditor Final</span></div>
+    </div>
+
+    <!-- AI Stats grid -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px">
+      <div class="mon-stat"><div class="mon-stat-val" id="ms-dl">0</div><div class="mon-stat-lbl">Clips DL</div></div>
+      <div class="mon-stat"><div class="mon-stat-val" id="ms-ok">0</div><div class="mon-stat-lbl">Validados</div></div>
+      <div class="mon-stat"><div class="mon-stat-val" id="ms-rej" style="color:#f59e0b">0</div><div class="mon-stat-lbl">Rejeitados</div></div>
+      <div class="mon-stat"><div class="mon-stat-val" id="ms-seg">0/0</div><div class="mon-stat-lbl">Segmentos</div></div>
+    </div>
+
+    <!-- Live log tail -->
+    <div style="margin-top:14px">
+      <div style="font-size:11px;color:var(--dim);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">Log em tempo real</div>
+      <div id="live-log" style="background:#0d0d1a;border:1px solid rgba(6,182,212,.15);border-radius:8px;padding:10px;font-family:monospace;font-size:11px;max-height:140px;overflow-y:auto;line-height:1.6"></div>
+    </div>
+
+    <!-- Quality report (shown after Auditor Final) -->
+    <div id="quality-report" style="display:none;margin-top:14px;padding:14px;border-radius:10px;border:1px solid rgba(16,185,129,.3);background:rgba(16,185,129,.06)">
+      <div style="font-size:12px;font-weight:700;color:var(--green);margin-bottom:6px">&#x2705; Relatorio de Qualidade — IA Auditor Final</div>
+      <div id="qr-score" style="font-size:28px;font-weight:800;color:var(--green)">--</div>
+      <div id="qr-detail" style="font-size:12px;color:var(--dim);margin-top:4px"></div>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:14px;align-items:center">
+      <span id="sync-elapsed" style="font-size:11px;color:var(--dim)"></span>
+      <button class="btn btn-ghost" style="margin-left:auto;color:var(--red);font-size:12px" onclick="cancelPipeline()">&#x1F6D1; Cancelar</button>
+    </div>
+  </div>
+  <div class="section-card" style="margin-top:16px">
+    <h3>&#x1F916; Gerente Geral IA - Monitor de Performance</h3>
+    <p style="color:var(--dim);font-size:13px">IA de supervisao analisa velocidade de render, uso de CPU e gargalos em tempo real.</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:12px">
+      <div style="background:rgba(6,182,212,.08);padding:12px;border-radius:8px;text-align:center"><div style="font-size:11px;color:var(--dim)">RENDER SPEED</div><div style="font-size:20px;font-weight:700;color:var(--accent)" id="gm-speed">--</div></div>
+      <div style="background:rgba(168,85,247,.08);padding:12px;border-radius:8px;text-align:center"><div style="font-size:11px;color:var(--dim)">CPU LOAD</div><div style="font-size:20px;font-weight:700;color:#a855f7" id="gm-cpu">--</div></div>
+      <div style="background:rgba(16,185,129,.08);padding:12px;border-radius:8px;text-align:center"><div style="font-size:11px;color:var(--dim)">PIPELINES ATIVOS</div><div style="font-size:20px;font-weight:700;color:var(--green)" id="gm-pipes">0/2</div></div>
+    </div>
+    <button class="btn btn-ghost" style="margin-top:12px;width:100%" onclick="fetch('/api/clean',{method:'POST'}).then(()=>toast('Cache limpo!'))">&#x1F5D1; Limpar Cache e Temporarios</button>
+  </div>
+</div>
+
+<!-- PIPELINE IA -->
+<div id="page-pipeline" class="page">
+  <h2>&#x1F916; Pipeline IA - Producao Autonoma</h2>
+  <p style="color:var(--dim)">5 IAs de validacao garantem qualidade maxima em cada video</p>
+  <div class="section-card" style="margin-top:16px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div><label>MODO DE PRODUCAO</label><select id="pipe-mode" class="input">
+        <option value="avatar_auto">Avatar + B-Roll Automatico (recomendado)</option>
+        <option value="avatar_full_veo">Full Avatar + VEO3 (PIP 15%)</option>
+        <option value="avatar_real">Avatar + Videos/Imagens Reais</option>
+        <option value="narration_real">Narracao Pura + Reais</option>
+        <option value="narr_veo">Narracao VEO3 Fullscreen</option>
+        <option value="auto">100% Automatico (IA gera tudo)</option>
+      </select></div>
+      <div><label>B-ROLL COUNT</label><input type="number" id="pipe-broll-count" class="input" value="30"></div>
+    </div>
+    <div style="margin-top:12px"><label>UPLOAD AVATAR</label><input type="file" id="pipe-avatar-upload" accept="video/*" class="input"></div>
+    <div style="margin-top:12px"><label>TEMA (modo automatico)</label><input type="text" id="pipe-topic" class="input" placeholder="Ex: Os segredos mais perigosos do oceano profundo"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:12px">
+      <div><label>DURACAO</label><select id="pipe-duration" class="input"><option>5 min</option><option>10 min</option><option>15 min</option><option>20 min</option></select></div>
+      <div><label>TOM</label><select id="pipe-tone" class="input"><option>Documentary serious</option><option>Casual friendly</option><option>Dramatic epic</option><option>Scientific precise</option></select></div>
+      <div><label>ENGINE IA</label><select id="pipe-engine" class="input"><option>gemini-2.0-flash</option><option>gemini-2.5-pro</option><option>gemini-2.5-flash</option></select></div>
+    </div>
+    <div style="margin-top:12px"><label>CANAIS YOUTUBE PARA B-ROLL (opcional — IDs separados por virgula)</label><input type="text" id="pipe-yt-channels" class="input" placeholder="Ex: UCxxxx,UCyyyy  (canais de b-roll do seu nicho)"></div>
+    <div style="margin-top:12px"><label>PROMPTS VEO3 CUSTOMIZADOS (opcional)</label><textarea id="pipe-custom-prompts" class="input" rows="4" placeholder="Cole seus prompts VEO3 aqui (1 por linha)..."></textarea></div>
+    <button class="btn btn-primary" style="width:100%;margin-top:16px;padding:14px;font-size:16px" onclick="startPipeline()">&#x1F680; INICIAR PRODUCAO COM 5 IAs</button>
+  </div>
+</div>
+
+<!-- RADAR YOUTUBE -->
+<div id="page-radar" class="page">
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <div>
+      <h2 style="display:flex;align-items:center;gap:12px"><span style="font-size:28px">&#x1F4E1;</span> Radar YouTube (Niche Overview &amp; Analytics)</h2>
+      <p style="color:var(--dim);margin-top:8px">Mineracao viral estilo NexLev: encontre canais emergentes, outliers e tendencias globais.</p>
+    </div>
+    <div style="background:rgba(16,185,129,0.1);color:var(--green);padding:8px 16px;border-radius:20px;font-weight:bold;font-size:12px;border:1px solid rgba(16,185,129,0.3)">MOTOR DE BIG DATA ATIVO</div>
+  </div>
+  <div class="section-card" style="margin-top:16px">
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <button class="tab-btn active" onclick="this.parentElement.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active')">Em Alta (Trending)</button>
+      <button class="tab-btn" onclick="this.parentElement.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active')">Niche Overview</button>
+      <button class="tab-btn" onclick="this.parentElement.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active')">Canais Similares</button>
+      <button class="tab-btn" onclick="this.parentElement.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active')">Outliers (Virais Recentes)</button>
+    </div>
+    <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:16px">
+      <div><label>BUSCAR SUBNICHO / PALAVRA-CHAVE</label><input type="text" id="radar-query" class="input" placeholder="Ex: documentarios oceano profundo"></div>
+      <div><label>REGIAO (TOP 30+ PAISES)</label><select id="radar-region" class="input">
+        <option value="US">US - Estados Unidos</option><option value="BR">BR - Brasil</option><option value="ES">ES - Espanha</option>
+        <option value="MX">MX - Mexico</option><option value="PT">PT - Portugal</option><option value="GB">GB - Reino Unido</option>
+        <option value="FR">FR - Franca</option><option value="DE">DE - Alemanha</option><option value="IT">IT - Italia</option>
+        <option value="JP">JP - Japao</option><option value="KR">KR - Coreia do Sul</option><option value="IN">IN - India</option>
+        <option value="RU">RU - Russia</option><option value="CA">CA - Canada</option><option value="AU">AU - Australia</option>
+        <option value="AR">AR - Argentina</option><option value="CO">CO - Colombia</option><option value="CL">CL - Chile</option>
+        <option value="PE">PE - Peru</option><option value="ID">ID - Indonesia</option><option value="TH">TH - Tailandia</option>
+        <option value="VN">VN - Vietna</option><option value="PH">PH - Filipinas</option><option value="TR">TR - Turquia</option>
+        <option value="SA">SA - Arabia Saudita</option><option value="AE">AE - Emirados</option><option value="EG">EG - Egito</option>
+        <option value="ZA">ZA - Africa do Sul</option><option value="NG">NG - Nigeria</option><option value="PL">PL - Polonia</option>
+      </select></div>
+      <div><label>FORMATO</label><select id="radar-format" class="input">
+        <option value="all">Todos</option><option value="long">Apenas Videos Longos (&gt;8min)</option><option value="short">Apenas Shorts</option>
+      </select></div>
+    </div>
+    <div style="display:flex;gap:16px;margin-top:12px;font-size:13px">
+      <label><input type="checkbox" checked> VPH &gt; 1.000</label>
+      <label><input type="checkbox"> Outlier Score &gt; 3x</label>
+      <label><input type="checkbox"> Canais Pequenos (&lt; 50k subs)</label>
+      <label><input type="checkbox" checked> Postado ha menos de 7 dias</label>
+    </div>
+    <button class="btn btn-primary" style="width:100%;margin-top:16px;padding:14px" onclick="scanRadar()">Executar Mineracao Profunda (Deep Scan IA)</button>
+  </div>
+  <div id="radar-results"></div>
+</div>
+
+<!-- VEO3 -->
+<div id="page-veo3" class="page">
+  <h2>&#x26A1; Gerador VEO 3 - Prompts em Massa</h2>
+  <div class="section-card" style="margin-top:16px">
+    <label>COLE SEUS PROMPTS VEO3 (1 POR LINHA)</label>
+    <textarea id="veo3-prompts" class="input" rows="12" placeholder="Cinematic wide shot of deep ocean trench, golden hour lighting, 4K ultra-realistic...&#10;Close-up of doctor examining patient, soft medical lighting, documentary style...&#10;Aerial view of ancient ruins at sunset, dramatic clouds, cinematic..."></textarea>
+    <div style="display:flex;justify-content:space-between;margin-top:8px;align-items:center">
+      <span style="color:var(--dim)"><span id="veo3-count">0</span> prompts detectados</span>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost" onclick="document.getElementById('veo3-prompts').value='';updateVeo3Count()">&#x1F5D1; Limpar</button>
+        <button class="btn btn-primary" onclick="fetch('/api/veo3/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompts:document.getElementById('veo3-prompts').value})}).then(r=>r.json()).then(d=>toast(d.count+' prompts prontos!'))">&#x1F680; Processar Prompts</button>
+      </div>
+    </div>
+  </div>
+  <div class="section-card" style="margin-top:12px">
+    <h3>&#x1F916; Auto-Gerar Prompts com IA</h3>
+    <p style="color:var(--dim);font-size:13px;margin-bottom:12px">A IA analisa seu video avatar e gera prompts VEO3 cinematicos automaticamente para cada cena.</p>
+    <div style="background:rgba(6,182,212,.05);border:1px solid rgba(6,182,212,.15);border-radius:8px;padding:12px;margin-bottom:12px;font-size:12px;color:var(--dim)">
+      <b style="color:var(--accent)">Como usar:</b> 1. Carregue um avatar no Sincronizador → 2. Volte aqui → 3. Clique em Auto-Gerar
+    </div>
+    <button class="btn btn-yellow" style="width:100%;padding:14px;font-size:15px" onclick="autoGenerateVeo3Prompts()">&#x2728; Auto-Gerar Prompts do Avatar (IA Gemini)</button>
+  </div>
+</div>
+
+<!-- MULTICONTA -->
+<div id="page-multiconta" class="page">
+  <h2>&#x1F465; Multi-Conta VEO3</h2>
+  <div class="section-card" style="margin-top:16px">
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <button class="tab-btn active" onclick="showVeoTab(1)">Conta 1</button>
+      <button class="tab-btn" onclick="showVeoTab(2)">Conta 2</button>
+    </div>
+    <div id="veo-tab-1"><p>Configure a Conta 1 do VEO3 aqui. Cole os prompts e inicie a geracao.</p>
+      <textarea class="input" rows="8" placeholder="Prompts da Conta 1..."></textarea>
+    </div>
+    <div id="veo-tab-2" style="display:none"><p>Configure a Conta 2 do VEO3 aqui.</p>
+      <textarea class="input" rows="8" placeholder="Prompts da Conta 2..."></textarea>
+    </div>
+  </div>
+</div>
+
+<!-- PLANNER -->
+<div id="page-planner" class="page">
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <h2>&#x1F4CB; Production Planner</h2>
+    <button class="btn btn-primary" onclick="addPlan()">+ Novo Projeto</button>
+  </div>
+  <div class="kanban" style="margin-top:16px;display:grid;grid-template-columns:repeat(5,1fr);gap:12px">
+    <div class="kanban-col"><div class="kanban-header">&#x1F4A1; Ideia <span id="k-idea-n">0</span></div><div id="k-idea" class="kanban-items"></div></div>
+    <div class="kanban-col"><div class="kanban-header">&#x1F4DD; Roteiro <span id="k-script-n">0</span></div><div id="k-script" class="kanban-items"></div></div>
+    <div class="kanban-col"><div class="kanban-header">&#x1F3AC; Prompts <span id="k-prompts-n">0</span></div><div id="k-prompts" class="kanban-items"></div></div>
+    <div class="kanban-col"><div class="kanban-header">&#x2699; Producao <span id="k-prod-n">0</span></div><div id="k-prod" class="kanban-items"></div></div>
+    <div class="kanban-col"><div class="kanban-header">&#x2705; Pronto <span id="k-done-n">0</span></div><div id="k-done" class="kanban-items"></div></div>
+  </div>
+</div>
+
+<!-- RESEARCH -->
+<div id="page-research" class="page">
+  <h2>&#x1F50D; Video Research - Busca Multi-Fonte</h2>
+  <div class="section-card" style="margin-top:16px">
+    <label>TEMA / PALAVRA-CHAVE</label>
+    <input type="text" id="res-query" class="input" placeholder="Ex: deep ocean creatures 4k" style="width:100%">
+    <div style="display:flex;gap:16px;margin-top:12px" class="source-check">
+      <label><input type="checkbox" value="youtube" checked> YouTube</label>
+      <label><input type="checkbox" value="pexels" checked> Pexels</label>
+      <label><input type="checkbox" value="pixabay" checked> Pixabay</label>
+    </div>
+    <button class="btn btn-primary" style="width:100%;margin-top:12px" onclick="searchResearch()">&#x1F50D; Pesquisar em Todas as Fontes</button>
+  </div>
+  <div id="res-results"></div>
+</div>
+
+<!-- NARRATOR -->
+<div id="page-narrator" class="page">
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <div>
+      <h2>&#x1F399; Narrador IA (Pro Studio)</h2>
+      <p style="color:var(--dim)">322 vozes 12 multilingues Texto Livre, SRT em blocos, ou gerador de legendas.</p>
+    </div>
+    <div style="background:rgba(6,182,212,.1);color:var(--accent);padding:8px 16px;border-radius:20px;font-weight:bold;font-size:12px">MOTOR NEURAL ATIVO</div>
+  </div>
+  <div style="display:flex;gap:24px;margin-top:20px">
+    <div style="flex:2">
+      <div style="display:flex;gap:8px;margin-bottom:16px">
+        <button class="tab-btn active">&#x1F4DD; Texto Livre</button>
+        <button class="tab-btn">&#x1F4CB; SRT em Blocos</button>
+        <button class="tab-btn">&#x1F3AC; Gerar Legendas</button>
+        <button class="tab-btn">&#x1F916; IA: Criar Roteiro Humanizado (Gemini 2.5)</button>
+      </div>
+      <textarea id="narr-output" class="input" rows="16" placeholder="Cole seu roteiro aqui...&#10;&#10;Textos grandes (20k+) sao divididos em blocos automaticamente.&#10;Use 'SRT em Blocos' para narrar cada legenda separadamente."></textarea>
+      <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:12px;color:var(--dim)">
+        <span id="narr-wordcount">0 caracteres 1 bloco(s)</span>
+        <button class="btn btn-ghost" onclick="downloadScript()">&#x1F4BE; Salvar Roteiro</button>
+      </div>
+      <div style="margin-top:16px;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px">
+        <div><label>TEMA</label><input type="text" id="narr-topic" class="input" placeholder="Tema do video"></div>
+        <div><label>IDIOMA</label><select id="narr-lang" class="input"><option>Portuguese</option><option>English</option><option>Spanish</option></select></div>
+        <div><label>DURACAO</label><select id="narr-dur" class="input"><option>5 min</option><option>10 min</option><option>15 min</option><option>20 min</option></select></div>
+        <div><label>TOM</label><select id="narr-tone" class="input"><option>Documentary serious</option><option>Casual friendly</option><option>Dramatic epic</option></select></div>
+      </div>
+      <div style="margin-top:8px"><label>ENGINE</label><select id="narr-engine" class="input"><option>gemini-2.0-flash</option><option>gemini-2.5-pro</option></select></div>
+      <button class="btn btn-primary" style="width:100%;margin-top:12px" onclick="generateNarration()">&#x1F916; Gerar Roteiro com IA</button>
+    </div>
+    <div style="flex:1">
+      <div class="section-card">
+        <h4>&#x1F399; Motor de Voz</h4>
+        <div style="display:flex;gap:8px;margin:12px 0">
+          <button class="tab-btn active" style="font-size:11px">Edge TTS (PRO)</button>
+          <button class="tab-btn" style="font-size:11px">TikTok/CapCut</button>
+          <button class="tab-btn" style="font-size:11px">ElevenLabs</button>
+        </div>
+        <h4>&#x1F30D; Idioma &amp; Voz</h4>
+        <select id="narr-voice" class="input" style="width:100%;margin-top:8px"><option>Carregando vozes...</option></select>
+        <select id="pipe-voice" class="input" style="width:100%;margin-top:8px;display:none"></select>
+        <span id="pipe-voice-count" style="font-size:11px;color:var(--dim)"></span>
+        <button class="btn btn-secondary" style="width:100%;margin-top:8px" onclick="previewVoice('narr-voice')">&#x1F50A; Pre-ouvir (usa seu texto)</button>
+      </div>
+      <div class="section-card" style="margin-top:12px">
+        <h4>&#x1F3B5; Prosodia (Ajustes Finos)</h4>
+        <div style="margin-top:8px"><label>Velocidade</label><input type="range" min="-50" max="50" value="0" style="width:100%"><span>+0%</span></div>
+        <div style="margin-top:8px"><label>Tom (Pitch)</label><input type="range" min="-20" max="20" value="0" style="width:100%"><span>+0Hz</span></div>
+        <div style="margin-top:8px"><label>Volume</label><input type="range" min="-50" max="50" value="0" style="width:100%"><span>+0%</span></div>
+      </div>
+      <div class="section-card" style="margin-top:12px">
+        <h4>&#x2702; Travar Silencio</h4>
+        <label><input type="checkbox" checked> Ativar remocao de silencio</label>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- GALLERY -->
+<div id="page-gallery" class="page">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px">
+    <div>
+      <h2>&#x1F4C1; Galeria de Midia</h2>
+      <p style="color:var(--dim);font-size:12px;margin-top:4px">Pasta de saida: <code style="color:var(--accent);font-size:11px">C:\Users\Guilherme\Downloads\videos ferramenta</code></p>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-ghost" onclick="loadGallery()" style="gap:6px">&#x1F504; Atualizar</button>
+      <button class="btn btn-ghost" onclick="openOutputFolder()" style="gap:6px;font-size:12px">&#x1F4C2; Abrir Pasta</button>
+    </div>
+  </div>
+  <div id="gallery-count" style="font-size:12px;color:var(--dim);margin-bottom:10px"></div>
+  <div id="gallery-list"><p style="color:var(--dim)">Carregando...</p></div>
+</div>
+
+<!-- SETTINGS -->
+<div id="page-settings" class="page">
+  <h2>&#x2699; Configuracoes</h2>
+  <div class="section-card" style="margin-top:16px">
+    <h3>&#x1F511; Chaves de API</h3>
+    <div style="display:grid;gap:12px;margin-top:12px">
+      <div><label>GOOGLE AI (Gemini)</label><input type="password" id="key-google_ai" class="input" placeholder="Cole sua chave aqui" style="width:100%"></div>
+      <div><label>YOUTUBE DATA API</label><input type="password" id="key-youtube" class="input" placeholder="Cole sua chave aqui" style="width:100%"></div>
+      <div><label>PEXELS</label><input type="password" id="key-pexels" class="input" placeholder="Cole sua chave aqui" style="width:100%"></div>
+      <div><label>PIXABAY</label><input type="password" id="key-pixabay" class="input" placeholder="Cole sua chave aqui" style="width:100%"></div>
+      <div><label>UNSPLASH</label><input type="password" id="key-unsplash" class="input" placeholder="Cole sua chave aqui" style="width:100%"></div>
+      <div><label>CANAIS YOUTUBE PARA B-ROLL <span style="font-weight:normal;opacity:0.7">(IDs separados por virgula — carregados automaticamente em todo video)</span></label><input type="text" id="key-youtube_channels" class="input" placeholder="Ex: UCxxxxxx,UCyyyyyy,UCzzzzzz" style="width:100%"></div>
+    </div>
+    <button class="btn btn-primary" style="margin-top:16px" onclick="saveKeys()">&#x1F4BE; Salvar Chaves</button>
+    <div id="keys-status" style="margin-top:8px;color:var(--green);font-size:13px"></div>
+  </div>
+</div>
+
+<!-- DIAGNOSTIC -->
+<div id="page-diagnostic" class="page">
+  <h2>&#x1FA7A; Diagnostico IA</h2>
+  <div class="section-card" style="margin-top:16px">
+    <h3>Status do Sistema</h3>
+    <div id="health-status" style="margin-top:12px;font-family:monospace;line-height:1.8">Clique para executar diagnostico...</div>
+    <button class="btn btn-secondary" style="margin-top:12px" onclick="runDiagnostics()">&#x1F504; Executar Diagnostico</button>
+  </div>
+</div>
+
+</div></div>
+
+<!-- TOAST -->
+<div id="toast" class="toast"></div>
+<!-- LOADING -->
+<div id="loading" class="loading-overlay"><div class="loading-content"><div class="spinner"></div><div id="loading-text">Processando...</div></div></div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
