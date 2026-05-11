@@ -49,8 +49,10 @@
         <div class="create-left">
           <!-- Image Upload -->
           <div class="card">
-            <h3>📸 Avatar Image</h3>
-            <p class="hint">Upload a clear front-facing photo or full body image</p>
+            <h3>📸 Avatar Image
+              <button class="btn-ai" style="float:right" onclick="openImageGenModal()">🎨 AI Generate</button>
+            </h3>
+            <p class="hint">Upload a photo or generate one with AI (no account needed)</p>
             <div class="upload-zone" id="upload-zone" onclick="document.getElementById('img-input').click()">
               <input type="file" id="img-input" accept="image/*" hidden onchange="previewImage(this)">
               <div class="upload-placeholder" id="upload-placeholder">
@@ -141,9 +143,14 @@
               </select>
             </div>
             <div id="eleven-options" style="display:none">
-              <label>Voice ID:</label>
+              <label>Voice:</label>
+              <select id="eleven-voice-select" onchange="document.getElementById('eleven-voice-id').value=this.value" style="margin-bottom:6px">
+                <option value="">— Load voices below or paste ID —</option>
+              </select>
+              <button class="btn-secondary" onclick="loadElevenLabsVoices()" style="margin-bottom:6px;width:100%">🔄 Load My ElevenLabs Voices</button>
+              <label>Voice ID (manual):</label>
               <input type="text" id="eleven-voice-id" placeholder="Paste ElevenLabs voice ID">
-              <p class="hint">Get voice IDs from elevenlabs.io/voices</p>
+              <p class="hint">Go to Voices page to clone your own voice with ElevenLabs</p>
             </div>
             <button class="btn-secondary" onclick="previewAudio()" style="margin-top:12px">🔊 Preview Voice</button>
             <audio id="audio-preview" controls style="width:100%;margin-top:8px;display:none"></audio>
@@ -287,9 +294,12 @@
     <div class="page" id="page-voices">
       <div class="page-header">
         <h1>🎙️ Voice Library</h1>
-        <p>Preview and select from 300+ voices in 40+ languages</p>
+        <p>300+ Edge-TTS voices · ElevenLabs premium · Clone your own real voice</p>
       </div>
+
+      <!-- Edge-TTS Voices -->
       <div class="card">
+        <h3>🆓 Edge-TTS Voices (Free)</h3>
         <div style="display:flex;gap:12px;margin-bottom:16px">
           <select id="voices-filter-lang" onchange="loadVoiceList()" style="flex:1">
             <option value="">All Languages</option>
@@ -304,6 +314,37 @@
           <button class="btn-primary" onclick="loadVoiceList()">🔄 Load Voices</button>
         </div>
         <div id="voices-list"></div>
+      </div>
+
+      <!-- ElevenLabs Voices -->
+      <div class="card">
+        <h3>⭐ ElevenLabs Voices (Premium + Cloned)</h3>
+        <p class="hint">Requires ElevenLabs API key in Settings. Includes all your cloned voices.</p>
+        <button class="btn-primary" onclick="loadElevenLabsVoicesFull()" style="margin-bottom:12px">🔄 Load ElevenLabs Voices</button>
+        <div id="elevenlabs-voices-list"></div>
+      </div>
+
+      <!-- Voice Cloning -->
+      <div class="card">
+        <h3>🧬 Clone Your Voice (ElevenLabs)</h3>
+        <p class="hint">Upload 1–5 audio samples (30s–3min each) of your voice. ElevenLabs will clone it. Requires API key.</p>
+        <div class="setting-row">
+          <label>Voice Name:</label>
+          <input type="text" id="clone-name" placeholder="e.g. My Professional Voice">
+        </div>
+        <div class="setting-row">
+          <label>Description (optional):</label>
+          <input type="text" id="clone-description" placeholder="e.g. Male Brazilian, deep and professional">
+        </div>
+        <div class="setting-row">
+          <label>Audio Samples (1–5 files, MP3/WAV):</label>
+          <input type="file" id="clone-audio-input" accept="audio/*" multiple>
+          <p class="hint" style="margin-top:4px">Best results: clean audio, no background noise, 30s–3min each</p>
+        </div>
+        <button class="btn-generate" onclick="cloneVoice()" style="margin-top:12px;font-size:14px">
+          🧬 Clone Voice Now
+        </button>
+        <div id="clone-result" style="display:none;margin-top:12px" class="card" style="background:var(--surface3)"></div>
       </div>
     </div>
 
@@ -407,6 +448,45 @@ Content-Type: application/json
       </div>
     </div>
   </main>
+
+  <!-- AI IMAGE GENERATION MODAL -->
+  <div class="modal-overlay" id="img-gen-modal" style="display:none" onclick="if(event.target===this)closeImageGenModal()">
+    <div class="modal-box">
+      <h3 style="margin-bottom:16px">🎨 AI Avatar Image Generator</h3>
+      <p class="hint" style="margin-bottom:12px">Free generation via Pollinations.ai — no account needed</p>
+      <label>Describe your avatar:</label>
+      <textarea id="img-gen-prompt" rows="3" placeholder="e.g. Professional businesswoman, 30s, dark hair, white blazer, neutral expression, studio lighting"></textarea>
+      <label>Style:</label>
+      <select id="img-gen-style">
+        <option value="realistic">📷 Photorealistic (best for lip sync)</option>
+        <option value="anime">🎌 Anime</option>
+        <option value="illustration">🎨 Digital Illustration</option>
+        <option value="oil_painting">🖼️ Oil Painting</option>
+        <option value="3d_render">🎮 3D Render</option>
+      </select>
+      <label>Resolution:</label>
+      <select id="img-gen-size">
+        <option value="512">512×512 (standard)</option>
+        <option value="768">768×768 (high quality)</option>
+        <option value="1024">1024×1024 (ultra)</option>
+      </select>
+      <div style="display:flex;gap:8px;margin-top:16px">
+        <button class="btn-primary" onclick="generateAvatarImage()" style="flex:1">🎨 Generate Image</button>
+        <button class="btn-secondary" onclick="closeImageGenModal()">Cancel</button>
+      </div>
+      <div id="img-gen-loading" style="display:none;text-align:center;padding:20px;color:var(--accent2)">
+        <div class="loading-spinner" style="width:30px;height:30px;margin:0 auto 10px"></div>
+        Generating image with AI...
+      </div>
+      <div id="img-gen-result" style="display:none;margin-top:16px;text-align:center">
+        <img id="img-gen-preview" style="max-width:100%;border-radius:10px;margin-bottom:10px">
+        <div style="display:flex;gap:8px;justify-content:center">
+          <button class="btn-primary" onclick="useGeneratedImage()">✅ Use This Image</button>
+          <button class="btn-secondary" onclick="generateAvatarImage()">🔄 Regenerate</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- AI SCRIPT MODAL -->
   <div class="modal-overlay" id="ai-modal" style="display:none" onclick="if(event.target===this)closeAIModal()">

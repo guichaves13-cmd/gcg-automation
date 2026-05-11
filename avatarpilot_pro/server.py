@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-AvatarPilot Pro — AI Talking Avatar Generator v2
+AvatarPilot Pro — AI Talking Avatar Generator v3
 Port: 5052
-Features: SadTalker lip sync, Edge-TTS/ElevenLabs, background compositing,
+Features: SadTalker lip sync (chunked for 30min-1h), Edge-TTS/ElevenLabs,
+          voice cloning, AI image generation (Pollinations.ai), background compositing,
           history, batch processing, AI script generation, templates, dashboard,
           plan-based duration limits (30min / 1h).
 """
-import os, sys, json, time, uuid, asyncio, subprocess, re, shutil, hashlib, threading
+import os, sys, json, time, uuid, asyncio, subprocess, re, shutil, hashlib, threading, math
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify, send_from_directory, Response
 from threading import Thread
@@ -148,17 +149,22 @@ def edge_tts_generate(text, voice, output_path):
         loop.close()
 
 def elevenlabs_generate(text, voice_id, api_key, output_path):
+    """ElevenLabs TTS via REST API (no SDK — avoids Windows long path issues)."""
+    import requests
     try:
-        from elevenlabs import ElevenLabs
-        client = ElevenLabs(api_key=api_key)
-        audio = client.text_to_speech.convert(
-            text=text, voice_id=voice_id,
-            model_id="eleven_multilingual_v2",
-            output_format="mp3_44100_128",
+        r = requests.post(
+            f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
+            headers={"xi-api-key": api_key, "Content-Type": "application/json",
+                     "Accept": "audio/mpeg"},
+            json={"text": text, "model_id": "eleven_multilingual_v2",
+                  "voice_settings": {"stability": 0.5, "similarity_boost": 0.75}},
+            timeout=120
         )
-        with open(output_path, "wb") as f:
-            for chunk in audio:
-                f.write(chunk)
+        if r.status_code == 200:
+            with open(output_path, "wb") as f:
+                f.write(r.content)
+            return
+        raise Exception(f"ElevenLabs API error {r.status_code}: {r.text[:200]}")
     except Exception as e:
         raise Exception(f"ElevenLabs error: {e}")
 
@@ -188,16 +194,32 @@ def _ffprobe_path():
     return _ffmpeg_path().replace("ffmpeg.exe", "ffprobe.exe").replace("ffmpeg", "ffprobe")
 
 def get_media_duration(path: str) -> float:
-    """Return duration in seconds via ffprobe."""
+    """Return duration in seconds via ffprobe.
+    Uses a temp copy if the path contains non-ASCII chars (Windows cv2/ffprobe compat)."""
+    import tempfile, shutil as _shutil
+    work_path = path
+    tmp_copy  = None
+    try:
+        path.encode('ascii')
+    except UnicodeEncodeError:
+        # Non-ASCII path — copy to temp with safe name
+        ext = os.path.splitext(path)[1]
+        tmp_copy  = os.path.join(tempfile.gettempdir(), f"apro_dur_{uuid.uuid4().hex[:8]}{ext}")
+        _shutil.copy2(path, tmp_copy)
+        work_path = tmp_copy
     try:
         r = subprocess.run(
             [_ffprobe_path(), "-v", "error", "-show_entries", "format=duration",
-             "-of", "default=noprint_wrappers=1:nokey=1", path],
+             "-of", "default=noprint_wrappers=1:nokey=1", work_path],
             capture_output=True, text=True, timeout=15
         )
         return float(r.stdout.strip())
     except Exception:
         return 0.0
+    finally:
+        if tmp_copy and os.path.exists(tmp_copy):
+            try: os.remove(tmp_copy)
+            except: pass
 
 def check_plan_limit(audio_path: str, plan: str) -> tuple:
     """Returns (ok: bool, duration: float, limit: float|None)."""
@@ -235,6 +257,7 @@ def check_sadtalker_detailed():
 
 def run_sadtalker(image_path, audio_path, output_path, settings=None):
     """Run SadTalker inference with the venv311 Python."""
+    import tempfile
     st_path = os.path.join(MODELS_DIR, "SadTalker")
     if not check_sadtalker():
         raise Exception("SadTalker not installed. Check Settings.")
@@ -246,7 +269,17 @@ def run_sadtalker(image_path, audio_path, output_path, settings=None):
     size       = int(settings.get("size", 256))
     exp_scale  = float(settings.get("expression_scale", 1.0))
 
-    result_dir = os.path.join(OUTPUT_DIR, f"st_{uuid.uuid4().hex[:8]}")
+    # SadTalker's cv2.imread() breaks on non-ASCII Windows paths (e.g. ç).
+    # Copy all inputs to a clean ASCII temp directory before running.
+    tmp_root = tempfile.mkdtemp(prefix="avatarpilot_")
+    safe_img   = os.path.join(tmp_root, "src" + os.path.splitext(image_path)[1])
+    safe_audio = os.path.join(tmp_root, "aud" + os.path.splitext(audio_path)[1])
+    shutil.copy2(image_path, safe_img)
+    shutil.copy2(audio_path, safe_audio)
+    image_path = safe_img
+    audio_path = safe_audio
+
+    result_dir = os.path.join(tmp_root, "result")
     os.makedirs(result_dir, exist_ok=True)
 
     ckpt_dir = os.path.join(st_path, "checkpoints")
@@ -268,6 +301,7 @@ def run_sadtalker(image_path, audio_path, output_path, settings=None):
         cmd.append("--still")
 
     print(f"  [SadTalker] size={size}, preprocess={preprocess}, enhancer={enhancer}")
+    # Timeout: 1800s per chunk (30min) — enough for a 5-min audio segment on RTX 4060
     proc = subprocess.run(
         cmd, capture_output=True, text=True,
         cwd=st_path, timeout=1800,
@@ -276,7 +310,24 @@ def run_sadtalker(image_path, audio_path, output_path, settings=None):
 
     if proc.returncode != 0:
         err = (proc.stderr or proc.stdout or "")[:800]
-        raise Exception(f"SadTalker failed (code {proc.returncode}): {err}")
+        # VRAM out-of-memory: clear cache and retry once on CPU
+        if "CUDA out of memory" in err or "OutOfMemoryError" in err:
+            print("  [SadTalker] VRAM OOM — clearing cache and retrying...")
+            try:
+                import torch; torch.cuda.empty_cache()
+            except Exception:
+                pass
+            proc = subprocess.run(
+                cmd, capture_output=True, text=True,
+                cwd=st_path, timeout=1800,
+                env={**os.environ, "PYTHONIOENCODING": "utf-8"}
+            )
+            if proc.returncode != 0:
+                shutil.rmtree(tmp_root, ignore_errors=True)
+                raise Exception(f"SadTalker failed after OOM retry: {proc.stderr[:500]}")
+        else:
+            shutil.rmtree(tmp_root, ignore_errors=True)
+            raise Exception(f"SadTalker failed (code {proc.returncode}): {err}")
 
     # Find output video (deepest .mp4 inside result_dir)
     found = []
@@ -285,10 +336,213 @@ def run_sadtalker(image_path, audio_path, output_path, settings=None):
             if f.endswith(".mp4"):
                 found.append(os.path.join(root, f))
     if not found:
+        shutil.rmtree(tmp_root, ignore_errors=True)
         raise Exception("SadTalker produced no output video. Check GPU/CUDA.")
 
     shutil.copy2(max(found, key=os.path.getmtime), output_path)
+    shutil.rmtree(tmp_root, ignore_errors=True)
     return output_path
+
+
+def run_sadtalker_chunked(image_path, audio_path, output_path, settings=None,
+                          chunk_duration=270, job_id=None):
+    """
+    For long audio (>5min), splits into chunks of chunk_duration seconds,
+    processes each with SadTalker, then concatenates.
+    This avoids VRAM overflow and timeout on 30min-1h content.
+    chunk_duration=270s = 4.5min per chunk — safe for 8GB VRAM.
+    """
+    total_dur = get_media_duration(audio_path)
+    ffmpeg    = _ffmpeg_path()
+
+    # Short audio: direct processing
+    if total_dur <= chunk_duration + 30:
+        return run_sadtalker(image_path, audio_path, output_path, settings)
+
+    n_chunks  = math.ceil(total_dur / chunk_duration)
+    chunk_dir = os.path.join(OUTPUT_DIR, f"chunks_{uuid.uuid4().hex[:8]}")
+    os.makedirs(chunk_dir, exist_ok=True)
+    print(f"  [SadTalker] Chunked mode: {total_dur:.0f}s audio → {n_chunks} chunks of {chunk_duration}s")
+
+    chunk_videos = []
+    try:
+        for i in range(n_chunks):
+            start = i * chunk_duration
+            dur   = min(chunk_duration, total_dur - start)
+            if dur < 2.0:
+                break
+
+            # Update job progress
+            if job_id and job_id in jobs:
+                pct = 35 + int(45 * i / n_chunks)
+                jobs[job_id]["progress"] = pct
+                jobs[job_id]["message"]  = f"Lip sync chunk {i+1}/{n_chunks} ({start:.0f}s-{start+dur:.0f}s)..."
+
+            # Extract audio chunk (WAV 16kHz mono for SadTalker)
+            chunk_audio = os.path.join(chunk_dir, f"chunk_{i:03d}.wav")
+            r = subprocess.run([
+                ffmpeg, "-y", "-i", audio_path,
+                "-ss", str(round(start, 3)), "-t", str(round(dur, 3)),
+                "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le",
+                chunk_audio
+            ], capture_output=True, timeout=120)
+            if r.returncode != 0 or not os.path.exists(chunk_audio):
+                raise Exception(f"Audio chunk {i} extraction failed")
+
+            # Run SadTalker on this chunk
+            chunk_video = os.path.join(chunk_dir, f"chunk_{i:03d}.mp4")
+            run_sadtalker(image_path, chunk_audio, chunk_video, settings)
+            chunk_videos.append(chunk_video)
+
+            # Free VRAM between chunks
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except Exception:
+                pass
+            print(f"  [SadTalker] Chunk {i+1}/{n_chunks} done — VRAM cleared")
+
+        if not chunk_videos:
+            raise Exception("No chunks were processed successfully")
+
+        # Concatenate all chunks
+        if job_id and job_id in jobs:
+            jobs[job_id]["message"] = f"Concatenating {len(chunk_videos)} video chunks..."
+
+        concat_txt = os.path.join(chunk_dir, "concat.txt")
+        with open(concat_txt, "w", encoding="utf-8") as f:
+            for v in chunk_videos:
+                f.write(f"file '{v.replace(os.sep, '/')}'\n")
+
+        r = subprocess.run([
+            ffmpeg, "-y", "-f", "concat", "-safe", "0",
+            "-i", concat_txt,
+            "-c:v", "libx264", "-preset", "fast", "-crf", "20",
+            "-c:a", "aac", "-b:a", "192k",
+            output_path
+        ], capture_output=True, timeout=600)
+
+        if r.returncode != 0:
+            raise Exception(f"Concat failed: {r.stderr[:300]}")
+
+        print(f"  [SadTalker] Concat done: {len(chunk_videos)} chunks → {output_path}")
+        return output_path
+
+    finally:
+        shutil.rmtree(chunk_dir, ignore_errors=True)
+
+
+# ============================================================================
+# AI IMAGE GENERATION (Pollinations.ai — free, no key required)
+# ============================================================================
+def generate_avatar_image_pollinations(prompt: str, style: str = "realistic",
+                                       width: int = 512, height: int = 512) -> str:
+    """
+    Generate avatar image using Pollinations.ai (completely free, no key).
+    Returns path to saved PNG file.
+    """
+    import urllib.request, urllib.parse
+
+    style_prefix = {
+        "realistic":   "photorealistic portrait, studio lighting, 4K, professional headshot,",
+        "anime":       "anime style portrait, detailed, high quality,",
+        "illustration":"digital illustration portrait, professional, detailed,",
+        "oil_painting":"oil painting portrait, classical, detailed, museum quality,",
+        "3d_render":   "3D render portrait, CGI, professional, Unreal Engine quality,",
+    }.get(style, "photorealistic portrait, studio lighting,")
+
+    full_prompt = f"{style_prefix} {prompt}, suitable for talking avatar video, neutral background, front-facing"
+    encoded = urllib.parse.quote(full_prompt)
+
+    # Pollinations.ai free image generation
+    url = f"https://image.pollinations.ai/prompt/{encoded}?nologo=true&width={width}&height={height}&model=flux&seed={int(time.time())}"
+
+    out_path = os.path.join(OUTPUT_DIR, f"ai_img_{uuid.uuid4().hex[:8]}.png")
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "AvatarPilot/3.0"})
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            data = resp.read()
+        if len(data) < 5000:
+            raise Exception(f"Generated image too small ({len(data)} bytes) — likely API error")
+        with open(out_path, "wb") as f:
+            f.write(data)
+        print(f"  [AI Image] Generated: {len(data)//1024}KB")
+        return out_path
+    except Exception as e:
+        raise Exception(f"Image generation failed: {e}")
+
+
+# ============================================================================
+# VOICE CLONING (ElevenLabs REST API — no SDK needed)
+# ============================================================================
+def elevenlabs_list_voices(api_key: str) -> list:
+    """List all voices (preset + cloned) from ElevenLabs account."""
+    import requests
+    try:
+        r = requests.get(
+            "https://api.elevenlabs.io/v1/voices",
+            headers={"xi-api-key": api_key, "Accept": "application/json"},
+            timeout=15
+        )
+        if r.status_code == 200:
+            voices = r.json().get("voices", [])
+            return [{"id": v["voice_id"], "name": v["name"],
+                     "category": v.get("category", "premade"),
+                     "description": v.get("description", "")} for v in voices]
+        return []
+    except Exception as e:
+        print(f"  [ElevenLabs] List voices error: {e}")
+        return []
+
+def elevenlabs_clone_voice(name: str, description: str, audio_paths: list, api_key: str) -> str:
+    """Clone a voice using ElevenLabs Instant Voice Cloning API. Returns voice_id."""
+    import requests
+    files = []
+    file_handles = []
+    try:
+        for i, path in enumerate(audio_paths[:5]):  # max 5 samples
+            fh = open(path, "rb")
+            file_handles.append(fh)
+            files.append(("files", (os.path.basename(path), fh, "audio/mpeg")))
+
+        r = requests.post(
+            "https://api.elevenlabs.io/v1/voices/add",
+            headers={"xi-api-key": api_key, "Accept": "application/json"},
+            data={"name": name, "description": description},
+            files=files,
+            timeout=120
+        )
+        if r.status_code == 200:
+            return r.json()["voice_id"]
+        raise Exception(f"ElevenLabs clone error {r.status_code}: {r.text[:300]}")
+    finally:
+        for fh in file_handles:
+            try: fh.close()
+            except: pass
+
+def elevenlabs_generate_v2(text: str, voice_id: str, api_key: str, output_path: str,
+                            model: str = "eleven_multilingual_v2",
+                            stability: float = 0.5, similarity: float = 0.75) -> str:
+    """ElevenLabs TTS with voice settings (stability, similarity)."""
+    import requests
+    r = requests.post(
+        f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
+        headers={"xi-api-key": api_key, "Content-Type": "application/json",
+                 "Accept": "audio/mpeg"},
+        json={
+            "text": text,
+            "model_id": model,
+            "voice_settings": {"stability": stability, "similarity_boost": similarity}
+        },
+        timeout=120
+    )
+    if r.status_code == 200:
+        with open(output_path, "wb") as f:
+            f.write(r.content)
+        return output_path
+    raise Exception(f"ElevenLabs TTS error {r.status_code}: {r.text[:200]}")
+
 
 # ============================================================================
 # THUMBNAIL GENERATION
@@ -478,17 +732,17 @@ def run_pipeline(job_id: str, config: dict):
         jobs[job_id]["message"]  = f"Running SadTalker lip sync ({dur:.0f}s audio)..."
 
         avatar_video = os.path.join(OUTPUT_DIR, f"{job_id}_avatar.mp4")
-        run_sadtalker(
-            config["image_path"],
-            audio_path,
-            avatar_video,
-            settings={
-                "preprocess":        config.get("preprocess", "crop"),
-                "still":             config.get("still_mode", False),
-                "expression_scale":  config.get("expression_scale", 1.0),
-                "enhancer":          config.get("enhancer", "gfpgan"),
-                "size":              config.get("size", 256),
-            }
+        st_settings = {
+            "preprocess":       config.get("preprocess", "crop"),
+            "still":            config.get("still_mode", False),
+            "expression_scale": config.get("expression_scale", 1.0),
+            "enhancer":         config.get("enhancer", "gfpgan"),
+            "size":             config.get("size", 256),
+        }
+        # Auto-chunk for long audio (>5min) to avoid VRAM overflow + timeout
+        run_sadtalker_chunked(
+            config["image_path"], audio_path, avatar_video,
+            settings=st_settings, chunk_duration=270, job_id=job_id
         )
         jobs[job_id]["progress"] = 80
         jobs[job_id]["message"]  = "Compositing..."
@@ -858,6 +1112,75 @@ def api_ai_suggest_voice():
     except Exception:
         parsed = {"voice": "en-US-GuyNeural", "reason": result}
     return jsonify(parsed)
+
+@app.route("/api/ai/generate_image", methods=["POST"])
+def api_ai_generate_image():
+    """Generate an avatar image via Pollinations.ai (free, no key needed)."""
+    data   = request.json or {}
+    prompt = data.get("prompt", "").strip()
+    style  = data.get("style", "realistic")
+    width  = int(data.get("width", 512))
+    height = int(data.get("height", 512))
+    if not prompt:
+        return jsonify({"error": "Provide a prompt"}), 400
+    try:
+        img_path = generate_avatar_image_pollinations(prompt, style, width, height)
+        filename = os.path.basename(img_path)
+        return jsonify({"image_url": f"/outputs/{filename}", "path": img_path})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# ============================================================================
+# ROUTES — VOICES (ElevenLabs — list + clone)
+# ============================================================================
+@app.route("/api/voices/elevenlabs")
+def api_elevenlabs_voices():
+    """List all ElevenLabs voices for the configured API key."""
+    s = load_settings()
+    api_key = s.get("elevenlabs_key", "")
+    if not api_key:
+        return jsonify({"error": "ElevenLabs API key not configured"}), 400
+    voices = elevenlabs_list_voices(api_key)
+    return jsonify({"voices": voices, "total": len(voices)})
+
+@app.route("/api/voices/clone", methods=["POST"])
+def api_voices_clone():
+    """
+    Clone a voice using ElevenLabs Instant Voice Cloning.
+    Accepts multipart/form-data: name, description, and one or more audio files.
+    """
+    s = load_settings()
+    api_key = s.get("elevenlabs_key", "")
+    if not api_key:
+        return jsonify({"error": "ElevenLabs API key not configured in Settings"}), 400
+
+    name        = request.form.get("name", "").strip()
+    description = request.form.get("description", "").strip()
+    if not name:
+        return jsonify({"error": "Voice name required"}), 400
+
+    audio_files = request.files.getlist("audio")
+    if not audio_files:
+        return jsonify({"error": "At least one audio sample required"}), 400
+
+    # Save uploaded samples to disk
+    saved = []
+    clone_id = uuid.uuid4().hex[:8]
+    for i, f in enumerate(audio_files[:5]):
+        ext  = os.path.splitext(f.filename)[1] or ".mp3"
+        path = os.path.join(UPLOAD_DIR, f"clone_{clone_id}_{i}{ext}")
+        f.save(path)
+        saved.append(path)
+
+    try:
+        voice_id = elevenlabs_clone_voice(name, description, saved, api_key)
+        return jsonify({"voice_id": voice_id, "name": name,
+                        "message": f"Voice '{name}' cloned successfully!"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        for p in saved:
+            _safe_rm(p)
 
 # ============================================================================
 # ROUTES — EXTERNAL API (integration with StudioPilot)

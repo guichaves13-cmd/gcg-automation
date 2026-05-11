@@ -524,6 +524,188 @@ async function suggestVoice() {
 }
 
 // ============================================================================
+// AI IMAGE GENERATION
+// ============================================================================
+function openImageGenModal()  { document.getElementById('img-gen-modal').style.display = 'flex'; }
+function closeImageGenModal() {
+  document.getElementById('img-gen-modal').style.display = 'none';
+  document.getElementById('img-gen-result').style.display = 'none';
+  document.getElementById('img-gen-loading').style.display = 'none';
+}
+
+async function generateAvatarImage() {
+  const prompt = document.getElementById('img-gen-prompt').value.trim();
+  if (!prompt) { toast('Describe your avatar first', 'warn'); return; }
+
+  const style  = document.getElementById('img-gen-style').value;
+  const size   = parseInt(document.getElementById('img-gen-size').value);
+
+  document.getElementById('img-gen-loading').style.display = 'block';
+  document.getElementById('img-gen-result').style.display  = 'none';
+
+  try {
+    const r = await fetch('/api/ai/generate_image', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, style, width: size, height: size })
+    });
+    const d = await r.json();
+    if (d.error) { toast(d.error, 'error'); return; }
+
+    const preview = document.getElementById('img-gen-preview');
+    preview.src = d.image_url + '?t=' + Date.now();
+    preview.dataset.serverPath = d.path;
+    document.getElementById('img-gen-result').style.display = 'block';
+    toast('Image generated!', 'success');
+  } catch (e) { toast('Error: ' + e.message, 'error'); }
+  finally { document.getElementById('img-gen-loading').style.display = 'none'; }
+}
+
+async function useGeneratedImage() {
+  const preview = document.getElementById('img-gen-preview');
+  const imgUrl  = preview.src;
+  try {
+    const resp = await fetch(imgUrl);
+    const blob = await resp.blob();
+    const file = new File([blob], 'ai_generated_avatar.png', { type: 'image/png' });
+    const dt   = new DataTransfer();
+    dt.items.add(file);
+    const input = document.getElementById('img-input');
+    input.files = dt.files;
+
+    const reader = new FileReader();
+    reader.onload = e => {
+      document.getElementById('img-preview').src = e.target.result;
+      document.getElementById('img-preview').style.display = 'block';
+      document.getElementById('upload-placeholder').style.display = 'none';
+    };
+    reader.readAsDataURL(file);
+    closeImageGenModal();
+    toast('AI image set as avatar!', 'success');
+  } catch (e) { toast('Error loading image: ' + e.message, 'error'); }
+}
+
+// ============================================================================
+// ELEVENLABS VOICES
+// ============================================================================
+async function loadElevenLabsVoices() {
+  const sel = document.getElementById('eleven-voice-select');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">Loading...</option>';
+  try {
+    const r = await fetch('/api/voices/elevenlabs');
+    const d = await r.json();
+    if (d.error) { toast(d.error, 'error'); sel.innerHTML = '<option value="">Error loading voices</option>'; return; }
+    sel.innerHTML = '<option value="">— Select a voice —</option>';
+    (d.voices || []).forEach(v => {
+      const cat = v.category !== 'premade' ? ` (${v.category})` : '';
+      sel.innerHTML += `<option value="${v.id}">${v.name}${cat}</option>`;
+    });
+    toast(`${d.total} ElevenLabs voices loaded`, 'success');
+  } catch (e) { toast('Error: ' + e.message, 'error'); }
+}
+
+async function loadElevenLabsVoicesFull() {
+  const container = document.getElementById('elevenlabs-voices-list');
+  if (!container) return;
+  container.innerHTML = '<div style="color:var(--dim);font-size:13px">Loading...</div>';
+  try {
+    const r = await fetch('/api/voices/elevenlabs');
+    const d = await r.json();
+    if (d.error) { container.innerHTML = `<div style="color:var(--red);font-size:13px">${d.error}</div>`; return; }
+    if (!d.voices || d.voices.length === 0) {
+      container.innerHTML = '<div style="color:var(--dim);font-size:13px">No voices found. Check your ElevenLabs API key in Settings.</div>';
+      return;
+    }
+    container.innerHTML = `<div style="margin-bottom:8px;font-size:12px;color:var(--dim)">${d.total} voices</div>` +
+      d.voices.map(v => {
+        const catColor = v.category === 'cloned' ? 'var(--accent2)' : v.category === 'professional' ? 'var(--gold)' : 'var(--dim)';
+        return `<div class="voice-item" onclick="selectElevenVoice('${v.id}','${v.name}')">
+          <span style="color:${catColor};font-size:11px;text-transform:uppercase;font-weight:700">${v.category}</span>
+          <span class="voice-name">${v.name}</span>
+          <span class="voice-meta">${v.id.substring(0, 8)}...</span>
+          <button class="btn-secondary" style="padding:4px 10px;font-size:11px"
+            onclick="event.stopPropagation();testElevenVoice('${v.id}')">▶ Test</button>
+        </div>`;
+      }).join('');
+  } catch (e) { container.innerHTML = `<div style="color:var(--red)">${e.message}</div>`; }
+}
+
+function selectElevenVoice(id, name) {
+  const idInput = document.getElementById('eleven-voice-id');
+  const sel     = document.getElementById('eleven-voice-select');
+  if (idInput) idInput.value = id;
+  if (sel) {
+    let found = false;
+    for (let o of sel.options) { if (o.value === id) { found = true; break; } }
+    if (!found) sel.innerHTML += `<option value="${id}">${name}</option>`;
+    sel.value = id;
+  }
+  toast(`ElevenLabs voice selected: ${name}`, 'success');
+  showPage('create');
+  // Switch to ElevenLabs engine
+  const tab = document.querySelector('.engine-tab:nth-child(2)');
+  if (tab) setEngine('elevenlabs', tab);
+}
+
+async function testElevenVoice(voiceId) {
+  loading(true, 'Testing ElevenLabs voice...');
+  try {
+    const r = await fetch('/api/preview_audio', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        script: 'Hello! This is a test of this ElevenLabs voice. How does it sound?',
+        engine: 'elevenlabs', voice_id: voiceId
+      })
+    });
+    const d = await r.json();
+    if (d.error) { toast(d.error, 'error'); return; }
+    new Audio(d.audio_url).play();
+  } catch (e) { toast('Error: ' + e.message, 'error'); }
+  finally { loading(false); }
+}
+
+// ============================================================================
+// VOICE CLONING
+// ============================================================================
+async function cloneVoice() {
+  const name     = document.getElementById('clone-name').value.trim();
+  const desc     = document.getElementById('clone-description').value.trim();
+  const files    = document.getElementById('clone-audio-input').files;
+  const resultEl = document.getElementById('clone-result');
+
+  if (!name)          { toast('Enter a voice name', 'warn'); return; }
+  if (!files || files.length === 0) { toast('Upload at least one audio sample', 'warn'); return; }
+
+  loading(true, 'Cloning voice with ElevenLabs... (may take 30-60s)');
+  try {
+    const formData = new FormData();
+    formData.append('name', name);
+    formData.append('description', desc);
+    for (let i = 0; i < Math.min(files.length, 5); i++) {
+      formData.append('audio', files[i]);
+    }
+
+    const r = await fetch('/api/voices/clone', { method: 'POST', body: formData });
+    const d = await r.json();
+
+    if (d.error) { toast(d.error, 'error'); return; }
+
+    resultEl.style.display = 'block';
+    resultEl.innerHTML = `
+      <div style="color:var(--green);font-weight:700;margin-bottom:8px">✅ Voice cloned successfully!</div>
+      <div style="font-size:13px">Name: <strong>${d.name}</strong></div>
+      <div style="font-size:13px;margin-top:4px">Voice ID: <code style="background:var(--bg);padding:2px 6px;border-radius:4px">${d.voice_id}</code></div>
+      <button class="btn-primary" style="margin-top:10px" onclick="selectElevenVoice('${d.voice_id}','${d.name}')">
+        ✅ Use This Voice
+      </button>`;
+    toast(`Voice "${name}" cloned!`, 'success');
+    // Auto-refresh ElevenLabs list
+    loadElevenLabsVoicesFull();
+  } catch (e) { toast('Error: ' + e.message, 'error'); }
+  finally { loading(false); }
+}
+
+// ============================================================================
 // TEMPLATES
 // ============================================================================
 async function loadTemplates() {
