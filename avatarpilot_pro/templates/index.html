@@ -106,6 +106,17 @@
 
         <!-- RIGHT -->
         <div class="create-right">
+          <!-- Voice Presets -->
+          <div class="card">
+            <h3>⚡ Voice Preset
+              <button class="btn-ai" style="float:right" onclick="detectLanguage()">🔍 Auto-Detect</button>
+            </h3>
+            <select id="voice-preset-select" onchange="applyVoicePreset(this.value)" style="width:100%">
+              <option value="">— Custom (use voice selection below) —</option>
+            </select>
+            <div id="preset-desc" class="hint" style="margin-top:6px"></div>
+          </div>
+
           <!-- Voice -->
           <div class="card">
             <h3>🎙️ Voice Engine</h3>
@@ -401,6 +412,32 @@
         <p class="hint">Starter = 30 min audio max per video. Pro = 1 hour max. Use this to enforce plan limits for your users.</p>
       </div>
 
+      <!-- Cloud GPU -->
+      <div class="card" style="border:1px solid rgba(124,58,237,0.4);background:rgba(124,58,237,0.06)">
+        <h3>☁️ Cloud GPU — A100 80GB (Para 300 clientes)</h3>
+        <p class="hint" style="margin-bottom:12px">Com Cloud GPU, qualquer cliente com notebook antigo processa vídeos em <strong>~3-5 minutos</strong> (vs 30+ min local). Usa GPU A100 80GB da Replicate.</p>
+        <div class="setting-row">
+          <label>Executor:</label>
+          <select id="executor-select" onchange="saveExecutor()">
+            <option value="local">🖥️ Local GPU (RTX 4060 — você mesmo)</option>
+            <option value="replicate">☁️ Cloud GPU A100 (Replicate — 300 clientes)</option>
+          </select>
+        </div>
+        <div id="replicate-section" style="display:none;margin-top:10px">
+          <label>Replicate API Key:</label>
+          <div style="display:flex;gap:8px">
+            <input type="password" id="replicate-key" placeholder="r8_xxxxxxxxxxxx" style="flex:1">
+            <button class="btn-primary" onclick="saveReplicateKey()">Save</button>
+          </div>
+          <p class="hint">Obtenha em replicate.com → Account → API Tokens. Custo: ~R$0,25-R$0,75 por vídeo.</p>
+          <button class="btn-secondary" onclick="testCloudGPU()" style="margin-top:8px">🧪 Testar Cloud GPU</button>
+          <div id="cloud-test-result" style="font-size:12px;margin-top:8px"></div>
+        </div>
+        <div style="margin-top:12px;padding:10px;background:rgba(0,0,0,0.2);border-radius:8px;font-size:12px;color:var(--dim)">
+          <strong style="color:var(--accent2)">Como funciona:</strong> Você roda o servidor AvatarPilot Pro num VPS barato. Os 300 clientes acessam via navegador. O processamento pesado vai para a GPU A100 na nuvem. Nenhum cliente precisa de GPU própria.
+        </div>
+      </div>
+
       <!-- ElevenLabs -->
       <div class="card">
         <h3>🔑 ElevenLabs API Key</h3>
@@ -428,6 +465,17 @@
         <div id="dashboard-content">
           <button class="btn-primary" onclick="loadDashboard()">🔄 Refresh Stats</button>
         </div>
+      </div>
+
+      <!-- Webhooks -->
+      <div class="card">
+        <h3>🔔 Webhooks (Notificações)</h3>
+        <p class="hint">Receba uma requisição POST quando cada vídeo terminar. Útil para integrar com n8n, Zapier, Make, ou seu sistema próprio.</p>
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+          <input type="text" id="webhook-url" placeholder="https://seu-servidor.com/webhook" style="flex:1">
+          <button class="btn-primary" onclick="registerWebhook()">+ Adicionar</button>
+        </div>
+        <div id="webhooks-list" style="font-size:12px;color:var(--dim)">Carregando...</div>
       </div>
 
       <!-- External API -->

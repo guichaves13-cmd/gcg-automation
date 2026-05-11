@@ -19,7 +19,7 @@ function showPage(id) {
   if (btn) btn.classList.add('active');
 
   if (id === 'backgrounds') loadBackgrounds();
-  if (id === 'settings')    { checkModels(); loadDashboard(); loadSettingsPage(); }
+  if (id === 'settings')    { checkModels(); loadDashboard(); loadSettingsPage(); loadWebhooks(); }
   if (id === 'history')     loadHistory();
   if (id === 'voices')      loadVoiceList();
   if (id === 'batch')       initBatchPage();
@@ -200,6 +200,7 @@ async function generateAvatar() {
   formData.append('avatar_position',  document.getElementById('avatar-position').value);
   formData.append('avatar_size',      document.getElementById('avatar-size').value);
   formData.append('avatar_opacity',   document.getElementById('avatar-opacity').value);
+  formData.append('voice_preset',     document.getElementById('voice-preset-select')?.value || '');
 
   if (audioInput.files && audioInput.files[0]) {
     formData.append('audio', audioInput.files[0]);
@@ -955,7 +956,19 @@ async function loadSettingsPage() {
     const planSel = document.getElementById('plan-select');
     if (planSel) planSel.value = currentPlan;
     document.getElementById('plan-badge').textContent = 'Plan: ' + currentPlan;
+    // Cloud GPU
+    const execSel = document.getElementById('executor-select');
+    if (execSel) {
+      execSel.value = d.executor || 'local';
+      const repSec = document.getElementById('replicate-section');
+      if (repSec) repSec.style.display = (d.executor === 'replicate') ? 'block' : 'none';
+    }
+    if (d.replicate_key_set) {
+      const kEl = document.getElementById('replicate-key');
+      if (kEl) kEl.placeholder = d.replicate_key + ' (saved)';
+    }
   } catch (e) {}
+  loadWebhooks();
 }
 
 // ============================================================================
@@ -1053,6 +1066,156 @@ async function loadDashboard() {
 }
 
 // ============================================================================
+// VOICE PRESETS (Task 9)
+// ============================================================================
+async function loadVoicePresets() {
+  try {
+    const r = await fetch('/api/voice_presets');
+    const d = await r.json();
+    const sel = document.getElementById('voice-preset-select');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">— Custom (use voice selection below) —</option>';
+    const cats = {};
+    (d.presets || []).forEach(p => {
+      cats[p.category] = cats[p.category] || [];
+      cats[p.category].push(p);
+    });
+    for (const [cat, presets] of Object.entries(cats)) {
+      sel.innerHTML += `<optgroup label="${cat}">`;
+      presets.forEach(p => {
+        sel.innerHTML += `<option value="${p.id}">${p.description} (${p.edge_voice.split('-').pop()})</option>`;
+      });
+      sel.innerHTML += '</optgroup>';
+    }
+  } catch (e) { console.error('Presets load error:', e); }
+}
+
+function applyVoicePreset(presetId) {
+  const descEl = document.getElementById('preset-desc');
+  if (!presetId) {
+    if (descEl) descEl.textContent = '';
+    return;
+  }
+  fetch('/api/voice_presets/' + presetId).then(r => r.json()).then(p => {
+    if (p.error) return;
+    // Set voice
+    const sel = document.getElementById('voice-select');
+    let found = false;
+    for (let o of sel.options) { if (o.value === p.edge_voice) { found = true; break; } }
+    if (!found) sel.innerHTML += `<option value="${p.edge_voice}">${p.edge_voice}</option>`;
+    sel.value = p.edge_voice;
+    // Show description
+    if (descEl) {
+      descEl.textContent = `${p.description} · Rate: ${p.rate} · Pitch: ${p.pitch} · Best for: ${(p.best_for||[]).join(', ')}`;
+    }
+    toast(`Preset applied: ${p.description}`, 'success');
+  }).catch(() => {});
+}
+
+async function detectLanguage() {
+  const script = document.getElementById('script').value.trim();
+  if (!script) { toast('Write a script first', 'warn'); return; }
+  try {
+    const r = await fetch('/api/ai/detect_voice', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ script })
+    });
+    const d = await r.json();
+    if (d.voice) {
+      const sel = document.getElementById('voice-select');
+      let found = false;
+      for (let o of sel.options) { if (o.value === d.voice) { found = true; break; } }
+      if (!found) sel.innerHTML += `<option value="${d.voice}">${d.voice}</option>`;
+      sel.value = d.voice;
+      toast(`Auto-detected voice: ${d.voice}`, 'success');
+    }
+  } catch (e) { toast('Error: ' + e.message, 'error'); }
+}
+
+// ============================================================================
+// CLOUD GPU SETTINGS (Replicate A100)
+// ============================================================================
+async function saveExecutor() {
+  const executor = document.getElementById('executor-select').value;
+  document.getElementById('replicate-section').style.display = executor === 'replicate' ? 'block' : 'none';
+  await fetch('/api/settings', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ executor })
+  });
+  toast(`Executor: ${executor === 'replicate' ? 'Cloud GPU A100 ☁️' : 'Local GPU 🖥️'}`, 'success');
+}
+
+async function saveReplicateKey() {
+  const key = document.getElementById('replicate-key').value.trim();
+  if (!key) { toast('Paste your Replicate API key', 'warn'); return; }
+  await fetch('/api/settings', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ replicate_key: key })
+  });
+  toast('Replicate key saved!', 'success');
+}
+
+async function testCloudGPU() {
+  const el = document.getElementById('cloud-test-result');
+  if (el) el.innerHTML = '<span style="color:var(--dim)">Testing...</span>';
+  try {
+    const r = await fetch('/api/cloud/test', { method: 'POST' });
+    const d = await r.json();
+    if (d.ok) {
+      if (el) el.innerHTML = `<span style="color:var(--green)">✅ Cloud GPU ready — ${d.model} · ${d.gpu} · version ${d.version}</span>`;
+      toast('Cloud GPU OK!', 'success');
+    } else {
+      if (el) el.innerHTML = `<span style="color:var(--red)">❌ ${d.error}</span>`;
+      toast('Cloud GPU error: ' + d.error, 'error');
+    }
+  } catch (e) { toast('Test error: ' + e.message, 'error'); }
+}
+
+// ============================================================================
+// WEBHOOKS (Task 10)
+// ============================================================================
+async function loadWebhooks() {
+  const el = document.getElementById('webhooks-list');
+  if (!el) return;
+  try {
+    const r = await fetch('/api/webhooks');
+    const d = await r.json();
+    if (!d.webhooks || d.webhooks.length === 0) {
+      el.innerHTML = '<span style="color:var(--dim)">Nenhum webhook cadastrado.</span>';
+      return;
+    }
+    el.innerHTML = d.webhooks.map(w => `
+      <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
+        <span style="flex:1;font-size:12px;word-break:break-all">${w.url}</span>
+        <span style="font-size:10px;color:var(--dim)">${w.global ? 'global' : 'job:'+w.job_id}</span>
+        <button onclick="deleteWebhook(${w.id})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px">✕</button>
+      </div>`).join('');
+  } catch (e) { if (el) el.textContent = 'Erro: ' + e.message; }
+}
+
+async function registerWebhook() {
+  const url = document.getElementById('webhook-url').value.trim();
+  if (!url || !url.startsWith('http')) { toast('URL válida necessária (http...)', 'warn'); return; }
+  try {
+    await fetch('/api/webhooks', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, global: true })
+    });
+    document.getElementById('webhook-url').value = '';
+    loadWebhooks();
+    toast('Webhook registrado!', 'success');
+  } catch (e) { toast('Erro: ' + e.message, 'error'); }
+}
+
+async function deleteWebhook(id) {
+  try {
+    await fetch('/api/webhooks/' + id, { method: 'DELETE' });
+    loadWebhooks();
+    toast('Webhook removido', 'success');
+  } catch (e) { toast('Erro: ' + e.message, 'error'); }
+}
+
+// ============================================================================
 // INIT
 // ============================================================================
 async function init() {
@@ -1061,11 +1224,21 @@ async function init() {
     const d = await r.json();
     currentPlan = d.plan || 'unlimited';
     document.getElementById('plan-badge').textContent = 'Plan: ' + currentPlan;
+    // Restore executor setting
+    const execSel = document.getElementById('executor-select');
+    if (execSel) {
+      execSel.value = d.executor || 'local';
+      if ((d.executor || 'local') === 'replicate') {
+        const repSec = document.getElementById('replicate-section');
+        if (repSec) repSec.style.display = 'block';
+      }
+    }
     updateScriptStats();
   } catch (e) {}
   checkModels();
   loadBackgrounds();
   loadTemplates();
+  loadVoicePresets();
 }
 
 init();

@@ -7,7 +7,7 @@ Features: SadTalker lip sync (chunked for 30min-1h), Edge-TTS/ElevenLabs,
           history, batch processing, AI script generation, templates, dashboard,
           plan-based duration limits (30min / 1h).
 """
-import os, sys, json, time, uuid, asyncio, subprocess, re, shutil, hashlib, threading, math
+import os, sys, json, time, uuid, asyncio, subprocess, re, shutil, hashlib, threading, math, sqlite3
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify, send_from_directory, Response
 from threading import Thread
@@ -54,6 +54,103 @@ DEFAULT_PLAN = "unlimited"    # change per user/tenant as needed
 jobs = {}         # {job_id: status dict}
 batch_queue = []  # list of job_ids waiting
 batch_lock  = threading.Lock()
+jobs_lock   = threading.Lock()
+
+# ── SQLite path ───────────────────────────────────────────────────────────────
+DB_PATH = os.path.join(DATA_DIR, "avatarpilot.db")
+
+# ── Webhook registry {job_id: [urls]} and global webhooks ────────────────────
+webhook_registry = {}   # {job_id: [url, ...]}
+global_webhooks  = []   # URLs notified on every completed job
+
+# ── Cloud GPU max workers ─────────────────────────────────────────────────────
+MAX_WORKERS   = 3       # concurrent SadTalker jobs (cloud can handle more)
+active_workers = 0
+workers_lock   = threading.Lock()
+
+# ── VOICE PRESETS ─────────────────────────────────────────────────────────────
+VOICE_PRESETS = {
+    # pitch uses Hz (Edge-TTS format: "+5Hz", "-10Hz", "+0Hz")
+    # rate uses % ("+10%", "-10%", "+0%")
+    "documentary_narrator": {
+        "edge_voice": "en-US-GuyNeural", "rate": "-10%", "pitch": "-10Hz",
+        "description": "Deep, authoritative narrator",
+        "best_for": ["documentary", "history", "science", "nature"],
+        "category": "English",
+    },
+    "news_anchor": {
+        "edge_voice": "en-US-JennyNeural", "rate": "+5%", "pitch": "+0Hz",
+        "description": "Professional news presenter, clear and confident",
+        "best_for": ["news", "breaking", "reports", "briefings"],
+        "category": "English",
+    },
+    "sales_pitch": {
+        "edge_voice": "en-US-DavisNeural", "rate": "+15%", "pitch": "+5Hz",
+        "description": "Energetic, persuasive sales voice",
+        "best_for": ["sales", "marketing", "ads", "promos"],
+        "category": "English",
+    },
+    "corporate_trainer": {
+        "edge_voice": "en-US-TonyNeural", "rate": "-5%", "pitch": "+0Hz",
+        "description": "Clear, professional e-learning narration",
+        "best_for": ["e-learning", "training", "tutorial", "courses"],
+        "category": "English",
+    },
+    "friendly_explainer": {
+        "edge_voice": "en-US-AriaNeural", "rate": "+0%", "pitch": "+5Hz",
+        "description": "Warm, engaging explainer voice",
+        "best_for": ["explainer", "education", "product demo"],
+        "category": "English",
+    },
+    "podcast_host": {
+        "edge_voice": "en-US-GuyNeural", "rate": "-3%", "pitch": "+3Hz",
+        "description": "Conversational, warm podcast tone",
+        "best_for": ["podcast", "interview", "storytelling"],
+        "category": "English",
+    },
+    "br_apresentador": {
+        "edge_voice": "pt-BR-AntonioNeural", "rate": "-5%", "pitch": "+0Hz",
+        "description": "Apresentador brasileiro profissional",
+        "best_for": ["apresentação", "notícias", "documentário"],
+        "category": "Português",
+    },
+    "br_educacional": {
+        "edge_voice": "pt-BR-FranciscaNeural", "rate": "-8%", "pitch": "+5Hz",
+        "description": "Voz educacional feminina, clara e didática",
+        "best_for": ["aulas", "cursos", "e-learning"],
+        "category": "Português",
+    },
+    "es_noticias": {
+        "edge_voice": "es-MX-JorgeNeural", "rate": "+0%", "pitch": "+0Hz",
+        "description": "Locutor de noticias profesional español",
+        "best_for": ["noticias", "presentación", "documental"],
+        "category": "Español",
+    },
+    "fr_narrateur": {
+        "edge_voice": "fr-FR-HenriNeural", "rate": "-5%", "pitch": "+0Hz",
+        "description": "Narrateur professionnel français",
+        "best_for": ["documentaire", "présentation", "e-learning"],
+        "category": "Français",
+    },
+    "de_sprecher": {
+        "edge_voice": "de-DE-ConradNeural", "rate": "-5%", "pitch": "+0Hz",
+        "description": "Professioneller deutscher Sprecher",
+        "best_for": ["Dokumentation", "Präsentation", "Schulung"],
+        "category": "Deutsch",
+    },
+    "asmr_calm": {
+        "edge_voice": "en-US-JennyNeural", "rate": "-20%", "pitch": "-15Hz",
+        "description": "Soft, calm, soothing whisper-like delivery",
+        "best_for": ["relaxation", "wellness", "meditation", "asmr"],
+        "category": "Special",
+    },
+    "energetic_host": {
+        "edge_voice": "en-US-DavisNeural", "rate": "+20%", "pitch": "+15Hz",
+        "description": "High-energy game show / event host",
+        "best_for": ["events", "gaming", "entertainment", "promo"],
+        "category": "Special",
+    },
+}
 
 # ============================================================================
 # SETTINGS
@@ -71,6 +168,106 @@ def load_settings():
 def save_settings(s):
     with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
         json.dump(s, f, indent=2, ensure_ascii=False)
+
+# ============================================================================
+# SQLITE — PERSISTENT JOB QUEUE
+# ============================================================================
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("""CREATE TABLE IF NOT EXISTS jobs_db (
+        id TEXT PRIMARY KEY,
+        status TEXT DEFAULT 'queued',
+        progress INTEGER DEFAULT 0,
+        config TEXT,
+        output_path TEXT DEFAULT '',
+        output_filename TEXT DEFAULT '',
+        error TEXT DEFAULT '',
+        message TEXT DEFAULT '',
+        created_at TEXT,
+        completed_at TEXT,
+        duration REAL DEFAULT 0,
+        thumbnail TEXT DEFAULT '',
+        audio_duration REAL DEFAULT 0
+    )""")
+    conn.execute("""CREATE TABLE IF NOT EXISTS webhooks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        job_id TEXT DEFAULT '',
+        url TEXT NOT NULL,
+        global_hook INTEGER DEFAULT 0,
+        created_at TEXT
+    )""")
+    conn.commit()
+    conn.close()
+
+def db_save_job(job_id, data: dict):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.execute("""INSERT OR REPLACE INTO jobs_db
+            (id, status, progress, config, output_path, output_filename, error, message,
+             created_at, completed_at, duration, thumbnail, audio_duration)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""", (
+            job_id,
+            data.get("status", "queued"),
+            data.get("progress", 0),
+            json.dumps(data.get("_config", {})),
+            data.get("output_path", ""),
+            data.get("output_filename", ""),
+            data.get("error", ""),
+            data.get("message", ""),
+            data.get("created", ""),
+            data.get("completed_at", ""),
+            data.get("duration", 0),
+            data.get("thumbnail", ""),
+            data.get("audio_duration", 0),
+        ))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"  [DB] save_job error: {e}")
+
+def db_load_incomplete_jobs():
+    """On startup, mark any jobs that were 'processing' as failed (server restarted)."""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        rows = conn.execute(
+            "SELECT id, config, created_at FROM jobs_db WHERE status NOT IN ('done','error','queued')"
+        ).fetchall()
+        for row in rows:
+            conn.execute("UPDATE jobs_db SET status='error', error='Server restarted' WHERE id=?", (row[0],))
+        conn.commit()
+        conn.close()
+        if rows:
+            print(f"  [DB] Marked {len(rows)} interrupted jobs as failed on startup")
+    except Exception as e:
+        print(f"  [DB] load_incomplete_jobs error: {e}")
+
+def db_get_webhooks(job_id=""):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        if job_id:
+            rows = conn.execute(
+                "SELECT url FROM webhooks WHERE job_id=? OR global_hook=1", (job_id,)
+            ).fetchall()
+        else:
+            rows = conn.execute("SELECT url FROM webhooks WHERE global_hook=1").fetchall()
+        conn.close()
+        return [r[0] for r in rows]
+    except Exception:
+        return []
+
+def db_register_webhook(url, job_id="", is_global=False):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.execute(
+            "INSERT INTO webhooks (job_id, url, global_hook, created_at) VALUES (?,?,?,?)",
+            (job_id, url, 1 if is_global else 0, datetime.now().isoformat())
+        )
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"  [DB] register_webhook error: {e}")
+        return False
 
 # ============================================================================
 # HISTORY (persistent JSON)
@@ -145,6 +342,19 @@ def edge_tts_generate(text, voice, output_path):
     asyncio.set_event_loop(loop)
     try:
         loop.run_until_complete(_edge_tts_generate(text, voice, output_path))
+    finally:
+        loop.close()
+
+async def _edge_tts_advanced(text, voice, output_path, rate="0%", pitch="0%"):
+    import edge_tts
+    communicate = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
+    await communicate.save(output_path)
+
+def edge_tts_generate_advanced(text, voice, output_path, rate="0%", pitch="0%"):
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(_edge_tts_advanced(text, voice, output_path, rate, pitch))
     finally:
         loop.close()
 
@@ -301,10 +511,11 @@ def run_sadtalker(image_path, audio_path, output_path, settings=None):
         cmd.append("--still")
 
     print(f"  [SadTalker] size={size}, preprocess={preprocess}, enhancer={enhancer}")
-    # Timeout: 1800s per chunk (30min) — enough for a 5-min audio segment on RTX 4060
+    # Timeout scales with size and mode: 256px crop=1800s, 512px full=7200s
+    timeout_s = 7200 if (size >= 512 or preprocess in ("full", "extfull")) else 1800
     proc = subprocess.run(
         cmd, capture_output=True, text=True,
-        cwd=st_path, timeout=1800,
+        cwd=st_path, timeout=timeout_s,
         env={**os.environ, "PYTHONIOENCODING": "utf-8"}
     )
 
@@ -347,11 +558,30 @@ def run_sadtalker(image_path, audio_path, output_path, settings=None):
 def run_sadtalker_chunked(image_path, audio_path, output_path, settings=None,
                           chunk_duration=270, job_id=None):
     """
-    For long audio (>5min), splits into chunks of chunk_duration seconds,
-    processes each with SadTalker, then concatenates.
-    This avoids VRAM overflow and timeout on 30min-1h content.
-    chunk_duration=270s = 4.5min per chunk — safe for 8GB VRAM.
+    Smart dispatcher: uses Cloud GPU (Replicate A100) if configured,
+    otherwise uses local GPU with chunked processing for long audio.
+    Cloud GPU: no VRAM limit, ~5x faster, supports 300 concurrent clients.
     """
+    # ── Cloud GPU path ────────────────────────────────────────────────────────
+    s = load_settings()
+    if s.get("executor", "local") == "replicate" and s.get("replicate_key", ""):
+        print("  [SadTalker] Using Cloud GPU (Replicate A100)")
+        if job_id and job_id in jobs:
+            jobs[job_id]["message"] = "Using Cloud GPU (Replicate A100)..."
+        return run_sadtalker_cloud_replicate(image_path, audio_path, output_path, settings, job_id)
+
+    # ── Local GPU: VRAM check ─────────────────────────────────────────────────
+    if not vram_is_sufficient(min_gb=2.0):
+        if job_id and job_id in jobs:
+            jobs[job_id]["message"] = "Waiting for VRAM to free up..."
+        for _ in range(60):   # wait up to 5 min
+            time.sleep(5)
+            release_vram()
+            if vram_is_sufficient(min_gb=2.0):
+                break
+        else:
+            print("  [SadTalker] VRAM insufficient after 5min wait — proceeding anyway")
+
     total_dur = get_media_duration(audio_path)
     ffmpeg    = _ffmpeg_path()
 
@@ -545,6 +775,220 @@ def elevenlabs_generate_v2(text: str, voice_id: str, api_key: str, output_path: 
 
 
 # ============================================================================
+# CLOUD GPU — REPLICATE A100 (serves 300 clients, no local GPU required)
+# ============================================================================
+def run_sadtalker_cloud_replicate(image_path, audio_path, output_path, settings=None, job_id=None):
+    """
+    Run SadTalker on Replicate A100/A40 cloud GPU.
+    Clients need ZERO local GPU — processing happens in the cloud.
+    Cost: ~$0.05-0.15 per video minute. No VRAM limits (80GB A100).
+    """
+    import requests as _req, base64 as _b64
+
+    s       = load_settings()
+    api_key = s.get("replicate_key", "")
+    if not api_key:
+        raise Exception("Replicate API key not configured. Set it in Settings → Cloud GPU.")
+
+    settings = settings or {}
+
+    # Read and base64-encode files for Replicate data-URI upload
+    with open(image_path, "rb") as f:
+        img_ext  = os.path.splitext(image_path)[1].lower().lstrip(".") or "png"
+        img_mime = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png"}.get(img_ext, "image/png")
+        img_data = f"data:{img_mime};base64," + _b64.b64encode(f.read()).decode()
+    with open(audio_path, "rb") as f:
+        aud_ext  = os.path.splitext(audio_path)[1].lower().lstrip(".") or "mp3"
+        aud_mime = {"mp3": "audio/mpeg", "wav": "audio/wav", "m4a": "audio/mp4", "ogg": "audio/ogg"}.get(aud_ext, "audio/mpeg")
+        aud_data = f"data:{aud_mime};base64," + _b64.b64encode(f.read()).decode()
+
+    if job_id and job_id in jobs:
+        jobs[job_id]["message"] = "Submitting to Cloud GPU (Replicate A100)..."
+
+    # Submit prediction — uses Replicate's SadTalker model (A100/A40 GPU)
+    resp = _req.post(
+        "https://api.replicate.com/v1/models/cjwbw/sadtalker/predictions",
+        headers={"Authorization": f"Token {api_key}", "Content-Type": "application/json",
+                 "Prefer": "wait"},  # Prefer:wait enables synchronous mode (up to 60s)
+        json={"input": {
+            "source_image":  img_data,
+            "driven_audio":  aud_data,
+            "preprocess":    settings.get("preprocess", "crop"),
+            "still_mode":    bool(settings.get("still", False)),
+            "use_enhancer":  settings.get("enhancer", "gfpgan") in ("gfpgan", "RestoreFormer"),
+            "size_of_image": int(settings.get("size", 256)),
+            "pose_style":    0,
+            "exp_scale":     float(settings.get("expression_scale", 1.0)),
+        }},
+        timeout=120
+    )
+
+    if resp.status_code not in (200, 201):
+        raise Exception(f"Replicate API error {resp.status_code}: {resp.text[:300]}")
+
+    pred = resp.json()
+    # Synchronous (Prefer:wait) may return result immediately
+    if pred.get("status") == "succeeded" and pred.get("output"):
+        output_url = pred["output"]
+    else:
+        pred_id  = pred["id"]
+        poll_url = pred.get("urls", {}).get("get", f"https://api.replicate.com/v1/predictions/{pred_id}")
+
+        # Poll until done (A100 is fast — usually 30-120s per minute of audio)
+        print(f"  [Cloud GPU] Prediction {pred_id} — polling for result...")
+        for attempt in range(720):   # max 1 hour (720 × 5s)
+            time.sleep(5)
+            r    = _req.get(poll_url, headers={"Authorization": f"Token {api_key}"}, timeout=15)
+            pred = r.json()
+            st   = pred.get("status")
+
+            if job_id and job_id in jobs:
+                pmap = {"starting": 38, "processing": 55, "succeeded": 88}
+                jobs[job_id]["progress"] = pmap.get(st, jobs[job_id].get("progress", 35))
+                jobs[job_id]["message"]  = f"Cloud GPU — {st} ({attempt*5}s)..."
+
+            print(f"  [Cloud GPU] {st} ({attempt*5}s)")
+            if st == "succeeded":
+                output_url = pred.get("output")
+                if not output_url:
+                    raise Exception("Replicate returned no output URL")
+                break
+            elif st == "failed":
+                raise Exception(f"Cloud GPU job failed: {pred.get('error', 'unknown')}")
+        else:
+            raise Exception("Cloud GPU timeout after 1 hour")
+
+    # Download result video
+    if job_id and job_id in jobs:
+        jobs[job_id]["message"] = "Downloading result from cloud..."
+    r2 = _req.get(output_url, timeout=300, stream=True)
+    r2.raise_for_status()
+    with open(output_path, "wb") as f:
+        for chunk in r2.iter_content(chunk_size=8192):
+            f.write(chunk)
+    print(f"  [Cloud GPU] Done — {os.path.getsize(output_path)//1024}KB saved")
+    return output_path
+
+
+# ============================================================================
+# AUTO LANGUAGE DETECTION
+# ============================================================================
+def auto_detect_voice(text: str) -> str:
+    """Detect script language and return the best matching Edge-TTS voice."""
+    if not text or len(text) < 20:
+        return "en-US-GuyNeural"
+
+    # Simple Unicode-based heuristic — no extra package needed
+    text_l = text.lower()
+    sample  = text_l[:500]
+
+    # Portuguese (check before Spanish — many common words)
+    pt_words = ['não', 'você', 'está', 'são', 'também', 'muito', 'isso', 'para', 'com', 'uma', 'mas']
+    if sum(1 for w in pt_words if w in sample) >= 2:
+        # Brazil or Portugal?
+        if any(w in sample for w in ['ão', 'ão', 'ações', 'vocês', 'então']):
+            return "pt-BR-AntonioNeural"
+        return "pt-PT-DuarteNeural"
+
+    # Spanish
+    es_words = ['que', 'los', 'las', 'una', 'del', 'por', 'con', 'más', 'también', 'está', 'para']
+    if sum(1 for w in es_words if f' {w} ' in f' {sample} ') >= 3:
+        return "es-MX-JorgeNeural"
+
+    # French
+    fr_words = ['les', 'des', 'une', 'est', 'dans', 'sur', 'avec', 'pour', 'vous', 'nous', "d'"]
+    if sum(1 for w in fr_words if f' {w} ' in f' {sample} ') >= 3:
+        return "fr-FR-HenriNeural"
+
+    # German
+    de_words = ['die', 'der', 'das', 'ist', 'und', 'ich', 'sie', 'ein', 'nicht', 'mit', 'auf']
+    if sum(1 for w in de_words if f' {w} ' in f' {sample} ') >= 3:
+        return "de-DE-ConradNeural"
+
+    # Italian
+    it_words = ['della', 'nel', 'con', 'una', 'per', 'sono', 'come', 'più', 'che', 'questo']
+    if sum(1 for w in it_words if f' {w} ' in f' {sample} ') >= 3:
+        return "it-IT-DiegoNeural"
+
+    # Japanese (CJK block)
+    if any('぀' <= c <= 'ヿ' or '一' <= c <= '鿿' for c in text[:200]):
+        if any('぀' <= c <= 'ヿ' for c in text[:200]):
+            return "ja-JP-KeitaNeural"
+        return "zh-CN-YunxiNeural"
+
+    # Arabic
+    if any('؀' <= c <= 'ۿ' for c in text[:200]):
+        return "ar-SA-HamedNeural"
+
+    # Hindi
+    if any('ऀ' <= c <= 'ॿ' for c in text[:200]):
+        return "hi-IN-MadhurNeural"
+
+    return "en-US-GuyNeural"
+
+
+# ============================================================================
+# VRAM MANAGEMENT
+# ============================================================================
+def get_vram_free_gb() -> float:
+    """Return free VRAM in GB. Returns 999 if no GPU or PyTorch not available."""
+    try:
+        import torch
+        if torch.cuda.is_available():
+            free, _ = torch.cuda.mem_get_info(0)
+            return round(free / 1024**3, 2)
+    except Exception:
+        pass
+    return 999.0
+
+def vram_is_sufficient(min_gb: float = 2.0) -> bool:
+    """Check if enough VRAM is available to start a new SadTalker job."""
+    free = get_vram_free_gb()
+    print(f"  [VRAM] Free: {free}GB (need {min_gb}GB)")
+    return free >= min_gb
+
+def release_vram():
+    """Release unused VRAM after a job completes."""
+    try:
+        import torch, gc
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+    except Exception:
+        pass
+
+
+# ============================================================================
+# WEBHOOK NOTIFICATIONS
+# ============================================================================
+def notify_webhooks(job_id: str, job_data: dict):
+    """Fire all registered webhooks for this job (runs in background thread)."""
+    urls = db_get_webhooks(job_id)
+    if not urls:
+        return
+    payload = {
+        "event":       "job_complete",
+        "job_id":      job_id,
+        "status":      job_data.get("status"),
+        "duration":    job_data.get("duration"),
+        "output_url":  f"http://localhost:5052/outputs/{job_data.get('output_filename', '')}",
+        "thumbnail":   job_data.get("thumbnail", ""),
+        "error":       job_data.get("error", ""),
+        "timestamp":   datetime.now().isoformat(),
+    }
+    def _fire():
+        import requests as _r
+        for url in urls:
+            try:
+                _r.post(url, json=payload, timeout=10)
+                print(f"  [Webhook] Fired: {url} for job {job_id}")
+            except Exception as e:
+                print(f"  [Webhook] Failed {url}: {e}")
+    Thread(target=_fire, daemon=True).start()
+
+
+# ============================================================================
 # THUMBNAIL GENERATION
 # ============================================================================
 def generate_thumbnail(video_path: str, out_path: str) -> bool:
@@ -700,18 +1144,24 @@ def run_pipeline(job_id: str, config: dict):
             jobs[job_id]["progress"] = 25
         elif config.get("tts_engine") == "elevenlabs":
             settings = load_settings()
-            elevenlabs_generate(
+            elevenlabs_generate_v2(
                 config["script"],
                 config.get("voice_id", "21m00Tcm4TlvDq8ikWAM"),
                 settings.get("elevenlabs_key", ""),
-                audio_path
+                audio_path,
             )
             jobs[job_id]["progress"] = 25
         else:
-            edge_tts_generate(
-                config["script"],
-                config.get("voice", "en-US-GuyNeural"),
-                audio_path
+            voice = config.get("voice", "")
+            # Auto-detect language if voice is not specified
+            if not voice or voice == "auto":
+                voice = auto_detect_voice(config.get("script", ""))
+                print(f"  [AutoVoice] Detected voice: {voice}")
+            # Apply voice preset rate/pitch if set
+            rate  = config.get("voice_rate", "+0%")
+            pitch = config.get("voice_pitch", "+0Hz")
+            edge_tts_generate_advanced(
+                config["script"], voice, audio_path, rate=rate, pitch=pitch
             )
             jobs[job_id]["progress"] = 25
 
@@ -790,13 +1240,21 @@ def run_pipeline(job_id: str, config: dict):
         add_to_history(history_record)
         increment_stats(jobs[job_id]["duration"])
 
+        # Persist to SQLite + fire webhooks
+        db_save_job(job_id, jobs[job_id])
+        notify_webhooks(job_id, jobs[job_id])
+
     except Exception as e:
         jobs[job_id]["status"]  = "error"
         jobs[job_id]["error"]   = str(e)
         jobs[job_id]["message"] = f"Error: {e}"
         print(f"  [Pipeline Error] job={job_id}: {e}")
+        db_save_job(job_id, jobs[job_id])
+        notify_webhooks(job_id, jobs[job_id])
 
     finally:
+        # Release GPU memory
+        release_vram()
         # Clean up tmp avatar (keep final only)
         _safe_rm(os.path.join(OUTPUT_DIR, f"{job_id}_avatar.mp4"))
         # Advance batch queue
@@ -882,7 +1340,18 @@ def api_generate():
     avatar_position = request.form.get("avatar_position", "bottom_right")
     avatar_size     = request.form.get("avatar_size", "medium")
     avatar_opacity  = float(request.form.get("avatar_opacity", "1.0"))
+    voice_preset    = request.form.get("voice_preset", "")
     plan            = load_settings().get("plan", DEFAULT_PLAN)
+
+    # Apply voice preset if selected
+    voice_rate  = "+0%"
+    voice_pitch = "+0Hz"
+    if voice_preset and voice_preset in VOICE_PRESETS:
+        p = VOICE_PRESETS[voice_preset]
+        if not voice:
+            voice = p.get("edge_voice", voice)
+        voice_rate  = p.get("rate", "+0%")
+        voice_pitch = p.get("pitch", "+0Hz")
 
     # Image
     if "image" not in request.files:
@@ -916,6 +1385,8 @@ def api_generate():
         "enhancer": enhancer, "background": bg_path, "size": size,
         "avatar_position": avatar_position, "avatar_size": avatar_size,
         "avatar_opacity": avatar_opacity, "plan": plan,
+        "voice_rate": voice_rate, "voice_pitch": voice_pitch,
+        "voice_preset": voice_preset,
     }
     jobs[job_id] = {
         "id": job_id, "status": "queued", "progress": 0,
@@ -1142,6 +1613,96 @@ def api_elevenlabs_voices():
         return jsonify({"error": "ElevenLabs API key not configured"}), 400
     voices = elevenlabs_list_voices(api_key)
     return jsonify({"voices": voices, "total": len(voices)})
+
+@app.route("/api/voice_presets")
+def api_voice_presets():
+    """List all voice presets grouped by category."""
+    category = request.args.get("category", "")
+    presets = []
+    for key, p in VOICE_PRESETS.items():
+        if category and p.get("category", "").lower() != category.lower():
+            continue
+        presets.append({"id": key, **p})
+    categories = sorted(set(p.get("category", "Other") for p in VOICE_PRESETS.values()))
+    return jsonify({"presets": presets, "categories": categories, "total": len(presets)})
+
+@app.route("/api/voice_presets/<preset_id>")
+def api_voice_preset_detail(preset_id):
+    p = VOICE_PRESETS.get(preset_id)
+    if not p:
+        return jsonify({"error": "Preset not found"}), 404
+    return jsonify({"id": preset_id, **p})
+
+@app.route("/api/webhooks", methods=["GET"])
+def api_webhooks_list():
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        rows = conn.execute("SELECT id, job_id, url, global_hook, created_at FROM webhooks").fetchall()
+        conn.close()
+        return jsonify({"webhooks": [{"id": r[0], "job_id": r[1], "url": r[2],
+                                      "global": bool(r[3]), "created_at": r[4]} for r in rows]})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/webhooks", methods=["POST"])
+def api_webhooks_register():
+    data = request.json or {}
+    url     = data.get("url", "").strip()
+    job_id  = data.get("job_id", "")
+    is_glob = data.get("global", True)
+    if not url or not url.startswith("http"):
+        return jsonify({"error": "Valid URL required"}), 400
+    db_register_webhook(url, job_id, is_glob)
+    return jsonify({"status": "registered", "url": url, "global": is_glob})
+
+@app.route("/api/webhooks/<int:wid>", methods=["DELETE"])
+def api_webhooks_delete(wid):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.execute("DELETE FROM webhooks WHERE id=?", (wid,))
+        conn.commit()
+        conn.close()
+        return jsonify({"deleted": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/cloud/test", methods=["POST"])
+def api_cloud_test():
+    """Test Replicate API key and SadTalker model availability."""
+    import requests as _r
+    s   = load_settings()
+    key = s.get("replicate_key", "")
+    if not key:
+        return jsonify({"ok": False, "error": "Replicate key not configured"})
+    try:
+        r = _r.get("https://api.replicate.com/v1/models/cjwbw/sadtalker",
+                   headers={"Authorization": f"Token {key}"}, timeout=10)
+        if r.status_code == 200:
+            m = r.json()
+            latest = m.get("latest_version", {}).get("id", "")[:12] or "latest"
+            return jsonify({"ok": True, "model": "cjwbw/sadtalker",
+                            "version": latest, "gpu": "A40/A100 (cloud)"})
+        return jsonify({"ok": False, "error": f"API error {r.status_code}: {r.text[:200]}"})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
+
+@app.route("/api/ai/detect_voice", methods=["POST"])
+def api_detect_voice():
+    """Auto-detect script language and suggest best voice."""
+    data   = request.json or {}
+    script = data.get("script", "").strip()
+    if not script:
+        return jsonify({"error": "No script"}), 400
+    voice = auto_detect_voice(script)
+    return jsonify({"voice": voice, "auto_detected": True})
+
+@app.route("/api/vram")
+def api_vram():
+    """Current VRAM status."""
+    free = get_vram_free_gb()
+    sufficient = vram_is_sufficient(2.0)
+    return jsonify({"vram_free_gb": free, "sufficient": sufficient,
+                    "recommendation": "ready" if sufficient else "wait_or_use_cloud"})
 
 @app.route("/api/voices/clone", methods=["POST"])
 def api_voices_clone():
@@ -1379,13 +1940,16 @@ def api_get_settings():
     if s.get("elevenlabs_key"):
         s["elevenlabs_key_set"] = True
         s["elevenlabs_key"]     = "***" + s["elevenlabs_key"][-4:]
+    if s.get("replicate_key"):
+        s["replicate_key_set"] = True
+        s["replicate_key"]     = "r8_***" + s["replicate_key"][-4:]
     return jsonify(s)
 
 @app.route("/api/settings", methods=["POST"])
 def api_save_settings():
     data = request.json or {}
     s    = load_settings()
-    for field in ("elevenlabs_key", "tts_engine", "default_voice", "plan"):
+    for field in ("elevenlabs_key", "tts_engine", "default_voice", "plan", "replicate_key", "executor"):
         if field in data and data[field] is not None:
             s[field] = data[field]
     save_settings(s)
@@ -1456,19 +2020,29 @@ def serve_upload(filename):
 # MAIN
 # ============================================================================
 if __name__ == "__main__":
+    # Init SQLite and clean up any interrupted jobs
+    init_db()
+    db_load_incomplete_jobs()
+
+    s = load_settings()
+    executor = s.get("executor", "local")
+
     print("=" * 60)
-    print("  AvatarPilot Pro v2 — AI Talking Avatar Generator")
-    print(f"  URL:  http://localhost:5052")
-    print(f"  Plan: {load_settings().get('plan', DEFAULT_PLAN)}")
-    print(f"  GPU:  ", end="")
+    print("  AvatarPilot Pro v3 — AI Talking Avatar Generator")
+    print(f"  URL:    http://localhost:5052")
+    print(f"  Plan:   {s.get('plan', DEFAULT_PLAN)}")
+    print(f"  Executor: {executor.upper()} {'(cloud A100 active)' if executor=='replicate' else '(local GPU)'}")
+    print(f"  GPU:    ", end="")
     try:
         import torch
         if torch.cuda.is_available():
-            print(torch.cuda.get_device_name(0))
+            free_gb = round(torch.cuda.mem_get_info(0)[0] / 1024**3, 1)
+            print(f"{torch.cuda.get_device_name(0)} ({free_gb}GB free VRAM)")
         else:
             print("CPU only")
     except Exception:
         print("PyTorch not found")
     print(f"  SadTalker: {'OK' if check_sadtalker() else 'NOT INSTALLED'}")
+    print(f"  Workers:   {MAX_WORKERS} concurrent jobs")
     print("=" * 60)
     app.run(host="0.0.0.0", port=5052, debug=False, threaded=True)
