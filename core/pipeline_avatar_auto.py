@@ -906,6 +906,13 @@ def _download_from_shot_list(shot_list, output_folder, pexels_key, pixabay_key, 
     # --- Deduplicação ---
     seen_urls = set()
 
+    def _rm(path):
+        try:
+            if path and os.path.exists(path):
+                os.remove(path)
+        except OSError:
+            pass
+
     def _file_hash(path):
         try:
             h = _hl.md5()
@@ -918,13 +925,23 @@ def _download_from_shot_list(shot_list, output_folder, pexels_key, pixabay_key, 
     seen_hashes = set()
 
     def _try_one(source, keyword, base_out, attempt_tag):
-        """Tenta baixar um clip/imagem de uma fonte. Retorna (path, url) ou (None, None)."""
+        """
+        Tenta baixar um clip/imagem de uma fonte.
+        Retorna (path, url) ou (None, None).
+
+        Validacao dupla:
+          - Video: tamanho >= 100KB, duracao >= 3s, largura >= 640px
+          - Imagem: tamanho >= 10KB, largura >= 640px
+          - Hash: nunca aceita arquivo identico a outro ja baixado
+        """
+        from core.video_auditor import validate_broll as _vbroll
+
         dl = downloaders.get(source)
         if not dl:
             return None, None
         search_vids, search_pics, download_fn, api_key = dl
 
-        # Tenta vídeo primeiro
+        # ── Video ──────────────────────────────────────────────────────────
         if search_vids:
             try:
                 if source == "pexels":
@@ -944,21 +961,28 @@ def _download_from_shot_list(shot_list, output_folder, pexels_key, pixabay_key, 
                 try:
                     download_fn(url, out_path)
                 except Exception:
+                    _rm(out_path)
                     continue
-                if os.path.exists(out_path) and os.path.getsize(out_path) > 5000:
+
+                # Validacao: tamanho minimo 100KB + duracao + resolucao
+                if os.path.exists(out_path) and os.path.getsize(out_path) >= 100_000:
+                    vr = _vbroll(out_path, min_duration=3, min_width=640)
+                    if not vr["valid"]:
+                        print(f"    [download] clip rejeitado ({vr['reason']}): {url[:60]}")
+                        _rm(out_path)
+                        continue
                     fh = _file_hash(out_path)
                     if fh and fh in seen_hashes:
-                        try:
-                            os.remove(out_path)
-                        except Exception:
-                            pass
+                        _rm(out_path)
                         continue
                     seen_urls.add(url)
                     if fh:
                         seen_hashes.add(fh)
                     return out_path, url
+                else:
+                    _rm(out_path)
 
-        # Fallback: foto
+        # ── Foto (fallback) ────────────────────────────────────────────────
         if search_pics:
             try:
                 if source in ("pexels", "pixabay", "unsplash"):
@@ -976,19 +1000,24 @@ def _download_from_shot_list(shot_list, output_folder, pexels_key, pixabay_key, 
                 try:
                     download_fn(url, out_path)
                 except Exception:
+                    _rm(out_path)
                     continue
-                if os.path.exists(out_path) and os.path.getsize(out_path) > 1000:
+
+                if os.path.exists(out_path) and os.path.getsize(out_path) >= 10_000:
+                    vr = _vbroll(out_path, min_duration=0, min_width=640)
+                    if not vr["valid"]:
+                        _rm(out_path)
+                        continue
                     fh = _file_hash(out_path)
                     if fh and fh in seen_hashes:
-                        try:
-                            os.remove(out_path)
-                        except Exception:
-                            pass
+                        _rm(out_path)
                         continue
                     seen_urls.add(url)
                     if fh:
                         seen_hashes.add(fh)
                     return out_path, url
+                else:
+                    _rm(out_path)
 
         return None, None
 
@@ -1179,11 +1208,24 @@ def _redownload_bad_clips(bad_indices, mapped_clips, shot_list, output_folder,
                                 download_fn(url, out_path)
                             except Exception:
                                 continue
-                            if os.path.exists(out_path) and os.path.getsize(out_path) > 5000:
+                            if os.path.exists(out_path) and os.path.getsize(out_path) >= 100_000:
+                                from core.video_auditor import validate_broll as _vbroll
+                                vr = _vbroll(out_path, min_duration=3, min_width=640)
+                                if not vr["valid"]:
+                                    try:
+                                        os.remove(out_path)
+                                    except OSError:
+                                        pass
+                                    continue
                                 mapped_clips[idx] = {**clip, "file": out_path, "keyword": term}
-                                print(f"  [Re-download] Clip {idx}: '{current_kw}' → '{term}' ✓")
+                                print(f"  [Re-download] Clip {idx}: '{current_kw}' -> '{term}' OK")
                                 found = True
                                 break
+                            elif os.path.exists(out_path):
+                                try:
+                                    os.remove(out_path)
+                                except OSError:
+                                    pass
                 except Exception:
                     continue
                 if found:

@@ -184,23 +184,32 @@ class VideoIntelligence:
     
     def _transcribe_fresh(self, video_path: str, output_dir: str, on_progress=None) -> tuple:
         """
-        Transcribe video from scratch — NEVER uses cached audio/srt.
+        Transcribe video from scratch com resiliencia em 3 niveis.
 
-        Auto-selects Whisper model based on video duration:
-            <= 8 min  -> "base"  (good accuracy)
-            8-20 min  -> "tiny"  (fast, acceptable accuracy)
-            > 20 min  -> "tiny"  (fast, avoids OOM)
+        Nivel 1 — modelo auto por duracao, timeout completo:
+            <= 8 min  -> 'base'  (6 min timeout)
+            8-20 min  -> 'tiny'  (8 min timeout)
+            > 20 min  -> 'tiny'  (10 min timeout)
 
-        Hard timeout: 10 minutes. If Whisper hangs (OOM, GPU deadlock, etc.),
-        the thread is abandoned and pipeline continues without transcription.
+        Nivel 2 — se timeout no nivel 1:
+            Tenta de novo com 'tiny' e metade do timeout original.
+
+        Nivel 3 — se timeout no nivel 2:
+            Extrai apenas os primeiros 5 minutos de audio e transcreve.
+            Garante que o pipeline sempre tem pelo menos o inicio da narracao
+            para gerar shot list semanticamente correto.
+
+        Nunca retorna erro — sempre entrega o melhor resultado possivel.
         """
         import tempfile as _tf
         import threading as _th
         import subprocess as _sp
         import shutil as _sh
 
-        # Always write audio to %TEMP% to avoid special-char path issues
-        audio_path = os.path.join(_tf.gettempdir(), f"sp_audio_{int(time.time())}.wav")
+        tmp_dir = _tf.gettempdir()
+        ts = int(time.time())
+        audio_path = os.path.join(tmp_dir, f"sp_audio_{ts}.wav")
+        audio_short = os.path.join(tmp_dir, f"sp_audio_{ts}_short.wav")
 
         # Clean stale temp files
         for f in os.listdir(output_dir):
@@ -210,94 +219,161 @@ class VideoIntelligence:
                 except Exception:
                     pass
 
-        # Extract audio
         ffmpeg_bin = _sh.which("ffmpeg") or os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ffmpeg", "ffmpeg.exe"
         )
+
+        # ── Extrair audio completo ──────────────────────────────────────────
         _r = _sp.run(
             [ffmpeg_bin, "-y", "-i", video_path,
              "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1", audio_path],
             capture_output=True, text=True, timeout=300,
         )
         if _r.returncode != 0 or not os.path.exists(audio_path) or os.path.getsize(audio_path) < 1000:
-            print(f"  [WARN] Audio extraction failed (rc={_r.returncode}): {_r.stderr[-200:]}")
+            print(f"  [WARN] Extracao de audio falhou (rc={_r.returncode}): {_r.stderr[-200:]}")
             return [], "en"
 
         audio_size_kb = os.path.getsize(audio_path) // 1024
-        print(f"    -> Audio extracted: {audio_size_kb}KB at {audio_path}")
+        estimated_minutes = audio_size_kb / 1920  # 16kHz mono WAV: ~1920KB/min
+        print(f"    -> Audio: {audio_size_kb}KB ({estimated_minutes:.1f} min estimado)")
 
-        # Choose model based on duration (16000 Hz mono WAV: 1 min ≈ 1920KB)
-        estimated_minutes = audio_size_kb / 1920
+        # ── Selecionar modelo e timeout para nivel 1 ────────────────────────
         if estimated_minutes <= 8:
-            model_size = "base"
-            whisper_timeout = 360   # 6 min
+            model_l1, timeout_l1 = "base", 360
         elif estimated_minutes <= 20:
-            model_size = "tiny"
-            whisper_timeout = 480   # 8 min
+            model_l1, timeout_l1 = "tiny", 480
         else:
-            model_size = "tiny"
-            whisper_timeout = 600   # 10 min
+            model_l1, timeout_l1 = "tiny", 600
 
-        print(f"    -> Duracao estimada: {estimated_minutes:.1f} min | Whisper: '{model_size}' | Timeout: {whisper_timeout}s")
-        if on_progress:
-            on_progress(6, 100, f"Whisper '{model_size}': transcrevendo {estimated_minutes:.1f} min de audio...")
-
-        # Run Whisper in a thread with timeout so it can never freeze the pipeline
-        result_holder = [[], "en"]
-        error_holder = [None]
-
-        def _run_whisper():
+        def _run_whisper_thread(audio, model, holder, err_holder):
+            """Executa Whisper em thread separada. Nunca bloqueia o pipeline."""
             try:
                 from core.subtitle_generator import transcribe_audio_with_language
-                segs, lang = transcribe_audio_with_language(audio_path, model_size=model_size)
-                result_holder[0] = segs
-                result_holder[1] = lang
+                segs, lang = transcribe_audio_with_language(audio, model_size=model)
+                holder[0], holder[1] = segs, lang
             except ImportError:
-                error_holder[0] = "ImportError: Whisper nao instalado. Execute: pip install openai-whisper"
+                err_holder[0] = "Whisper nao instalado (pip install openai-whisper)"
             except Exception as exc:
-                error_holder[0] = str(exc)
+                err_holder[0] = str(exc)
 
-        t = _th.Thread(target=_run_whisper, daemon=True)
-        t.start()
+        def _wait_with_progress(thread, timeout_s, label, prog_start, prog_end):
+            """Aguarda thread com ticks de progresso a cada 15s."""
+            elapsed = 0
+            while thread.is_alive() and elapsed < timeout_s:
+                thread.join(timeout=15)
+                elapsed += 15
+                if thread.is_alive() and on_progress:
+                    pct = prog_start + int((elapsed / timeout_s) * (prog_end - prog_start))
+                    on_progress(pct, 100,
+                                f"Whisper {label}: {elapsed}s/{timeout_s}s ({int(elapsed/timeout_s*100)}%)...")
+            return not thread.is_alive()  # True = concluiu, False = timeout
 
-        # Tick progress every 15s while waiting
-        elapsed = 0
-        interval = 15
-        while t.is_alive() and elapsed < whisper_timeout:
-            t.join(timeout=interval)
-            elapsed += interval
-            if t.is_alive() and on_progress:
-                pct_done = min(95, int(elapsed / whisper_timeout * 100))
-                on_progress(6, 100,
-                            f"Whisper transcrevendo... {elapsed}s / {whisper_timeout}s ({pct_done}%)")
+        # ════════════════════════════════════════════════════════════════════
+        # NIVEL 1 — modelo principal, timeout completo
+        # ════════════════════════════════════════════════════════════════════
+        if on_progress:
+            on_progress(6, 100,
+                        f"Whisper nivel 1 ('{model_l1}'): transcrevendo {estimated_minutes:.1f} min...")
+        print(f"    -> Nivel 1: Whisper '{model_l1}' | timeout {timeout_l1}s")
 
-        if t.is_alive():
-            # Whisper hung — abandon and continue without transcription
-            print(f"  [WARN] Whisper timeout ({whisper_timeout}s) — continuando sem transcricao")
-            print(f"         O video sera processado sem legendas automaticas.")
-            try:
-                os.remove(audio_path)
-            except Exception:
-                pass
+        holder1, err1 = [[], "en"], [None]
+        t1 = _th.Thread(target=_run_whisper_thread,
+                        args=(audio_path, model_l1, holder1, err1), daemon=True)
+        t1.start()
+        done1 = _wait_with_progress(t1, timeout_l1, "nivel 1", 6, 7)
+
+        if done1 and not err1[0] and holder1[0]:
+            segs, lang = holder1[0], holder1[1]
+            print(f"    -> Nivel 1 OK: {len(segs)} segmentos, idioma: {lang}")
+            _cleanup(audio_path, audio_short)
+            return segs, lang
+
+        if err1[0]:
+            print(f"  [WARN] Nivel 1 erro: {err1[0]}")
+        else:
+            print(f"  [WARN] Nivel 1 timeout ({timeout_l1}s) — tentando nivel 2...")
+
+        # ════════════════════════════════════════════════════════════════════
+        # NIVEL 2 — modelo 'tiny', metade do timeout
+        # ════════════════════════════════════════════════════════════════════
+        if err1[0] and "nao instalado" in str(err1[0]):
+            # Whisper nao esta instalado — nivel 2 e 3 tambem vao falhar
+            print("  [ERRO] Whisper nao instalado. Continuando sem transcricao.")
+            print("         Instale com: pip install openai-whisper")
+            _cleanup(audio_path, audio_short)
             return [], "en"
 
-        if error_holder[0]:
-            print(f"  [WARN] Transcricao falhou: {error_holder[0]}")
-            try:
-                os.remove(audio_path)
-            except Exception:
-                pass
-            return [], "en"
+        timeout_l2 = max(120, timeout_l1 // 2)
+        if on_progress:
+            on_progress(6, 100, f"Whisper nivel 2 ('tiny'): nova tentativa ({timeout_l2}s)...")
+        print(f"    -> Nivel 2: Whisper 'tiny' | timeout {timeout_l2}s")
 
-        segments, language = result_holder[0], result_holder[1]
-        print(f"    -> {len(segments)} segmentos, idioma: {language}")
+        holder2, err2 = [[], "en"], [None]
+        t2 = _th.Thread(target=_run_whisper_thread,
+                        args=(audio_path, "tiny", holder2, err2), daemon=True)
+        t2.start()
+        done2 = _wait_with_progress(t2, timeout_l2, "nivel 2", 6, 7)
 
+        if done2 and not err2[0] and holder2[0]:
+            segs, lang = holder2[0], holder2[1]
+            print(f"    -> Nivel 2 OK: {len(segs)} segmentos, idioma: {lang}")
+            _cleanup(audio_path, audio_short)
+            return segs, lang
+
+        print(f"  [WARN] Nivel 2 timeout/erro — tentando nivel 3 (primeiros 5 min)...")
+
+        # ════════════════════════════════════════════════════════════════════
+        # NIVEL 3 — transcreve apenas os primeiros 5 minutos
+        # Garante que o pipeline entende o TEMA e gera shot list semantico
+        # ════════════════════════════════════════════════════════════════════
+        if on_progress:
+            on_progress(6, 100, "Whisper nivel 3: transcrevendo primeiros 5 minutos...")
+        print(f"    -> Nivel 3: Whisper 'tiny' nos primeiros 5 min")
+
+        # Extrai apenas os primeiros 5 min de audio
+        _r2 = _sp.run(
+            [ffmpeg_bin, "-y", "-i", audio_path, "-t", "300",
+             "-acodec", "copy", audio_short],
+            capture_output=True, timeout=30,
+        )
+
+        short_ok = (_r2.returncode == 0
+                    and os.path.exists(audio_short)
+                    and os.path.getsize(audio_short) > 1000)
+
+        if short_ok:
+            holder3, err3 = [[], "en"], [None]
+            t3 = _th.Thread(target=_run_whisper_thread,
+                            args=(audio_short, "tiny", holder3, err3), daemon=True)
+            t3.start()
+            done3 = _wait_with_progress(t3, 150, "nivel 3 (5min)", 6, 7)
+
+            if done3 and not err3[0] and holder3[0]:
+                segs, lang = holder3[0], holder3[1]
+                print(f"    -> Nivel 3 OK: {len(segs)} segmentos dos primeiros 5 min")
+                print(f"       Shot list sera semantico para o inicio; restante usa tema detectado.")
+                _cleanup(audio_path, audio_short)
+                return segs, lang
+
+        # ════════════════════════════════════════════════════════════════════
+        # FALLBACK ABSOLUTO — todos os 3 niveis falharam
+        # Pipeline continua: shot list usa tema (menos preciso mas funcional)
+        # Legendas serao geradas no Step 6 diretamente do video final
+        # ════════════════════════════════════════════════════════════════════
+        print("  [WARN] Todos os 3 niveis de transcricao falharam.")
+        print("         Shot list usara analise de tema. Legendas serao geradas no Step 6.")
+        _cleanup(audio_path, audio_short)
+        return [], "en"
+
+
+def _cleanup(*paths):
+    """Remove arquivos temporarios silenciosamente."""
+    for p in paths:
         try:
-            os.remove(audio_path)
+            if p and os.path.exists(p):
+                os.remove(p)
         except Exception:
             pass
-
-        return segments, language
     
     def _deep_analyze(self, full_text: str, language: str) -> dict:
         """Use Gemini AI for deep video understanding."""
