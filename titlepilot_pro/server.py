@@ -33,9 +33,13 @@ def _load_key():
 GOOGLE_API_KEY = _load_key()
 
 # =============================================
-# GEMINI AI ENGINE
+# GEMINI AI ENGINE (with cache + throttle)
 # =============================================
 _gemini_client = None
+_gemini_cache = {}      # {prompt_hash: (timestamp, response)}
+_gemini_cache_ttl = 600  # 10 minutes
+_gemini_last_call = 0
+_gemini_throttle = 1.5   # seconds between calls
 
 def get_gemini():
     global _gemini_client
@@ -44,29 +48,57 @@ def get_gemini():
         _gemini_client = genai.Client(api_key=GOOGLE_API_KEY)
     return _gemini_client
 
-def ask_gemini(prompt, max_retries=2):
-    """Send prompt to Gemini with retry logic and model fallback."""
-    models = ["gemini-2.5-flash", "gemini-2.0-flash"]
+def _cache_key(prompt):
+    import hashlib
+    return hashlib.md5(prompt.encode('utf-8', errors='ignore')).hexdigest()
+
+def ask_gemini(prompt, max_retries=3, use_cache=True):
+    """Send prompt to Gemini with cache, throttle, retry and model fallback."""
+    global _gemini_last_call
+    
+    # Check cache first
+    if use_cache:
+        key = _cache_key(prompt)
+        if key in _gemini_cache:
+            ts, cached = _gemini_cache[key]
+            if time.time() - ts < _gemini_cache_ttl:
+                print(f"  [Gemini] Cache hit")
+                return cached
+    
+    # Throttle requests
+    elapsed = time.time() - _gemini_last_call
+    if elapsed < _gemini_throttle:
+        time.sleep(_gemini_throttle - elapsed)
+    
+    models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.0-flash-lite"]
     for model in models:
         for attempt in range(max_retries + 1):
             try:
+                _gemini_last_call = time.time()
                 client = get_gemini()
                 r = client.models.generate_content(
                     model=model,
                     contents=prompt,
                 )
-                return r.text if r and r.text else ""
+                result = r.text if r and r.text else ""
+                if result and use_cache:
+                    _gemini_cache[_cache_key(prompt)] = (time.time(), result)
+                return result
             except Exception as e:
                 err = str(e).lower()
-                if "429" in err or "quota" in err or "rate" in err:
-                    time.sleep(3 * (attempt + 1))
+                if "429" in err or "quota" in err or "rate" in err or "resource_exhausted" in err:
+                    wait = 8 * (attempt + 1)
+                    print(f"  [Gemini] {model} rate limited, waiting {wait}s (attempt {attempt+1}/{max_retries+1})")
+                    time.sleep(wait)
                 elif "404" in err or "not found" in err:
-                    break  # Try next model
+                    print(f"  [Gemini] {model} not found, trying next model")
+                    break
                 else:
+                    print(f"  [Gemini] {model} error: {str(e)[:100]}")
                     if attempt == max_retries:
-                        break  # Try next model
-                    time.sleep(2)
-    return "[AI temporarily unavailable - rate limited]"
+                        break
+                    time.sleep(3)
+    return "[AI temporarily unavailable - all models rate limited. Please wait 1-2 minutes and try again.]"
 
 # =============================================
 # VIRAL ANALYSIS ENGINE
@@ -381,18 +413,22 @@ Only valid JSON. No markdown."""
     
     result = ask_gemini(prompt)
     
+    ai_error = ""
     try:
         match = re.search(r'\[.*\]', result, re.DOTALL)
         niches = json.loads(match.group()) if match else json.loads(result)
         niches.sort(key=lambda x: x.get("opportunity", 0), reverse=True)
     except:
         niches = []
+        if "unavailable" in result.lower() or "rate" in result.lower():
+            ai_error = result
     
     return jsonify({
         "videos": trending_videos,
         "niches": niches,
         "theme": theme,
         "youtube_active": bool(trending_videos),
+        "ai_error": ai_error,
     })
 
 @app.route("/api/deep_analysis", methods=["POST"])
