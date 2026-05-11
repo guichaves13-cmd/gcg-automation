@@ -10,16 +10,7 @@ if hasattr(sys.stdout, 'reconfigure'):
         sys.stderr.reconfigure(encoding='utf-8', errors='replace')
     except Exception:
         pass
-os.environ['PYTHONIOENCODING'] = 'utf-8' 
-
-# Fix Windows encoding crash (charmap codec can't encode unicode)
-if hasattr(sys.stdout, 'reconfigure'):
-    try:
-        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
-        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
-    except Exception:
-        pass
-os.environ['PYTHONIOENCODING'] = 'utf-8' 
+os.environ['PYTHONIOENCODING'] = 'utf-8'
 from datetime import datetime
 from pathlib import Path
 from flask import Flask, render_template, request, jsonify, send_from_directory, send_file, session, redirect, Response, stream_with_context
@@ -77,6 +68,7 @@ pipeline_status = {
     "elapsed": 0,
 }
 active_pipelines = 0
+_pipeline_thread = None  # track the actual thread for is_alive() checks
 
 def _push_log(msg, level="info"):
     """Add entry to rotating log buffer (max 60)."""
@@ -464,6 +456,12 @@ def api_uploads_list():
 
 @app.route("/api/pipeline/status")
 def api_pipeline_status():
+    # Auto-sync: if thread is dead, mark not running
+    global active_pipelines, _pipeline_thread
+    if _pipeline_thread is not None and not _pipeline_thread.is_alive():
+        active_pipelines = 0
+        pipeline_status["running"] = False
+        _pipeline_thread = None
     return jsonify(pipeline_status)
 
 @app.route("/api/pipeline/stream")
@@ -495,10 +493,15 @@ def api_pipeline_stream():
 
 @app.route("/api/pipeline/start", methods=["POST"])
 def api_pipeline_start():
-    global active_pipelines, pipeline_status
+    global active_pipelines, pipeline_status, _pipeline_thread
 
-    if active_pipelines >= 2:
-        return jsonify({"error": "Maximo de 2 videos simultaneos. Aguarde um terminar."}), 409
+    # Ground truth: if the thread is dead (for ANY reason), reset everything
+    if _pipeline_thread is None or not _pipeline_thread.is_alive():
+        active_pipelines = 0
+        pipeline_status["running"] = False
+
+    if active_pipelines >= 1:
+        return jsonify({"error": "Ja existe um video sendo processado. Aguarde terminar ou cancele antes de iniciar outro."}), 409
 
     active_pipelines += 1
     data = request.json
@@ -581,20 +584,39 @@ def api_pipeline_start():
         finally:
             pipeline_status["running"] = False
             global active_pipelines
-            if 'active_pipelines' in globals() and active_pipelines > 0:
-                active_pipelines -= 1
-    threading.Thread(target=run, daemon=True).start()
+            active_pipelines = 0  # always reset — one pipeline at a time
+    t = threading.Thread(target=run, daemon=False)
+    _pipeline_thread = t
+    t.start()
     return jsonify({"started": True, "output": output_path})
 
 @app.route("/api/pipeline/cancel", methods=["POST"])
 def api_pipeline_cancel():
-    global pipeline_status, active_pipelines
+    global pipeline_status, active_pipelines, _pipeline_thread
     active_pipelines = 0
+    _pipeline_thread = None
     pipeline_status["running"] = False
     pipeline_status["progress"] = 0
     pipeline_status["message"] = "Cancelado pelo usuario."
     pipeline_status["error"] = "Processo interrompido."
     return jsonify({"success": True})
+
+@app.route("/api/pipeline/reset", methods=["POST"])
+def api_pipeline_reset():
+    """Emergency reset — clears all pipeline state no matter what."""
+    global pipeline_status, active_pipelines, _pipeline_thread
+    active_pipelines = 0
+    _pipeline_thread = None
+    pipeline_status["running"] = False
+    pipeline_status["progress"] = 0
+    pipeline_status["message"] = ""
+    pipeline_status["error"] = ""
+    pipeline_status["phase"] = ""
+    pipeline_status["phase_idx"] = 0
+    pipeline_status["logs"] = []
+    pipeline_status["start_time"] = None
+    pipeline_status["elapsed"] = 0
+    return jsonify({"success": True, "message": "Estado resetado com sucesso."})
 
 @app.route("/api/clean", methods=["POST"])
 def api_clean():

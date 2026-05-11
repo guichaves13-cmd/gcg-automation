@@ -560,6 +560,14 @@ function cancelPipeline(){
   });
 }
 
+function resetPipeline(){
+  if(_sseSource){_sseSource.close();_sseSource=null;}
+  fetch('/api/pipeline/reset',{method:'POST'}).then(r=>r.json()).then(d=>{
+    document.getElementById('sync-status').style.display='none';
+    toast('Estado resetado! Pode iniciar novo video.');
+  }).catch(()=>toast('Reset enviado.'));
+}
+
 function _updateMonitorPanel(d){
   const pct = d.progress||0;
   document.getElementById('sync-pct').textContent = pct+'%';
@@ -640,20 +648,27 @@ function _updateMonitorPanel(d){
   }
 }
 
-function startMonitoringStream(){
-  if(_sseSource){_sseSource.close();}
+let _pollFallbackIv=null;
+let _sseRetryTimer=null;
+
+function startMonitoringStream(resetPanel=true){
+  if(_sseSource){_sseSource.close();_sseSource=null;}
+  if(_sseRetryTimer){clearTimeout(_sseRetryTimer);_sseRetryTimer=null;}
+  if(_pollFallbackIv){clearInterval(_pollFallbackIv);_pollFallbackIv=null;}
+
   const statusEl=document.getElementById('sync-status');
   if(statusEl) statusEl.style.display='block';
 
-  // reset panel
-  document.getElementById('quality-report').style.display='none';
-  document.getElementById('live-log').innerHTML='';
-  document.getElementById('sync-bar').style.background='var(--accent)';
-  for(let i=1;i<=8;i++){
-    const row=document.getElementById('ai-ph-'+i);
-    const dot=document.getElementById('dot-'+i);
-    if(row){row.className='ai-phase-row';}
-    if(dot){dot.className='ai-ph-dot';dot.textContent='●';}
+  if(resetPanel){
+    document.getElementById('quality-report').style.display='none';
+    document.getElementById('live-log').innerHTML='';
+    document.getElementById('sync-bar').style.background='var(--accent)';
+    for(let i=1;i<=8;i++){
+      const row=document.getElementById('ai-ph-'+i);
+      const dot=document.getElementById('dot-'+i);
+      if(row){row.className='ai-phase-row';}
+      if(dot){dot.className='ai-ph-dot';dot.textContent='●';}
+    }
   }
 
   _sseSource=new EventSource('/api/pipeline/stream');
@@ -665,18 +680,50 @@ function startMonitoringStream(){
     }catch(err){}
   };
   _sseSource.onerror=()=>{
-    // SSE failed — fall back to polling
     if(_sseSource){_sseSource.close();_sseSource=null;}
-    _pollFallback();
+    // Check if pipeline still running; if yes, reconnect in 3s
+    fetch('/api/pipeline/status').then(r=>r.json()).then(d=>{
+      _updateMonitorPanel(d);
+      if(d.running){
+        _sseRetryTimer=setTimeout(()=>startMonitoringStream(false),3000);
+      } else {
+        _pollFallback();
+      }
+    }).catch(()=>{
+      _sseRetryTimer=setTimeout(()=>startMonitoringStream(false),5000);
+    });
   };
 }
 
+// Reconnect SSE when window regains focus (user un-minimizes or switches back)
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible'){
+    fetch('/api/pipeline/status').then(r=>r.json()).then(d=>{
+      if(d.running){
+        // Pipeline still going — reconnect SSE to resume live updates
+        if(!_sseSource) startMonitoringStream(false);
+      } else if(_sseSource){
+        _sseSource.close();_sseSource=null;
+      }
+      _updateMonitorPanel(d);
+    }).catch(()=>{});
+  }
+});
+
+window.addEventListener('focus',()=>{
+  fetch('/api/pipeline/status').then(r=>r.json()).then(d=>{
+    if(d.running && !_sseSource) startMonitoringStream(false);
+    _updateMonitorPanel(d);
+  }).catch(()=>{});
+});
+
 function _pollFallback(){
-  const iv=setInterval(async()=>{
+  if(_pollFallbackIv) clearInterval(_pollFallbackIv);
+  _pollFallbackIv=setInterval(async()=>{
     try{
       const d=await(await fetch('/api/pipeline/status')).json();
       _updateMonitorPanel(d);
-      if(!d.running){clearInterval(iv);}
+      if(!d.running){clearInterval(_pollFallbackIv);_pollFallbackIv=null;}
     }catch(e){}
   },2000);
 }
@@ -696,7 +743,15 @@ async function startSync(){
   try{
     const r=await fetch('/api/pipeline/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const d=await r.json();
-    if(d.error){toast('Erro: '+d.error);return}
+    if(d.error){
+      if(r.status===409){
+        toast('Erro: '+d.error+' — Clique em Resetar para liberar.');
+        if(confirm('Existe um processo travado. Resetar o estado agora?')){resetPipeline();}
+      } else {
+        toast('Erro: '+d.error);
+      }
+      return;
+    }
     toast('Pipeline iniciado!');
     startMonitoringStream();
   }catch(e){toast('Erro: '+e.message)}
@@ -757,7 +812,15 @@ async function startPipeline(){
     try {
       const r2=await fetch('/api/pipeline/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
       const d2=await r2.json();
-      if(d2.error){toast('Erro: '+d2.error);return;}
+      if(d2.error){
+        if(r2.status===409){
+          toast('Erro: '+d2.error+' — Clique em Resetar para liberar.');
+          if(confirm('Existe um processo travado. Resetar o estado agora?')){resetPipeline();}
+        } else {
+          toast('Erro: '+d2.error);
+        }
+        return;
+      }
       
       showPage('sync');
       toast('Pipeline iniciado!');
