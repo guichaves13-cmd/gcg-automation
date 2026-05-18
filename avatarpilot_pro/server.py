@@ -5946,6 +5946,76 @@ def api_transcribe():
 
 
 # ============================================================================
+# ROUTES — PUBLIC PRICING PAGE
+# ============================================================================
+@app.route("/pricing")
+def page_pricing():
+    return render_template("pricing.html")
+
+
+@app.route("/api/pricing/plans")
+def api_pricing_plans():
+    """Public endpoint — returns plan info + whether Stripe is configured."""
+    cfg = _get_stripe_keys()
+    stripe_ok = bool(cfg["secret_key"] and (cfg["price_starter"] or cfg["price_pro"]))
+    return jsonify({
+        "stripe_configured": stripe_ok,
+        "plans": {
+            "free":    {"name": "Free",    "limit_min": 5,    "price_brl": 0},
+            "starter": {"name": "Starter", "limit_min": 30,   "price_brl": 97},
+            "pro":     {"name": "Pro",     "limit_min": 60,   "price_brl": 197},
+        }
+    })
+
+
+@app.route("/api/pricing/checkout", methods=["POST"])
+def api_pricing_checkout():
+    """Public endpoint — creates a Stripe checkout session and returns the URL."""
+    # Rate limit: 5 checkouts per IP per minute to prevent abuse
+    ip = request.remote_addr or "unknown"
+    if not _check_rate_limit(ip):
+        return jsonify({"error": "Muitas tentativas. Aguarde um momento."}), 429
+
+    data  = request.json or {}
+    plan  = data.get("plan", "")
+    email = (data.get("email", "") or "").strip()
+    name  = (data.get("name", "") or "").strip()[:100]
+
+    if plan not in ("starter", "pro"):
+        return jsonify({"error": "Plano inválido. Use 'starter' ou 'pro'."}), 400
+    if not email or "@" not in email or len(email) > 200:
+        return jsonify({"error": "E-mail inválido."}), 400
+
+    try:
+        import stripe as _stripe
+    except ImportError:
+        return jsonify({"error": "Pagamentos online não disponíveis no momento."}), 503
+
+    cfg = _get_stripe_keys()
+    if not cfg["secret_key"]:
+        return jsonify({"error": "Pagamentos online não configurados. Entre em contato."}), 503
+
+    price_id = cfg["price_starter"] if plan == "starter" else cfg["price_pro"]
+    if not price_id:
+        return jsonify({"error": f"Plano {plan} ainda não disponível para compra online."}), 503
+
+    _stripe.api_key = cfg["secret_key"]
+    try:
+        session = _stripe.checkout.Session.create(
+            payment_method_types=["card"],
+            line_items=[{"price": price_id, "quantity": 1}],
+            mode="payment",
+            success_url=cfg["success_url"],
+            cancel_url=cfg["cancel_url"] if cfg["cancel_url"] else request.referrer or cfg["success_url"],
+            customer_email=email or None,
+            metadata={"plan": plan, "customer_name": name},
+        )
+        return jsonify({"url": session.url, "session_id": session.id})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
+# ============================================================================
 # ROUTES — SETTINGS
 # ============================================================================
 @app.route("/api/settings")

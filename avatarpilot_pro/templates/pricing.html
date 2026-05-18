@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AvatarPilot Pro — Planos & Preços</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0a0a14; --bg2: #0f0f1e; --card: #12122a; --border: #1e1e3a;
+      --text: #e8e8f0; --dim: #6b6b8d; --muted: #9090b0;
+      --accent: #7c3aed; --accent2: #a855f7;
+      --green: #10b981; --gold: #f59e0b; --blue: #3b82f6; --red: #ef4444;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+
+    /* ── HERO ── */
+    .hero {
+      text-align:center; padding:80px 24px 60px;
+      background: linear-gradient(180deg, #0d0d22 0%, var(--bg) 100%);
+      border-bottom: 1px solid var(--border);
+    }
+    .hero-logo { font-size:42px; margin-bottom:12px; }
+    .hero-title { font-size:clamp(28px,5vw,48px); font-weight:800; line-height:1.15; margin-bottom:14px; }
+    .hero-title span { background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent; }
+    .hero-sub { font-size:16px; color:var(--muted); max-width:540px; margin:0 auto 24px; line-height:1.6; }
+    .hero-badge {
+      display:inline-flex; align-items:center; gap:8px; background:rgba(124,58,237,0.12);
+      border:1px solid rgba(124,58,237,0.3); border-radius:100px;
+      padding:6px 16px; font-size:13px; color:var(--accent2); margin-bottom:0;
+    }
+
+    /* ── PLANS GRID ── */
+    .plans-section { padding:60px 24px; max-width:1080px; margin:0 auto; }
+    .plans-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:24px; }
+
+    .plan-card {
+      background:var(--card); border:1px solid var(--border); border-radius:16px;
+      padding:32px 28px; display:flex; flex-direction:column; position:relative;
+      transition: transform 0.2s, border-color 0.2s;
+    }
+    .plan-card:hover { transform:translateY(-4px); border-color:rgba(124,58,237,0.4); }
+    .plan-card.featured {
+      border-color:var(--accent); background:linear-gradient(135deg,#130d2a,#1a1035);
+      box-shadow:0 0 40px rgba(124,58,237,0.15);
+    }
+    .plan-card.featured::before {
+      content:'⭐ MAIS POPULAR';
+      position:absolute; top:-14px; left:50%; transform:translateX(-50%);
+      background:linear-gradient(135deg,var(--accent),var(--accent2));
+      color:#fff; font-size:11px; font-weight:700; letter-spacing:0.05em;
+      padding:4px 14px; border-radius:100px;
+    }
+
+    .plan-badge {
+      display:inline-flex; align-items:center; gap:6px;
+      font-size:12px; font-weight:600; letter-spacing:0.05em; text-transform:uppercase;
+      padding:4px 12px; border-radius:8px; margin-bottom:20px; width:fit-content;
+    }
+    .plan-badge.free     { background:rgba(107,114,128,0.15); color:#9ca3af; }
+    .plan-badge.starter  { background:rgba(59,130,246,0.15);  color:#60a5fa; }
+    .plan-badge.pro      { background:rgba(124,58,237,0.15);  color:#a78bfa; }
+
+    .plan-name  { font-size:22px; font-weight:800; margin-bottom:8px; }
+    .plan-price { font-size:40px; font-weight:900; color:var(--accent2); margin-bottom:4px; line-height:1; }
+    .plan-price span { font-size:16px; font-weight:500; color:var(--dim); }
+    .plan-desc  { font-size:13px; color:var(--muted); margin-bottom:24px; line-height:1.5; }
+
+    .plan-limit {
+      background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.2);
+      border-radius:8px; padding:10px 14px; font-size:13px; color:var(--green);
+      font-weight:600; margin-bottom:20px; text-align:center;
+    }
+
+    .plan-features { list-style:none; flex:1; margin-bottom:28px; }
+    .plan-features li {
+      font-size:13px; color:var(--muted); padding:6px 0;
+      border-bottom:1px solid rgba(255,255,255,0.04); display:flex; align-items:center; gap:8px;
+    }
+    .plan-features li:last-child { border-bottom:none; }
+    .plan-features li .icon { font-size:14px; flex-shrink:0; }
+    .plan-features li.dim { color:#555; }
+    .plan-features li.dim .icon { opacity:0.4; }
+
+    .btn-buy {
+      display:block; width:100%; padding:14px; border:none; border-radius:10px;
+      font-size:14px; font-weight:700; cursor:pointer; text-align:center;
+      transition:all 0.2s; text-decoration:none;
+    }
+    .btn-buy.primary {
+      background:linear-gradient(135deg,var(--accent),var(--accent2));
+      color:#fff; box-shadow:0 4px 20px rgba(124,58,237,0.35);
+    }
+    .btn-buy.primary:hover { transform:translateY(-1px); box-shadow:0 6px 25px rgba(124,58,237,0.5); }
+    .btn-buy.secondary { background:rgba(255,255,255,0.06); color:var(--text); border:1px solid var(--border); }
+    .btn-buy.secondary:hover { background:rgba(255,255,255,0.1); }
+    .btn-buy:disabled { opacity:0.5; cursor:not-allowed; transform:none !important; }
+
+    /* ── FAQ / TRUST ── */
+    .trust-section { padding:0 24px 60px; max-width:800px; margin:0 auto; }
+    .trust-title { font-size:22px; font-weight:700; text-align:center; margin-bottom:32px; color:var(--text); }
+    .faq-item { margin-bottom:16px; }
+    .faq-q { font-size:14px; font-weight:600; color:var(--text); margin-bottom:6px; }
+    .faq-a { font-size:13px; color:var(--muted); line-height:1.6; }
+
+    .trust-badges { display:flex; justify-content:center; gap:20px; flex-wrap:wrap; margin:32px 0 0; }
+    .trust-badge {
+      display:flex; align-items:center; gap:8px; font-size:13px; color:var(--dim);
+      background:var(--card); border:1px solid var(--border); border-radius:10px; padding:10px 16px;
+    }
+
+    /* ── FOOTER ── */
+    footer { text-align:center; padding:32px; border-top:1px solid var(--border); }
+    footer a { color:var(--accent2); text-decoration:none; }
+    footer p { font-size:12px; color:var(--dim); }
+
+    /* ── MODAL ── */
+    .modal-overlay {
+      position:fixed; inset:0; background:rgba(0,0,0,0.7); display:flex;
+      align-items:center; justify-content:center; z-index:1000; padding:20px;
+    }
+    .modal-box {
+      background:var(--card); border:1px solid var(--border); border-radius:16px;
+      padding:32px; width:100%; max-width:420px;
+    }
+    .modal-box h3 { font-size:18px; font-weight:700; margin-bottom:6px; }
+    .modal-box p  { font-size:13px; color:var(--muted); margin-bottom:20px; line-height:1.5; }
+    .modal-box label { font-size:12px; color:var(--dim); display:block; margin-bottom:6px; }
+    .modal-box input {
+      width:100%; background:rgba(255,255,255,0.05); border:1px solid var(--border);
+      border-radius:8px; padding:10px 12px; color:var(--text); font-size:14px;
+      font-family:inherit; margin-bottom:16px; outline:none;
+    }
+    .modal-box input:focus { border-color:var(--accent); }
+    .modal-actions { display:flex; gap:10px; }
+    .modal-actions button { flex:1; padding:12px; border:none; border-radius:8px; font-size:14px; font-weight:600; cursor:pointer; }
+    .modal-actions .btn-confirm { background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#fff; }
+    .modal-actions .btn-cancel  { background:rgba(255,255,255,0.07); color:var(--muted); }
+    #modal-error { font-size:12px; color:var(--red); margin-top:10px; display:none; }
+    #modal-loading { text-align:center; padding:16px 0; display:none; }
+    .spinner {
+      width:28px; height:28px; border:3px solid rgba(124,58,237,0.2);
+      border-top-color:var(--accent2); border-radius:50%; animation:spin 0.7s linear infinite; margin:0 auto 10px;
+    }
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    /* ── STRIPE NOT CONFIGURED banner ── */
+    #no-stripe-banner {
+      background:rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.3);
+      border-radius:10px; padding:14px 20px; font-size:13px; color:#fcd34d;
+      text-align:center; margin:0 24px 24px; max-width:800px; margin-left:auto; margin-right:auto; display:none;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-logo">🎭</div>
+    <h1 class="hero-title">
+      Avatares com<br><span>IA que realmente falam</span>
+    </h1>
+    <p class="hero-sub">Gere vídeos com avatar sincronizado por inteligência artificial. Ideal para criadores de conteúdo, educadores e empresas.</p>
+    <div class="hero-badge">⚡ Tecnologia MuseTalk + SadTalker</div>
+  </section>
+
+  <div id="no-stripe-banner">
+    ⚠️ Pagamentos online não configurados — entre em contato para obter acesso.
+  </div>
+
+  <!-- PLANS -->
+  <section class="plans-section">
+    <div class="plans-grid">
+
+      <!-- FREE -->
+      <div class="plan-card">
+        <span class="plan-badge free">🆓 Free</span>
+        <div class="plan-name">Demonstração</div>
+        <div class="plan-price">R$0 <span>/único</span></div>
+        <div class="plan-desc">Experimente sem compromisso. Perfeito para avaliar a qualidade.</div>
+        <div class="plan-limit">⏱️ Até 5 minutos de vídeo</div>
+        <ul class="plan-features">
+          <li><span class="icon">✅</span> 1 avatar por vez</li>
+          <li><span class="icon">✅</span> Voz Edge-TTS (270+ vozes)</li>
+          <li><span class="icon">✅</span> Lip sync MuseTalk</li>
+          <li><span class="icon">✅</span> Output 1280×720 HD</li>
+          <li class="dim"><span class="icon">❌</span> Sem suporte prioritário</li>
+          <li class="dim"><span class="icon">❌</span> Sem API Key</li>
+        </ul>
+        <a href="/" class="btn-buy secondary">Acessar Demo →</a>
+      </div>
+
+      <!-- STARTER -->
+      <div class="plan-card featured">
+        <span class="plan-badge starter">🚀 Starter</span>
+        <div class="plan-name">Starter</div>
+        <div class="plan-price" id="price-starter">R$97 <span>/mês</span></div>
+        <div class="plan-desc">Para criadores de conteúdo e educadores que precisam de mais volume.</div>
+        <div class="plan-limit">⏱️ Até 30 minutos de vídeo/mês</div>
+        <ul class="plan-features">
+          <li><span class="icon">✅</span> Tudo do Free</li>
+          <li><span class="icon">✅</span> 30 min de avatar/mês</li>
+          <li><span class="icon">✅</span> Processamento em fila prioritária</li>
+          <li><span class="icon">✅</span> API Key pessoal</li>
+          <li><span class="icon">✅</span> Output 9:16 vertical (Reels/TikTok)</li>
+          <li><span class="icon">✅</span> Suporte por e-mail</li>
+        </ul>
+        <button class="btn-buy primary" onclick="openCheckout('starter')">
+          💳 Assinar Starter
+        </button>
+      </div>
+
+      <!-- PRO -->
+      <div class="plan-card">
+        <span class="plan-badge pro">👑 Pro</span>
+        <div class="plan-name">Pro</div>
+        <div class="plan-price" id="price-pro">R$197 <span>/mês</span></div>
+        <div class="plan-desc">Para agências e empresas que produzem vídeos em escala.</div>
+        <div class="plan-limit">⏱️ Até 1 hora de vídeo/mês</div>
+        <ul class="plan-features">
+          <li><span class="icon">✅</span> Tudo do Starter</li>
+          <li><span class="icon">✅</span> 1 hora de avatar/mês</li>
+          <li><span class="icon">✅</span> Batch processing (10 vídeos/lote)</li>
+          <li><span class="icon">✅</span> Voice cloning personalizado</li>
+          <li><span class="icon">✅</span> Webhooks de entrega</li>
+          <li><span class="icon">✅</span> Suporte prioritário</li>
+        </ul>
+        <button class="btn-buy primary" onclick="openCheckout('pro')">
+          👑 Assinar Pro
+        </button>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- TRUST -->
+  <section class="trust-section">
+    <div class="trust-badges">
+      <div class="trust-badge">🔒 Pagamento seguro via Stripe</div>
+      <div class="trust-badge">📧 API Key entregue por e-mail</div>
+      <div class="trust-badge">⚡ Ativo em minutos</div>
+      <div class="trust-badge">🔄 Cancele quando quiser</div>
+    </div>
+
+    <h2 class="trust-title" style="margin-top:48px">Perguntas frequentes</h2>
+    <div class="faq-item">
+      <div class="faq-q">Como funciona após o pagamento?</div>
+      <div class="faq-a">Após confirmar o pagamento, você recebe sua API Key por e-mail em segundos. Use-a no header <code style="color:#a78bfa">X-API-Key</code> para acessar a API, ou insira nas Configurações da interface web.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">O que é o limite de minutos?</div>
+      <div class="faq-a">É a duração total dos vídeos gerados por mês. Um vídeo de 5 minutos consome 5 minutos do seu plano. O contador reinicia todo mês.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">Posso usar minha própria voz?</div>
+      <div class="faq-a">Sim! O plano Pro inclui voice cloning — grave alguns segundos de voz e o sistema sintetiza qualquer texto com ela.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">Funciona com qualquer imagem de avatar?</div>
+      <div class="faq-a">Sim. Envie qualquer foto com rosto frontal bem iluminado. Quanto mais nítida a imagem, melhor a qualidade do lip sync.</div>
+    </div>
+  </section>
+
+  <footer>
+    <p style="margin-bottom:8px">
+      <a href="/">← Voltar ao App</a>
+    </p>
+    <p>AvatarPilot Pro — Powered by MuseTalk & SadTalker</p>
+  </footer>
+
+  <!-- CHECKOUT MODAL -->
+  <div class="modal-overlay" id="checkout-modal" style="display:none" onclick="if(event.target===this)closeModal()">
+    <div class="modal-box">
+      <h3 id="modal-title">Assinar Starter</h3>
+      <p id="modal-desc">Informe seu e-mail para receber a API Key após o pagamento.</p>
+      <label>Seu nome</label>
+      <input type="text" id="modal-name" placeholder="Ex: João Silva">
+      <label>Seu e-mail</label>
+      <input type="email" id="modal-email" placeholder="seuemail@exemplo.com">
+      <div class="modal-actions">
+        <button class="btn-confirm" id="modal-confirm-btn" onclick="confirmCheckout()">Ir para pagamento →</button>
+        <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
+      </div>
+      <div id="modal-error"></div>
+      <div id="modal-loading">
+        <div class="spinner"></div>
+        <div style="font-size:13px;color:var(--muted)">Criando sessão de pagamento...</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let _selectedPlan = '';
+
+    async function loadPricingInfo() {
+      try {
+        const r = await fetch('/api/pricing/plans');
+        const d = await r.json();
+        if (!d.stripe_configured) {
+          document.getElementById('no-stripe-banner').style.display = 'block';
+          document.querySelectorAll('.btn-buy.primary').forEach(b => b.disabled = true);
+        }
+      } catch(_) {}
+    }
+
+    function openCheckout(plan) {
+      _selectedPlan = plan;
+      document.getElementById('modal-title').textContent =
+        plan === 'starter' ? '🚀 Assinar Plano Starter' : '👑 Assinar Plano Pro';
+      document.getElementById('modal-desc').textContent =
+        'Informe seus dados para receber a API Key após o pagamento.';
+      document.getElementById('modal-error').style.display = 'none';
+      document.getElementById('modal-loading').style.display = 'none';
+      document.getElementById('modal-confirm-btn').style.display = '';
+      document.querySelectorAll('.modal-actions button')[1].style.display = '';
+      document.getElementById('checkout-modal').style.display = 'flex';
+      setTimeout(() => document.getElementById('modal-name').focus(), 100);
+    }
+
+    function closeModal() {
+      document.getElementById('checkout-modal').style.display = 'none';
+      document.getElementById('modal-name').value = '';
+      document.getElementById('modal-email').value = '';
+    }
+
+    async function confirmCheckout() {
+      const name  = document.getElementById('modal-name').value.trim();
+      const email = document.getElementById('modal-email').value.trim();
+      const errEl = document.getElementById('modal-error');
+      errEl.style.display = 'none';
+      if (!name)  { errEl.textContent = 'Informe seu nome.'; errEl.style.display='block'; return; }
+      if (!email || !email.includes('@')) {
+        errEl.textContent = 'Informe um e-mail válido.'; errEl.style.display='block'; return;
+      }
+      document.getElementById('modal-loading').style.display = 'block';
+      document.getElementById('modal-confirm-btn').style.display = 'none';
+      document.querySelectorAll('.modal-actions button')[1].style.display = 'none';
+      try {
+        const r = await fetch('/api/pricing/checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ plan: _selectedPlan, email, name })
+        });
+        const d = await r.json();
+        if (!r.ok || d.error) {
+          throw new Error(d.error || 'Erro ao criar sessão');
+        }
+        window.location.href = d.url;
+      } catch(e) {
+        document.getElementById('modal-loading').style.display = 'none';
+        document.getElementById('modal-confirm-btn').style.display = '';
+        document.querySelectorAll('.modal-actions button')[1].style.display = '';
+        errEl.textContent = e.message;
+        errEl.style.display = 'block';
+      }
+    }
+
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+    loadPricingInfo();
+  </script>
+</body>
+</html>
