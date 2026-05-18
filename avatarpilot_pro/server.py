@@ -607,6 +607,38 @@ def _ffprobe_path():
         return probe
     return shutil.which("ffprobe") or "ffprobe"
 
+def _ensure_max_dim(image_path: str, max_dim: int = 720, prefix: str = "rsz") -> str:
+    """
+    If image is larger than max_dim on either side, downscale to fit max_dim while preserving aspect.
+    Returns path to resized image (in UPLOAD_DIR) or original path if no resize needed.
+    Prevents downstream slowness in Wav2Lip/GFPGAN on high-res inputs.
+    """
+    try:
+        import cv2 as _cvr, numpy as _npr
+        raw = open(image_path, 'rb').read()
+        im = _cvr.imdecode(_npr.frombuffer(raw, dtype=_npr.uint8), _cvr.IMREAD_COLOR)
+        if im is None:
+            return image_path
+        h, w = im.shape[:2]
+        if max(h, w) <= max_dim:
+            return image_path
+        sc = max_dim / max(h, w)
+        new_w, new_h = int(w * sc), int(h * sc)
+        # Ensure even dimensions (H.264 requirement)
+        new_w -= new_w % 2
+        new_h -= new_h % 2
+        im = _cvr.resize(im, (new_w, new_h), interpolation=_cvr.INTER_LANCZOS4)
+        out_path = os.path.join(UPLOAD_DIR, f"{prefix}_{uuid.uuid4().hex[:8]}.jpg")
+        ok, enc = _cvr.imencode('.jpg', im, [_cvr.IMWRITE_JPEG_QUALITY, 95])
+        if ok:
+            with open(out_path, 'wb') as f: f.write(enc.tobytes())
+            print(f"  [Resize] {w}x{h} -> {new_w}x{new_h} ({os.path.basename(out_path)})")
+            return out_path
+    except Exception as e:
+        print(f"  [Resize] failed: {e}")
+    return image_path
+
+
 def get_media_duration(path: str) -> float:
     """Return duration in seconds via ffprobe. Handles non-ASCII paths on Windows."""
     import tempfile as _tempfile, shutil as _shutil2
@@ -1421,6 +1453,9 @@ def run_musetalk_chunked(image_path: str, audio_path: str, output_path: str,
 
     ffmpeg = _ffmpeg_path()
     tmp = _tmpmod.mkdtemp(prefix="mst_chunk_")
+    # If face source is a video, chunk it too so each audio segment uses the matching
+    # video segment (otherwise every chunk would reuse the same first N seconds of motion).
+    _is_video_face = _is_video_file(image_path)
     try:
         n_chunks = math.ceil(dur / chunk_duration)
         chunk_videos = []
@@ -1442,12 +1477,26 @@ def run_musetalk_chunked(image_path: str, audio_path: str, output_path: str,
             if _aud_r.returncode != 0 or not os.path.exists(chunk_aud):
                 raise Exception(f"ffmpeg: extração de chunk de áudio {i+1}/{n_chunks} falhou (rc={_aud_r.returncode})")
 
+            # If face source is a video, extract matching video segment for this chunk
+            chunk_face = image_path
+            if _is_video_face:
+                chunk_face = os.path.join(tmp, f"face_{i:03d}.mp4")
+                _fac_r = subprocess.run([
+                    ffmpeg, "-y", "-i", image_path,
+                    "-ss", str(round(start, 3)), "-t", str(round(length, 3)),
+                    "-c:v", "copy", "-an", chunk_face
+                ], capture_output=True, timeout=180)
+                if _fac_r.returncode != 0 or not os.path.exists(chunk_face):
+                    # Fallback to full video if segment extraction fails
+                    print(f"  [MuseTalk] Video chunk extract falhou — usando vídeo completo")
+                    chunk_face = image_path
+
             if job_id and jobs.get(job_id):
                 jobs[job_id]["message"]  = f"MuseTalk chunk {i+1}/{n_chunks} ({start:.0f}s–{start+length:.0f}s)..."
                 jobs[job_id]["progress"] = int(_prog_start + (_prog_end - _prog_start) * i / n_chunks)
             print(f"  [MuseTalk] Chunk {i+1}/{n_chunks} ({start:.0f}s–{start+length:.0f}s)")
 
-            run_musetalk(image_path, chunk_aud, chunk_vid, settings, job_id=None)
+            run_musetalk(chunk_face, chunk_aud, chunk_vid, settings, job_id=None)
             chunk_videos.append(chunk_vid)
             if job_id and jobs.get(job_id):
                 jobs[job_id]["progress"] = int(_prog_start + (_prog_end - _prog_start) * (i + 1) / n_chunks)
@@ -1786,23 +1835,9 @@ def apply_gfpgan_to_video(input_path: str, output_path: str, job_id: str = None,
             jobs[job_id]["message"] = "GFPGAN: restaurando qualidade facial..."
         print(f"  [GFPGAN] Loading model: {os.path.basename(_gfpgan_model)}")
 
-        # Try to use Real-ESRGAN as background upsampler for sharper non-face regions
+        # bg_upsampler disabled: 2x scaling makes GFPGAN 5-10x slower (e.g. 1280x714 -> 5+ min per minute of video)
+        # Final HD encode at 1280x720 already handles upscaling. Trade off background sharpness for speed.
         _bg_upsampler = None
-        try:
-            from basicsr.archs.rrdbnet_arch import RRDBNet
-            from realesrgan import RealESRGANer
-            _realesrgan_model = os.path.join(BASE_DIR, "venv311", "Lib", "site-packages", "gfpgan", "weights", "RealESRGAN_x2plus.pth")
-            if not os.path.exists(_realesrgan_model):
-                _realesrgan_model = os.path.join(MODELS_DIR, "RealESRGAN_x2plus.pth")
-            if os.path.exists(_realesrgan_model):
-                _bg_upsampler = RealESRGANer(
-                    scale=2, model_path=_realesrgan_model,
-                    model=RRDBNet(num_in_ch=3, num_out_ch=3, num_feat=64, num_block=23, num_grow_ch=32, scale=2),
-                    tile=400, tile_pad=10, pre_pad=0, half=True
-                )
-                print("  [GFPGAN] Real-ESRGAN background upsampler loaded")
-        except Exception as _reu:
-            _bg_upsampler = None
 
         restorer = GFPGANer(
             model_path=_gfpgan_model,
@@ -3649,6 +3684,12 @@ def run_pipeline(job_id: str, config: dict):
         _input_is_video = _is_video_file(config["image_path"])
         _gesture_video  = config.get("gesture_video", "")  # path do vídeo de gestos selecionado
 
+        # Pre-resize: cap input image at 720px max to keep downstream lip sync + GFPGAN fast.
+        # High-res images (1080p+) make Wav2Lip and GFPGAN take 5-10x longer with no quality gain
+        # since the final HD encode produces 1280x720 anyway.
+        if not _input_is_video:
+            config["image_path"] = _ensure_max_dim(config["image_path"], 720, prefix="pre")
+
         # ── MODO GESTURE TEMPLATE — corpo inteiro com gestos reais + face swap ──
         if not _input_is_video and _gesture_video and os.path.exists(_gesture_video):
             jobs[job_id]["message"] = f"Gesture Mode: trocando rosto no vídeo de gestos..."
@@ -3776,8 +3817,10 @@ def run_pipeline(job_id: str, config: dict):
                     _st_done.set()
                     print(f"  [SadTalker] Falhou ({_st_err}) — fallback para Wav2Lip")
                     jobs[job_id]["message"] = f"Wav2Lip (fallback): sincronizando lábios ({dur:.0f}s)..."
+                    # Resize image to max 720px before Wav2Lip — high-res input makes GFPGAN extremely slow downstream
+                    _fb_img = _ensure_max_dim(config["image_path"], 720, prefix="w2lfb")
                     run_wav2lip_chunked(
-                        config["image_path"], audio_path, avatar_video,
+                        _fb_img, audio_path, avatar_video,
                         settings={}, chunk_duration=300, job_id=job_id
                     )
                     # Validar output do fallback
@@ -7235,10 +7278,12 @@ def _attach_request_id():
 
 
 # ── Watchdog thread: detects stuck jobs and auto-recovers them ───────────────
-_STUCK_JOB_TIMEOUT_MIN = 45   # jobs stuck longer than this get killed
+# 4h: long enough for 1h video on RTX 4060 (SadTalker base ~3min + MuseTalk chunked ~2h
+# + GFPGAN chunked ~30min + HD encode ~20min ≈ 3h total). Tune up for slower hardware.
+_STUCK_JOB_TIMEOUT_MIN = 240
 
 def _watchdog_loop():
-    """Runs every 60s. Kills jobs stuck in processing for >45 min."""
+    """Runs every 60s. Kills jobs stuck in processing for >4h."""
     import time as _wt
     while True:
         try:
