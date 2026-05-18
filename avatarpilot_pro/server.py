@@ -3903,9 +3903,14 @@ def run_pipeline(job_id: str, config: dict):
 
                 # Step 3: Lip sync on looped video (moving face) OR static image (fallback)
                 # MuseTalk (primary, latent diffusion) → Wav2Lip (fallback)
+                # For very long videos (>30min) MuseTalk on moving face would take 10-15h
+                # on RTX 4060 — auto-skip to Wav2Lip which handles 1h in ~30min with good quality.
                 _face_src = _base_video if _base_video else config["image_path"]
                 _mode_label = "vídeo animado" if _base_video else "imagem estática"
-                _mst_ok = check_musetalk()
+                _skip_musetalk = bool(_base_video) and dur > 1800
+                if _skip_musetalk:
+                    print(f"  [Pipeline] {dur:.0f}s > 1800s + video face — pulando MuseTalk (custo proibitivo), usando Wav2Lip direto")
+                _mst_ok = check_musetalk() and not _skip_musetalk
                 if _mst_ok:
                     jobs[job_id]["message"] = f"MuseTalk: lip sync em {_mode_label} ({dur:.0f}s)..."
                     print(f"  [Pipeline] MuseTalk em {_mode_label}")
