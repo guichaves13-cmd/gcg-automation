@@ -831,7 +831,7 @@ def run_sadtalker(image_path, audio_path, output_path, settings=None):
     # Scale timeout: audio_dur * processing_ratio + overhead. Min 300s for concurrent tolerance.
     _aud_dur = max(1.0, get_media_duration(audio_path))
     _base = int(_aud_dur * (4.0 if size >= 512 or enhancer not in ("none", "") else 2.5)) + 120
-    timeout_s = max(300, min(600, _base))
+    timeout_s = max(300, _base)  # no upper cap — long audio needs time on RTX 4060
 
     def _run_cmd(run_cmd, tout=None):
         return subprocess.run(
@@ -850,7 +850,7 @@ def run_sadtalker(image_path, audio_path, output_path, settings=None):
         print(f"  [SadTalker] Timeout ({timeout_s}s) — retrying without enhancer...")
         cmd_no_enh = _build_cmd(preprocess, "none")
         try:
-            _retry_tout = max(300, min(600, int(_aud_dur * 2.5) + 120))
+            _retry_tout = max(300, int(_aud_dur * 2.5) + 120)  # no cap on retry either
             proc = _run_cmd(cmd_no_enh, tout=_retry_tout)
             proc_stdout = proc.stdout or ""
             proc_stderr = proc.stderr or ""
@@ -1395,8 +1395,8 @@ def run_musetalk(image_path: str, audio_path: str, output_path: str,
 
         # MuseTalk writes to results/{version}/result.mp4
         mt_out = os.path.join(result_dir, "v15", "result.mp4")
-        if not os.path.exists(mt_out) or os.path.getsize(mt_out) < 10000:
-            raise Exception(f"MuseTalk output missing (rc={result.returncode}). stderr: {stderr[-400:]}")
+        if not os.path.exists(mt_out) or os.path.getsize(mt_out) < 100_000:
+            raise Exception(f"MuseTalk output missing or too small (rc={result.returncode}). stderr: {stderr[-400:]}")
 
         shutil.copy2(mt_out, output_path)
         print(f"  [MuseTalk] Done → {os.path.getsize(output_path)//1024}KB")
@@ -1461,12 +1461,12 @@ def run_musetalk_chunked(image_path: str, audio_path: str, output_path: str,
         _concat_r = subprocess.run([
             ffmpeg, "-y", "-f", "concat", "-safe", "0",
             "-i", concat_list, "-c", "copy", output_path
-        ], capture_output=True, timeout=300)
+        ], capture_output=True, timeout=max(300, n_chunks * 20))
         if _concat_r.returncode != 0:
             _cerr = (_concat_r.stderr or b"").decode("utf-8", errors="replace")[-300:]
             raise Exception(f"MuseTalk chunked concat falhou (rc={_concat_r.returncode}): {_cerr}")
 
-        if not os.path.exists(output_path) or os.path.getsize(output_path) < 10000:
+        if not os.path.exists(output_path) or os.path.getsize(output_path) < 100_000:
             raise Exception("MuseTalk chunked concat failed")
 
         print(f"  [MuseTalk] Chunked done: {n_chunks} chunks → {os.path.getsize(output_path)//1024}KB")
@@ -2991,8 +2991,8 @@ def _validate_video_output(path: str, expected_dur: float = 0, min_kb: int = 50)
         streams = [s.get("codec_type") for s in _info.get("streams", [])]
         if "video" not in streams:
             return False, "sem stream de vídeo"
-        if expected_dur > 0 and dur < expected_dur * 0.30:
-            return False, f"duração muito curta ({dur:.1f}s esperado ≥{expected_dur*0.30:.1f}s)"
+        if expected_dur > 0 and dur < expected_dur * 0.70:
+            return False, f"duração muito curta ({dur:.1f}s esperado ≥{expected_dur*0.70:.1f}s)"
         return True, f"OK ({dur:.1f}s, {size_kb}KB)"
     except Exception as _ve:
         return False, f"ffprobe falhou: {_ve}"
