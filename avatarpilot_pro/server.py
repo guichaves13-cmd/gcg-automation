@@ -863,7 +863,9 @@ def run_sadtalker(image_path, audio_path, output_path, settings=None):
     # Scale timeout: audio_dur * processing_ratio + overhead. Min 300s for concurrent tolerance.
     _aud_dur = max(1.0, get_media_duration(audio_path))
     _base = int(_aud_dur * (4.0 if size >= 512 or enhancer not in ("none", "") else 2.5)) + 120
-    timeout_s = max(300, _base)  # no upper cap — long audio needs time on RTX 4060
+    # Floor 600s gives breathing room when GPU is warm from previous job (avoids cascade failures).
+    # No upper cap — long audio legitimately needs time on RTX 4060.
+    timeout_s = max(600, _base)
 
     def _run_cmd(run_cmd, tout=None):
         return subprocess.run(
@@ -882,7 +884,7 @@ def run_sadtalker(image_path, audio_path, output_path, settings=None):
         print(f"  [SadTalker] Timeout ({timeout_s}s) — retrying without enhancer...")
         cmd_no_enh = _build_cmd(preprocess, "none")
         try:
-            _retry_tout = max(300, int(_aud_dur * 2.5) + 120)  # no cap on retry either
+            _retry_tout = max(600, int(_aud_dur * 2.5) + 120)  # floor 600s for warm-GPU breathing room
             proc = _run_cmd(cmd_no_enh, tout=_retry_tout)
             proc_stdout = proc.stdout or ""
             proc_stderr = proc.stderr or ""
@@ -1405,7 +1407,9 @@ def run_musetalk(image_path: str, audio_path: str, output_path: str,
             jobs[job_id]["message"] = "MuseTalk: sincronizando lábios (difusão latente)..."
 
         print(f"  [MuseTalk] Starting inference on {os.path.basename(image_path)}")
-        timeout = max(600, int(_get_duration_safe(audio_path) * 4) + 120)
+        # MuseTalk on RTX 4060: ~4x audio for static image, can hit 5-6x on cold cache or warm GPU.
+        # Generous timeout prevents cascade failures (MuseTalk timeout -> Wav2Lip fallback -> slow GFPGAN).
+        timeout = max(1800, int(_get_duration_safe(audio_path) * 6) + 300)
         env = os.environ.copy()
         env["PYTHONPATH"] = MUSETALK_DIR + os.pathsep + env.get("PYTHONPATH", "")
         env["PYTHONIOENCODING"] = "utf-8"
