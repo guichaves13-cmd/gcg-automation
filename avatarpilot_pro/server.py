@@ -4178,24 +4178,30 @@ def run_pipeline(job_id: str, config: dict):
             print(f"  [HD] probe: {_cur_w}×{_cur_h} @ {_cur_br//1000}kbps")
 
             # SEMPRE re-encode para garantir resolução, bitrate e nitidez máxima (HeyGen quality)
+            # 1080p Full HD output by default — HeyGen-class deliverable.
+            # User can override via config["output_resolution"] = "720p" if needed for size.
+            _target_res = config.get("output_resolution", "1080p")
+            if _target_res == "720p":
+                _tw, _th, _vbr, _vmin, _vmax, _vbuf = 1280, 720, "2500k", "2000k", "4000k", "5000k"
+            else:
+                _tw, _th, _vbr, _vmin, _vmax, _vbuf = 1920, 1080, "5000k", "4000k", "8000k", "10000k"
             _needs_hd = True
             if _needs_hd:
-                jobs[job_id]["message"] = f"HD final: {_cur_w}×{_cur_h}→1280×720 @ 2.5Mbps..."
+                jobs[job_id]["message"] = f"HD final: {_cur_w}×{_cur_h}→{_tw}×{_th} @ {_vbr}..."
                 _hd_preset  = "fast" if dur > 120 else "medium"
-                # Timeout realista: libx264 fast = ~100fps CPU → 3× vídeo + 3min buffer
-                # NÃO usar dur*10 — hiberna e acorda causa timeout negativo no subprocess
-                _hd_timeout = max(300, int(dur * 3) + 180)
-                # scale+crop 1280×720 + nitidez moderada (não destruir movimento dos lábios)
-                _vf = ("scale=1280:720:force_original_aspect_ratio=increase:flags=lanczos,"
-                       "crop=1280:720,"
+                # Timeout realista: libx264 fast = ~100fps CPU → 4× vídeo + 5min buffer for 1080p
+                _hd_timeout = max(300, int(dur * 4) + 300)
+                # scale+crop + denoise + sharpen + color grade for HeyGen-class look
+                _vf = (f"scale={_tw}:{_th}:force_original_aspect_ratio=increase:flags=lanczos,"
+                       f"crop={_tw}:{_th},"
                        "hqdn3d=1.5:1.5:3:3,"
-                       "unsharp=3:3:0.8:3:3:0.0,"
-                       "eq=contrast=1.04:brightness=0.002:saturation=1.06:gamma=1.01")
+                       "unsharp=5:5:1.0:5:5:0.0,"
+                       "eq=contrast=1.05:brightness=0.003:saturation=1.08:gamma=1.01")
                 _hd_cmd = [_ff2, "-y", "-i", _safe_in,
                            "-vf", _vf,
-                           "-c:v", "libx264", "-preset", _hd_preset,
-                           "-b:v", "2500k", "-minrate", "2000k", "-maxrate", "4000k", "-bufsize", "5000k",
-                           "-c:a", "aac", "-b:a", "192k",
+                           "-c:v", "libx264", "-preset", _hd_preset, "-crf", "18",
+                           "-b:v", _vbr, "-minrate", _vmin, "-maxrate", _vmax, "-bufsize", _vbuf,
+                           "-c:a", "aac", "-b:a", "192k", "-ar", "44100",
                            "-pix_fmt", "yuv420p",
                            "-movflags", "+faststart",
                            _safe_out]
