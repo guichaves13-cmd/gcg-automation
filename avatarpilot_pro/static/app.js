@@ -2603,10 +2603,9 @@ let _adminToken = sessionStorage.getItem('avp_admin_token') || '';
 
 function adminCheckSession() {
   if (_adminToken) {
-    adminShowPanel();
+    adminShowPanel();   // calls adminLoadAnalytics() internally
     adminLoadStatus();
     adminLoadKeys();
-    adminLoadAnalytics();
   }
 }
 
@@ -2968,7 +2967,7 @@ function renderAnalytics(d) {
   if (dailyCanvas && typeof Chart !== 'undefined') {
     const labels = (d.daily || []).map(x => x.day.slice(5));  // MM-DD
     const values = (d.daily || []).map(x => x.jobs);
-    if (_chartDaily) _chartDaily.destroy();
+    if (_chartDaily && typeof _chartDaily.destroy === 'function') _chartDaily.destroy();
     _chartDaily = new Chart(dailyCanvas, {
       type: 'bar',
       data: {
@@ -2995,7 +2994,7 @@ function renderAnalytics(d) {
     const planColors = { free: '#6b7280', starter: '#3b82f6', pro: '#8b5cf6', unlimited: '#10b981' };
     const labels = (d.by_plan || []).map(p => p.plan);
     const values = (d.by_plan || []).map(p => p.jobs);
-    if (_chartPlans) _chartPlans.destroy();
+    if (_chartPlans && typeof _chartPlans.destroy === 'function') _chartPlans.destroy();
     _chartPlans = new Chart(plansCanvas, {
       type: 'doughnut',
       data: {

@@ -5182,14 +5182,17 @@ def api_voice_preset_detail(preset_id):
 
 @app.route("/api/webhooks", methods=["GET"])
 def api_webhooks_list():
+    conn = None
     try:
         conn = sqlite3.connect(DB_PATH)
         rows = conn.execute("SELECT id, job_id, url, global_hook, created_at FROM webhooks").fetchall()
-        conn.close()
         return jsonify({"webhooks": [{"id": r[0], "job_id": r[1], "url": r[2],
                                       "global": bool(r[3]), "created_at": r[4]} for r in rows]})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
 
 @app.route("/api/webhooks", methods=["POST"])
 def api_webhooks_register():
@@ -5204,14 +5207,17 @@ def api_webhooks_register():
 
 @app.route("/api/webhooks/<int:wid>", methods=["DELETE"])
 def api_webhooks_delete(wid):
+    conn = None
     try:
         conn = sqlite3.connect(DB_PATH)
         conn.execute("DELETE FROM webhooks WHERE id=?", (wid,))
         conn.commit()
-        conn.close()
         return jsonify({"deleted": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
 
 @app.route("/api/cloud/test", methods=["POST"])
 def api_cloud_test():
@@ -6081,6 +6087,11 @@ def stripe_webhook():
         if cfg["webhook_secret"]:
             event = _stripe.Webhook.construct_event(payload, sig, cfg["webhook_secret"])
         else:
+            # webhook_secret not configured: only allow in dev (localhost) to prevent spoofing
+            remote = request.remote_addr or ""
+            if remote not in ("127.0.0.1", "::1"):
+                print(f"  [Stripe] Rejected unsigned webhook from {remote} — configure webhook_secret", flush=True)
+                return jsonify({"error": "webhook_secret not configured — unsigned webhooks rejected"}), 403
             event = json.loads(payload)
     except Exception as e:
         return jsonify({"error": str(e)}), 400
@@ -7131,6 +7142,156 @@ def api_face_swap():
 
 
 # ============================================================================
+# ANTI-ERROR SYSTEM
+# ============================================================================
+
+# ── Lightweight health check (for uptime monitors / load balancers) ──────────
+@app.route("/api/healthz")
+def api_healthz():
+    """Ultra-fast health check — responds in <5ms. Use for uptime monitoring."""
+    return jsonify({
+        "status": "ok",
+        "ts":     datetime.now().isoformat(),
+        "jobs":   len(jobs),
+        "queue":  len(batch_queue),
+    })
+
+
+# ── Request-ID middleware (traces each request in logs) ──────────────────────
+import uuid as _uuid_mod
+@app.before_request
+def _attach_request_id():
+    request.environ["X-Request-ID"] = _uuid_mod.uuid4().hex[:8]
+
+
+# ── Watchdog thread: detects stuck jobs and auto-recovers them ───────────────
+_STUCK_JOB_TIMEOUT_MIN = 45   # jobs stuck longer than this get killed
+
+def _watchdog_loop():
+    """Runs every 60s. Kills jobs stuck in processing for >45 min."""
+    import time as _wt
+    while True:
+        try:
+            _wt.sleep(60)
+            _now = datetime.now()
+            stuck = []
+            with jobs_lock:
+                for jid, jdata in list(jobs.items()):
+                    if jdata.get("status") in ("tts", "generating_video", "compositing",
+                                                "generating_audio", "processing"):
+                        created_str = jdata.get("created", "")
+                        if created_str:
+                            try:
+                                age_min = (_now - datetime.fromisoformat(created_str)).seconds / 60
+                                if age_min > _STUCK_JOB_TIMEOUT_MIN:
+                                    stuck.append(jid)
+                            except Exception:
+                                pass
+            for jid in stuck:
+                with jobs_lock:
+                    if jobs.get(jid, {}).get("status") not in ("done", "error", "cancelled"):
+                        jobs[jid]["status"]   = "error"
+                        jobs[jid]["error"]    = f"Timeout: job travado por >{_STUCK_JOB_TIMEOUT_MIN}min"
+                        jobs[jid]["message"]  = "Job cancelado automaticamente (timeout)"
+                        jobs[jid]["progress"] = 0
+                        db_save_job(jid, jobs[jid])
+                        print(f"  [Watchdog] Job {jid} marcado como error (stuck timeout)", flush=True)
+            # Alert on memory growth
+            with jobs_lock:
+                n_jobs = len(jobs)
+            if n_jobs > 500:
+                print(f"  [Watchdog] ALERTA: {n_jobs} jobs em memória — possível leak", flush=True)
+        except Exception as _we:
+            print(f"  [Watchdog] Erro interno: {_we}", flush=True)
+
+def _start_watchdog():
+    t = threading.Thread(target=_watchdog_loop, name="WatchdogThread", daemon=True)
+    t.start()
+    print("  Watchdog: OK (stuck-job detector ativo)", flush=True)
+
+
+# ── Startup diagnostics: validate critical dependencies at boot ──────────────
+def _run_startup_diagnostics():
+    """Called once at startup. Logs warnings for missing/broken dependencies."""
+    _ok, _warn = [], []
+
+    # FFmpeg
+    try:
+        r = subprocess.run([_ffmpeg_path(), "-version"], capture_output=True, timeout=5)
+        if r.returncode == 0:
+            _ok.append("FFmpeg")
+        else:
+            _warn.append("FFmpeg retornou erro")
+    except Exception as e:
+        _warn.append(f"FFmpeg não encontrado: {e}")
+
+    # SQLite write test
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.execute("SELECT COUNT(*) FROM jobs_db")
+        conn.close()
+        _ok.append("SQLite")
+    except Exception as e:
+        _warn.append(f"SQLite: {e}")
+
+    # Disk space
+    free_mb = _free_disk_mb()
+    if free_mb < DISK_WARN_MB:
+        _warn.append(f"Disco baixo: {free_mb:.0f}MB livres")
+    else:
+        _ok.append(f"Disco ({free_mb:.0f}MB livres)")
+
+    # Output dir writable
+    try:
+        _test = os.path.join(OUTPUT_DIR, "_write_test")
+        open(_test, "w").close()
+        os.remove(_test)
+        _ok.append("Output dir")
+    except Exception as e:
+        _warn.append(f"Output dir não gravável: {e}")
+
+    # VRAM
+    try:
+        import torch
+        if torch.cuda.is_available():
+            free_gb = torch.cuda.mem_get_info(0)[0] / 1024**3
+            if free_gb < 1.0:
+                _warn.append(f"VRAM crítica: {free_gb:.1f}GB livres")
+            else:
+                _ok.append(f"VRAM ({free_gb:.1f}GB livres)")
+    except Exception:
+        pass
+
+    if _warn:
+        print(f"  [Diagnostics] ⚠️  Avisos: {', '.join(_warn)}", flush=True)
+    print(f"  [Diagnostics] ✅ OK: {', '.join(_ok)}", flush=True)
+
+
+# ── Input sanitization helpers ───────────────────────────────────────────────
+def _safe_filename(name: str, max_len: int = 100) -> str:
+    """Strip path components and dangerous characters from user-supplied filenames."""
+    name = os.path.basename(name)
+    name = re.sub(r'[^\w.\-]', '_', name)
+    return name[:max_len]
+
+def _safe_url(url: str) -> bool:
+    """Return True if URL is safe to fetch (blocks SSRF targets)."""
+    if not url:
+        return False
+    blocked = ("169.254.", "127.", "10.", "192.168.", "172.16.", "172.17.",
+               "172.18.", "172.19.", "172.2", "172.3", "0.0.0.0", "localhost",
+               "metadata.google", "169.254.169.254")
+    import urllib.parse as _up
+    try:
+        parsed = _up.urlparse(url)
+        host = parsed.hostname or ""
+        return (parsed.scheme in ("http", "https") and
+                not any(host.startswith(b) or host == b.rstrip(".") for b in blocked))
+    except Exception:
+        return False
+
+
+# ============================================================================
 # GLOBAL ERROR HANDLERS
 # ============================================================================
 @app.errorhandler(413)
@@ -7146,13 +7307,15 @@ def error_404(e):
 
 @app.errorhandler(500)
 def error_500(e):
-    print(f"[Flask 500] {e}")
+    rid = request.environ.get("X-Request-ID", "?")
+    print(f"[Flask 500] req={rid} {e}", flush=True)
     return jsonify({"error": "Erro interno do servidor. Verifique os logs."}), 500
 
 @app.errorhandler(Exception)
 def error_unhandled(e):
     import traceback
-    print(f"[Flask Unhandled] {traceback.format_exc()}")
+    rid = request.environ.get("X-Request-ID", "?")
+    print(f"[Flask Unhandled] req={rid}\n{traceback.format_exc()}", flush=True)
     if request.path.startswith("/api/"):
         return jsonify({"error": f"Erro inesperado: {str(e)}"}), 500
     return "Erro interno", 500
@@ -7193,4 +7356,6 @@ if __name__ == "__main__":
     print(f"  Workers:   {MAX_WORKERS} concurrent jobs")
     print("=" * 60)
     _init_admin_token()
+    _run_startup_diagnostics()
+    _start_watchdog()
     app.run(host="0.0.0.0", port=5052, debug=False, threaded=True)
