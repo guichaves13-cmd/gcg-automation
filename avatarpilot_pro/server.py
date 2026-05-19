@@ -554,6 +554,56 @@ def edge_tts_generate_advanced(text, voice, output_path, rate="+0%", pitch="+0Hz
     finally:
         loop.close()
 
+
+# ─── F5-TTS — SOTA voice cloning (5s reference audio → cloned voice) ───────
+_f5_model_cache = None
+
+def f5_tts_generate(text: str, ref_audio: str, output_path: str,
+                    ref_text: str = "", model: str = "F5TTS_v1_Base") -> str:
+    """
+    Clone a voice from a 5-30s reference audio file using F5-TTS.
+    Produces dramatically more natural speech than Edge-TTS with the cloned voice.
+
+    ref_audio: path to clean 5-30s WAV/MP3 of the target voice
+    ref_text:  what the reference audio says (improves quality if provided;
+               auto-transcribed via Whisper if empty)
+    model:     F5TTS_v1_Base (default) or F5TTS_Base / E2TTS_Base
+    """
+    global _f5_model_cache
+    from f5_tts.api import F5TTS
+
+    if _f5_model_cache is None:
+        print(f"  [F5-TTS] Loading model '{model}' (first call ~30s)...")
+        _f5_model_cache = F5TTS(model=model)
+
+    # F5-TTS requires reference text. If absent, auto-transcribe with Whisper.
+    if not ref_text:
+        try:
+            print("  [F5-TTS] Auto-transcribing reference audio with Whisper...")
+            ref_text = transcribe_to_srt(ref_audio, model_size="base")
+            # Extract pure text (no timestamps) from SRT
+            lines = []
+            for ln in ref_text.split("\n"):
+                ln = ln.strip()
+                if ln and not ln.isdigit() and "-->" not in ln:
+                    lines.append(ln)
+            ref_text = " ".join(lines)
+        except Exception as _te:
+            print(f"  [F5-TTS] Auto-transcribe falhou ({_te}); usando ref_text vazio")
+            ref_text = ""
+
+    print(f"  [F5-TTS] Synthesizing {len(text)} chars from ref ({len(ref_text)} ref chars)")
+    wav, sr, _ = _f5_model_cache.infer(
+        ref_file=ref_audio,
+        ref_text=ref_text,
+        gen_text=text,
+        file_wave=output_path,
+        seed=None,
+    )
+    print(f"  [F5-TTS] Done -> {os.path.basename(output_path)} ({sr}Hz)")
+    return output_path
+
+
 def elevenlabs_generate(text, voice_id, api_key, output_path):
     """ElevenLabs TTS via REST API (no SDK — avoids Windows long path issues)."""
     import requests
@@ -1796,6 +1846,159 @@ def run_wav2lip(image_path: str, audio_path: str, output_path: str,
 
 
 # ============================================================================
+# ============================================================================
+# CODEFORMER FACE RESTORATION — SOTA alternative to GFPGAN (better identity)
+# ============================================================================
+_codeformer_cache = {"net": None, "device": None}
+
+def _codeformer_init():
+    """Lazy-init CodeFormer model + face restoration helper. Returns dict or None."""
+    if _codeformer_cache["net"] is not None:
+        return _codeformer_cache
+    try:
+        import torch as _t
+        from codeformer.basicsr.utils.registry import ARCH_REGISTRY
+        device = _t.device("cuda" if _t.cuda.is_available() else "cpu")
+        net = ARCH_REGISTRY.get("CodeFormer")(
+            dim_embd=512, codebook_size=1024, n_head=8, n_layers=9,
+            connect_list=["32", "64", "128", "256"],
+        ).to(device)
+        ckpt = os.path.join(MODELS_DIR, "CodeFormer", "weights", "CodeFormer", "codeformer.pth")
+        if not os.path.exists(ckpt):
+            print(f"  [CodeFormer] checkpoint missing at {ckpt}")
+            return None
+        state = _t.load(ckpt, map_location=device)["params_ema"]
+        net.load_state_dict(state)
+        net.eval()
+        _codeformer_cache.update({"net": net, "device": device})
+        print("  [CodeFormer] Model loaded (CUDA)" if device.type == "cuda" else "  [CodeFormer] Model loaded (CPU)")
+        return _codeformer_cache
+    except Exception as e:
+        print(f"  [CodeFormer] init failed: {e}")
+        return None
+
+
+def apply_codeformer_to_video(input_path: str, output_path: str, job_id: str = None,
+                              fidelity: float = 0.7, max_process_frames: int = 0) -> str:
+    """
+    CodeFormer face restoration — produces sharper identity-preserving results than GFPGAN.
+    fidelity 0.0 (max quality, may change identity) to 1.0 (max identity, may be blurry).
+    Auto-falls back to apply_gfpgan_to_video if CodeFormer init fails.
+    """
+    cache = _codeformer_init()
+    if cache is None:
+        print("  [CodeFormer] unavailable — falling back to GFPGAN")
+        return apply_gfpgan_to_video(input_path, output_path, job_id=job_id,
+                                     max_process_frames=max_process_frames)
+
+    import tempfile as _tf, cv2 as _cv, numpy as _np, torch as _t
+    from torchvision.transforms.functional import normalize as _tnorm
+    from codeformer.basicsr.utils import img2tensor, tensor2img
+    from codeformer.facelib.utils.face_restoration_helper import FaceRestoreHelper
+
+    net    = cache["net"]
+    device = cache["device"]
+    _ff    = _ffmpeg_path()
+    _ffp   = _ffprobe_path()
+
+    # Point facelib to our local weights dir so it doesn't try to re-download
+    os.environ["TORCH_HOME"] = os.path.join(MODELS_DIR, "CodeFormer")
+
+    _tmp = _tf.mkdtemp(prefix="codeformer_avp_")
+    try:
+        if job_id and job_id in jobs:
+            jobs[job_id]["message"] = "CodeFormer: restaurando qualidade facial (SOTA)..."
+
+        cap   = _cv.VideoCapture(input_path)
+        fps   = cap.get(_cv.CAP_PROP_FPS) or 25
+        w     = int(cap.get(_cv.CAP_PROP_FRAME_WIDTH))
+        h     = int(cap.get(_cv.CAP_PROP_FRAME_HEIGHT))
+        total = int(cap.get(_cv.CAP_PROP_FRAME_COUNT))
+        if total < 10:
+            dur = _get_duration_safe(input_path)
+            total = int(dur * fps)
+        print(f"  [CodeFormer] {total} frames @ {fps:.0f}fps | {w}x{h}")
+
+        # Adaptive frame budget like GFPGAN does
+        if max_process_frames <= 0:
+            _sec = total / max(fps, 1)
+            if   _sec <= 60:   max_process_frames = total
+            elif _sec <= 300:  max_process_frames = 3000
+            elif _sec <= 1800: max_process_frames = 2000
+            else:              max_process_frames = 1000
+            print(f"  [CodeFormer] Auto max_frames={max_process_frames} for {_sec:.0f}s video")
+        skip = max(1, int(_np.ceil(total / max_process_frames)))
+
+        # Output frames to disk, then concat with ffmpeg
+        out_frames_dir = os.path.join(_tmp, "frames")
+        os.makedirs(out_frames_dir, exist_ok=True)
+        last_restored = None
+        idx = 0
+        processed = 0
+        while True:
+            ok, frame = cap.read()
+            if not ok: break
+            if idx % skip == 0:
+                helper = FaceRestoreHelper(
+                    1, face_size=512, crop_ratio=(1, 1),
+                    det_model="retinaface_resnet50", save_ext="png", use_parse=True,
+                    device=device,
+                )
+                try:
+                    helper.read_image(frame)
+                    helper.get_face_landmarks_5(only_center_face=True, resize=640, eye_dist_threshold=5)
+                    helper.align_warp_face()
+                    for cropped in helper.cropped_faces:
+                        ct = img2tensor(cropped / 255.0, bgr2rgb=True, float32=True)
+                        _tnorm(ct, (0.5,0.5,0.5), (0.5,0.5,0.5), inplace=True)
+                        ct = ct.unsqueeze(0).to(device)
+                        with _t.no_grad():
+                            out = net(ct, w=fidelity, adain=True)[0]
+                            restored = tensor2img(out, rgb2bgr=True, min_max=(-1, 1))
+                        del out
+                        helper.add_restored_face(restored.astype(_np.uint8))
+                    helper.get_inverse_affine(None)
+                    final = helper.paste_faces_to_input_image(upsample_img=None)
+                    last_restored = final
+                except Exception as _fe:
+                    last_restored = frame  # face detect failed, use raw frame
+                if device.type == "cuda":
+                    _t.cuda.empty_cache()
+                processed += 1
+                if job_id and job_id in jobs and processed % 5 == 0:
+                    pct = int(processed * 100 / max_process_frames)
+                    jobs[job_id]["message"] = f"CodeFormer: {pct}% — {w}x{h}"
+
+            out_frame = last_restored if last_restored is not None else frame
+            _cv.imwrite(os.path.join(out_frames_dir, f"f_{idx:06d}.png"), out_frame)
+            idx += 1
+        cap.release()
+
+        # Reassemble video with original audio
+        _safe_v = os.path.join(_tmp, "video.mp4")
+        subprocess.run([_ff, "-y", "-framerate", str(int(fps)),
+                        "-i", os.path.join(out_frames_dir, "f_%06d.png"),
+                        "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+                        "-pix_fmt", "yuv420p", _safe_v],
+                       capture_output=True, timeout=max(600, total // 2))
+
+        subprocess.run([_ff, "-y", "-i", _safe_v, "-i", input_path,
+                        "-map", "0:v", "-map", "1:a?",
+                        "-c:v", "copy", "-c:a", "copy",
+                        output_path],
+                       capture_output=True, timeout=300)
+
+        if not os.path.exists(output_path) or os.path.getsize(output_path) < 10000:
+            print("  [CodeFormer] output invalid, falling back to copy")
+            shutil.copy2(input_path, output_path)
+        else:
+            print(f"  [CodeFormer] Done -> {os.path.getsize(output_path)//1024}KB")
+        return output_path
+    finally:
+        shutil.rmtree(_tmp, ignore_errors=True)
+
+
+# ============================================================================
 # GFPGAN FACE RESTORATION — post-Wav2Lip quality enhancement
 # ============================================================================
 def apply_gfpgan_to_video(input_path: str, output_path: str, job_id: str = None,
@@ -2750,6 +2953,101 @@ def run_sadtalker_cloud_replicate(image_path, audio_path, output_path, settings=
 
 
 # ============================================================================
+# CLOUD GPU — ECHOMIMIC V2 via Replicate (HeyGen-class half-body w/ HAND GESTURES)
+# ============================================================================
+def run_echomimic_v2_replicate(image_path, audio_path, output_path, settings=None, job_id=None):
+    """
+    Run EchoMimic v2 on Replicate (Ant Group's SOTA half-body model).
+    Generates the avatar speaking WITH HAND GESTURES from a single photo + audio.
+    No gesture-template video required — model synthesizes natural body motion.
+    This is the local equivalent of HeyGen's gesture engine.
+
+    Cost: ~$0.30/minute of generated video on Replicate A100.
+    Requires: settings["replicate_key"] OR replicate_key in server settings.
+    """
+    import requests as _req, base64 as _b64
+
+    s       = load_settings()
+    api_key = s.get("replicate_key", "")
+    if not api_key:
+        raise Exception("Replicate API key not configured. Set it in Settings → Cloud GPU.")
+
+    settings = settings or {}
+
+    with open(image_path, "rb") as f:
+        img_ext  = os.path.splitext(image_path)[1].lower().lstrip(".") or "png"
+        img_mime = {"jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png"}.get(img_ext, "image/png")
+        img_data = f"data:{img_mime};base64," + _b64.b64encode(f.read()).decode()
+    with open(audio_path, "rb") as f:
+        aud_ext  = os.path.splitext(audio_path)[1].lower().lstrip(".") or "wav"
+        aud_mime = {"mp3": "audio/mpeg", "wav": "audio/wav", "m4a": "audio/mp4"}.get(aud_ext, "audio/wav")
+        aud_data = f"data:{aud_mime};base64," + _b64.b64encode(f.read()).decode()
+
+    if job_id and job_id in jobs:
+        jobs[job_id]["message"] = "EchoMimic v2: enviando para Cloud GPU (HeyGen-class gestos)..."
+
+    # EchoMimic v2 on Replicate — multiple community models available
+    # Primary: jd7h/echomimic-v2 (most stable)
+    resp = _req.post(
+        "https://api.replicate.com/v1/models/jd7h/echomimic-v2/predictions",
+        headers={"Authorization": f"Token {api_key}", "Content-Type": "application/json",
+                 "Prefer": "wait"},
+        json={"input": {
+            "input_image":  img_data,
+            "input_audio":  aud_data,
+            "width":  int(settings.get("width", 768)),
+            "height": int(settings.get("height", 768)),
+            "guidance_scale":  float(settings.get("guidance_scale", 2.5)),
+            "num_inference_steps": int(settings.get("steps", 20)),
+            "seed": int(settings.get("seed", 42)),
+        }},
+        timeout=120
+    )
+
+    if resp.status_code not in (200, 201):
+        raise Exception(f"Replicate EchoMimic v2 error {resp.status_code}: {resp.text[:300]}")
+
+    pred = resp.json()
+    if pred.get("status") == "succeeded" and pred.get("output"):
+        output_url = pred["output"]
+    else:
+        pred_id  = pred["id"]
+        poll_url = pred.get("urls", {}).get("get", f"https://api.replicate.com/v1/predictions/{pred_id}")
+        print(f"  [EchoMimic v2] Prediction {pred_id} — polling...")
+        for attempt in range(1440):  # up to 2h (1440 * 5s)
+            time.sleep(5)
+            r    = _req.get(poll_url, headers={"Authorization": f"Token {api_key}"}, timeout=15)
+            pred = r.json()
+            st   = pred.get("status")
+
+            if job_id and job_id in jobs:
+                pmap = {"starting": 40, "processing": 60, "succeeded": 88}
+                jobs[job_id]["progress"] = pmap.get(st, jobs[job_id].get("progress", 50))
+                jobs[job_id]["message"]  = f"EchoMimic v2 — {st} ({attempt*5}s)..."
+
+            if st == "succeeded":
+                output_url = pred.get("output")
+                if not output_url:
+                    raise Exception("EchoMimic v2 returned no output URL")
+                break
+            elif st == "failed":
+                raise Exception(f"EchoMimic v2 failed: {pred.get('error', 'unknown')}")
+        else:
+            raise Exception("EchoMimic v2 timeout after 2h")
+
+    if isinstance(output_url, list): output_url = output_url[0]
+    if job_id and job_id in jobs:
+        jobs[job_id]["message"] = "Baixando resultado HeyGen-class..."
+    r2 = _req.get(output_url, timeout=600, stream=True)
+    r2.raise_for_status()
+    with open(output_path, "wb") as f:
+        for chunk in r2.iter_content(chunk_size=8192):
+            f.write(chunk)
+    print(f"  [EchoMimic v2] Done — {os.path.getsize(output_path)//1024}KB")
+    return output_path
+
+
+# ============================================================================
 # CLOUD GPU — HUGGINGFACE SPACES (FREE, A100 ZeroGPU)
 # ============================================================================
 def run_sadtalker_huggingface(image_path, audio_path, output_path, settings=None, job_id=None):
@@ -3619,6 +3917,16 @@ def run_pipeline(job_id: str, config: dict):
                 audio_path,
             )
             jobs[job_id]["progress"] = 25
+        elif config.get("tts_engine") == "f5_tts" and config.get("voice_ref_audio"):
+            # F5-TTS: clone voice from a reference 5-30s audio sample (SOTA naturalness)
+            jobs[job_id]["message"] = "F5-TTS: clonando voz da amostra..."
+            f5_tts_generate(
+                config["script"],
+                config["voice_ref_audio"],
+                audio_path,
+                ref_text=config.get("voice_ref_text", ""),
+            )
+            jobs[job_id]["progress"] = 25
         else:
             voice = config.get("voice", "")
             # Auto-detect language if voice is not specified
@@ -3680,6 +3988,7 @@ def run_pipeline(job_id: str, config: dict):
         # ── Step 2: Lip Sync — engine auto-selecionado por tipo de entrada ─────
         # Vídeo → Wav2Lip (preserva corpo/mãos do vídeo original) + GFPGAN
         # Foto  → SadTalker full preprocess (movimento natural de cabeça/pescoço) + GFPGAN interno
+        # Premium: EchoMimic v2 via Replicate (gestos reais com mãos, HeyGen-class)
         _check_cancel(job_id)
         jobs[job_id]["status"]   = "generating_video"
         jobs[job_id]["progress"] = 35
@@ -3688,6 +3997,30 @@ def run_pipeline(job_id: str, config: dict):
         _input_is_video = _is_video_file(config["image_path"])
         _gesture_video  = config.get("gesture_video", "")  # path do vídeo de gestos selecionado
 
+        # ── PREMIUM MODE — EchoMimic v2 cloud (HeyGen-class half-body w/ gestures) ──
+        _echomimic_done = False
+        if config.get("engine") == "echomimic_v2" and not _input_is_video:
+            jobs[job_id]["message"] = "EchoMimic v2 Premium: HeyGen-class com gestos..."
+            jobs[job_id]["progress"] = 38
+            try:
+                run_echomimic_v2_replicate(
+                    config["image_path"], audio_path, avatar_video,
+                    settings=config.get("echomimic_settings", {}),
+                    job_id=job_id,
+                )
+                if not os.path.exists(avatar_video) or os.path.getsize(avatar_video) < 10000:
+                    raise Exception("EchoMimic v2 output missing")
+                _av_ok, _av_reason = _validate_video_output(avatar_video, expected_dur=dur)
+                if not _av_ok:
+                    raise Exception(f"EchoMimic v2 output inválido: {_av_reason}")
+                _echomimic_done = True
+                jobs[job_id]["progress"] = 72
+                print("  [Pipeline] EchoMimic v2 OK — bypass local lip sync stack")
+            except Exception as _echo_err:
+                print(f"  [EchoMimic v2] Falhou ({_echo_err}) — fallback para pipeline local")
+                jobs[job_id]["message"] = f"EchoMimic falhou — usando pipeline local"
+                if os.path.exists(avatar_video): _safe_rm(avatar_video)
+
         # Pre-resize: cap input image at 720px max to keep downstream lip sync + GFPGAN fast.
         # High-res images (1080p+) make Wav2Lip and GFPGAN take 5-10x longer with no quality gain
         # since the final HD encode produces 1280x720 anyway.
@@ -3695,7 +4028,7 @@ def run_pipeline(job_id: str, config: dict):
             config["image_path"] = _ensure_max_dim(config["image_path"], 720, prefix="pre")
 
         # ── MODO GESTURE TEMPLATE — corpo inteiro com gestos reais + face swap ──
-        if not _input_is_video and _gesture_video and os.path.exists(_gesture_video):
+        if not _echomimic_done and not _input_is_video and _gesture_video and os.path.exists(_gesture_video):
             jobs[job_id]["message"] = f"Gesture Mode: trocando rosto no vídeo de gestos..."
             jobs[job_id]["progress"] = 38
             try:
@@ -3739,7 +4072,7 @@ def run_pipeline(job_id: str, config: dict):
                 _input_is_video = False  # cair no path SadTalker abaixo
                 _gesture_video  = ""
 
-        if not _gesture_video and not _input_is_video:
+        if not _echomimic_done and not _gesture_video and not _input_is_video:
             # ── IMAGE input via SadTalker (≤90s) or Wav2Lip (>90s) ──────────
             _sadtalker_ok = check_sadtalker()
             if _sadtalker_ok and dur <= 90:
@@ -3970,7 +4303,7 @@ def run_pipeline(job_id: str, config: dict):
                     raise Exception(f"Avatar video inválido: {_av_reason2}")
 
         # ── VIDEO input — MuseTalk (primary) ou Wav2Lip (fallback) ──
-        if _input_is_video:
+        if not _echomimic_done and _input_is_video:
             if check_musetalk():
                 jobs[job_id]["message"] = f"MuseTalk: lip sync no vídeo ({dur:.0f}s)..."
                 try:
@@ -5332,6 +5665,47 @@ def api_vram():
     sufficient = vram_is_sufficient(2.0)
     return jsonify({"vram_free_gb": free, "sufficient": sufficient,
                     "recommendation": "ready" if sufficient else "wait_or_use_cloud"})
+
+@app.route("/api/voices/f5_clone", methods=["POST"])
+def api_voices_f5_clone():
+    """
+    Upload a 5-30s reference audio for F5-TTS local voice cloning (SOTA).
+    No API key needed - runs on the local GPU. Returns reference paths to use
+    in subsequent /api/generate calls with tts_engine=f5_tts.
+    """
+    if "audio" not in request.files:
+        return jsonify({"error": "audio file required"}), 400
+    name     = request.form.get("name", "").strip() or f"voice_{uuid.uuid4().hex[:6]}"
+    ref_text = request.form.get("ref_text", "").strip()
+    f        = request.files["audio"]
+
+    ref_id   = uuid.uuid4().hex[:8]
+    ext      = os.path.splitext(f.filename)[1].lower() or ".wav"
+    if ext not in (".wav", ".mp3", ".m4a", ".ogg", ".flac"):
+        ext = ".wav"
+    ref_path = os.path.join(UPLOAD_DIR, f"f5ref_{ref_id}{ext}")
+    f.save(ref_path)
+
+    dur = _get_duration_safe(ref_path)
+    if dur < 3:
+        _safe_rm(ref_path)
+        return jsonify({"error": f"Reference audio too short ({dur:.1f}s). Use 5-30s."}), 400
+    if dur > 60:
+        return jsonify({"error": f"Reference audio too long ({dur:.1f}s). Trim to 5-30s clean speech."}), 400
+
+    meta = {"id": ref_id, "name": name, "ref_path": ref_path,
+            "ref_text": ref_text, "duration": round(dur, 1),
+            "created": datetime.now().isoformat()}
+    meta_path = os.path.join(UPLOAD_DIR, f"f5ref_{ref_id}.json")
+    with open(meta_path, "w", encoding="utf-8") as mf:
+        json.dump(meta, mf, ensure_ascii=False)
+
+    return jsonify({
+        "ok": True, "voice_ref_id": ref_id, "name": name,
+        "voice_ref_audio": ref_path, "duration": meta["duration"],
+        "message": f"Voz '{name}' pronta. Use tts_engine=f5_tts e voice_ref_audio em /api/generate."
+    })
+
 
 @app.route("/api/voices/clone", methods=["POST"])
 def api_voices_clone():
