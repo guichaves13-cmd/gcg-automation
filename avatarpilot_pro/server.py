@@ -5957,7 +5957,8 @@ def api_avatar_change_clothing():
 @app.route("/api/avatar/remove_bg", methods=["POST"])
 def api_avatar_remove_bg():
     """Remove background from uploaded image."""
-    if "image" not in request.files and "image_path" not in (request.json or {}):
+    body_json = request.get_json(silent=True) or {}
+    if "image" not in request.files and "image_path" not in body_json:
         return jsonify({"error": "No image provided"}), 400
 
     try:
@@ -5968,7 +5969,7 @@ def api_avatar_remove_bg():
             img_path = os.path.join(UPLOAD_DIR, f"avatar_raw_{img_id}{ext}")
             f.save(img_path)
         else:
-            img_path = request.json["image_path"]
+            img_path = body_json["image_path"]
 
         out_path = os.path.join(UPLOAD_DIR, f"avatar_nobg_{uuid.uuid4().hex[:8]}.png")
         remove_background(img_path, out_path)
@@ -5981,7 +5982,8 @@ def api_avatar_remove_bg():
 @app.route("/api/avatar/transcribe", methods=["POST"])
 def api_transcribe():
     """Transcribe audio file to SRT captions."""
-    if "audio" not in request.files and "audio_path" not in (request.json or {}):
+    body_json = request.get_json(silent=True) or {}
+    if "audio" not in request.files and "audio_path" not in body_json:
         return jsonify({"error": "No audio provided"}), 400
 
     try:
@@ -5992,10 +5994,10 @@ def api_transcribe():
             aud_path = os.path.join(UPLOAD_DIR, f"transcribe_{aud_id}{ext}")
             f.save(aud_path)
         else:
-            aud_path = request.json["audio_path"]
+            aud_path = body_json["audio_path"]
 
-        lang  = (request.form.get("language") or (request.json or {}).get("language")) or None
-        model = (request.form.get("model") or (request.json or {}).get("model", "base"))
+        lang  = (request.form.get("language") or body_json.get("language")) or None
+        model = (request.form.get("model") or body_json.get("model", "base"))
         srt   = transcribe_to_srt(aud_path, language=lang, model_size=model)
         return jsonify({"status": "ok", "srt": srt,
                         "lines": len([l for l in srt.split('\n') if l.strip() and not l.strip().isdigit() and '-->' not in l])})
@@ -7210,7 +7212,16 @@ def api_face_swap():
             if not src_faces or not tgt_faces:
                 raise ValueError("No faces detected")
 
-            swapper = insightface.model_zoo.get_model("inswapper_128.onnx", root=MODELS_DIR)
+            # Try direct path first — insightface auto-download is finicky on Windows
+            _isw_candidates = [
+                os.path.join(MODELS_DIR, "inswapper_128.onnx"),
+                os.path.join(MODELS_DIR, "SadTalker", "inswapper_128.onnx"),
+            ]
+            _isw_path = next((p for p in _isw_candidates if os.path.exists(p)), None)
+            if _isw_path:
+                swapper = insightface.model_zoo.get_model(_isw_path)
+            else:
+                swapper = insightface.model_zoo.get_model("inswapper_128.onnx", root=MODELS_DIR)
             result  = swapper.get(tgt_img, tgt_faces[0], src_faces[0], paste_back=True)
             _, buf  = _cv2.imencode(".jpg", result, [_cv2.IMWRITE_JPEG_QUALITY, 92])
             with open(out_path, "wb") as f_out:
