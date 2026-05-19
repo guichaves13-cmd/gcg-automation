@@ -2953,7 +2953,120 @@ def run_sadtalker_cloud_replicate(image_path, audio_path, output_path, settings=
 
 
 # ============================================================================
-# CLOUD GPU — ECHOMIMIC V2 via Replicate (HeyGen-class half-body w/ HAND GESTURES)
+# LOCAL ECHOMIMIC V2 — HeyGen-class half-body w/ HAND GESTURES (100% free)
+# ============================================================================
+ECHOMIMIC_DIR = os.path.join(MODELS_DIR, "EchoMimicV2")
+
+def check_echomimic_v2() -> bool:
+    """Check if EchoMimic V2 is installed locally (venv + key model weights)."""
+    venv_py = os.path.join(ECHOMIMIC_DIR, "venv", "Scripts", "python.exe")
+    weights = os.path.join(ECHOMIMIC_DIR, "pretrained_weights")
+    return all(os.path.exists(p) for p in [
+        venv_py,
+        os.path.join(ECHOMIMIC_DIR, "run_local.py"),
+        os.path.join(weights, "denoising_unet.pth"),
+        os.path.join(weights, "motion_module.pth"),
+        os.path.join(weights, "reference_unet.pth"),
+        os.path.join(weights, "pose_encoder.pth"),
+    ])
+
+
+def run_echomimic_v2_local(image_path, audio_path, output_path, settings=None, job_id=None):
+    """
+    Run EchoMimic V2 locally (no cloud cost). Generates the avatar speaking
+    WITH HAND GESTURES from a single photo + audio using one of 8 pose templates.
+
+    settings options:
+      pose (str): pose template name (01-04, fight, good, salute, ultraman) — default "01"
+      width (int): output width (default 768)
+      height (int): output height (default 768)
+      steps (int): diffusion steps 10-30 (default 20)
+      cfg (float): guidance scale (default 2.5)
+      seed (int): random seed (default 3407)
+      fps (int): output fps (default 24)
+    """
+    if not check_echomimic_v2():
+        raise Exception(
+            "EchoMimic V2 not installed locally. Required: "
+            "models/EchoMimicV2/venv/ + models/EchoMimicV2/pretrained_weights/*.pth"
+        )
+    settings = settings or {}
+    venv_py = os.path.join(ECHOMIMIC_DIR, "venv", "Scripts", "python.exe")
+    runner  = os.path.join(ECHOMIMIC_DIR, "run_local.py")
+
+    # Copy inputs to ASCII paths (avoid Windows ç issue)
+    import tempfile as _tfe
+    tmp = _tfe.mkdtemp(prefix="echo_avp_")
+    try:
+        safe_img = os.path.join(tmp, "ref" + (os.path.splitext(image_path)[1] or ".jpg"))
+        safe_aud = os.path.join(tmp, "audio" + (os.path.splitext(audio_path)[1] or ".wav"))
+        safe_out = os.path.join(tmp, "out.mp4")
+        shutil.copy2(image_path, safe_img)
+        shutil.copy2(audio_path, safe_aud)
+
+        # Audio must be 16kHz for the wav2vec2 audio encoder
+        if not safe_aud.endswith(".wav") or _get_duration_safe(safe_aud) > 0:
+            wav_path = os.path.join(tmp, "audio16k.wav")
+            subprocess.run([_ffmpeg_path(), "-y", "-i", safe_aud,
+                            "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", wav_path],
+                           capture_output=True, timeout=120)
+            if os.path.exists(wav_path) and os.path.getsize(wav_path) > 1000:
+                safe_aud = wav_path
+
+        pose   = str(settings.get("pose", "01"))
+        width  = int(settings.get("width", 768))
+        height = int(settings.get("height", 768))
+        steps  = int(settings.get("steps", 20))
+        cfg    = float(settings.get("cfg", 2.5))
+        seed   = int(settings.get("seed", 3407))
+        fps    = int(settings.get("fps", 24))
+
+        # Max length capped by audio dur in run_local.py — but expose budget here
+        aud_dur = _get_duration_safe(safe_aud)
+        length  = min(int(aud_dur * fps) + 10, 1200)  # safety cap ~50s per call
+
+        if job_id and job_id in jobs:
+            jobs[job_id]["message"] = f"EchoMimic V2 (local): gerando gestos com pose '{pose}'..."
+
+        cmd = [venv_py, runner,
+               "--ref",    safe_img,
+               "--audio",  safe_aud,
+               "--pose",   pose,
+               "--output", safe_out,
+               "-W", str(width), "-H", str(height),
+               "-L", str(length),
+               "--steps", str(steps),
+               "--cfg",   str(cfg),
+               "--seed",  str(seed),
+               "--fps",   str(fps)]
+
+        # Timeout: each diffusion step ~3-5s/frame on RTX 4060; budget conservatively
+        timeout_s = max(900, int(aud_dur * fps * 5) + 600)
+        print(f"  [EchoMimic V2 local] inferring (timeout={timeout_s}s)")
+        env = os.environ.copy()
+        env["PYTHONIOENCODING"] = "utf-8"
+        env["PYTHONUTF8"] = "1"
+        env["FFMPEG_PATH"] = os.path.dirname(_ffmpeg_path())
+
+        result = subprocess.run(cmd, capture_output=True, timeout=timeout_s,
+                                cwd=ECHOMIMIC_DIR, env=env)
+        so = (result.stdout or b"").decode("utf-8", errors="replace")
+        se = (result.stderr or b"").decode("utf-8", errors="replace")
+        if so: print(so[-1000:])
+        if se: print(se[-1000:])
+
+        if not os.path.exists(safe_out) or os.path.getsize(safe_out) < 10000:
+            raise Exception(f"EchoMimic V2 produced no output (rc={result.returncode})")
+
+        shutil.copy2(safe_out, output_path)
+        print(f"  [EchoMimic V2 local] Done -> {os.path.getsize(output_path)//1024}KB")
+        return output_path
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+# ============================================================================
+# CLOUD GPU — ECHOMIMIC V2 via Replicate (fallback when no local GPU)
 # ============================================================================
 def run_echomimic_v2_replicate(image_path, audio_path, output_path, settings=None, job_id=None):
     """
@@ -3997,29 +4110,43 @@ def run_pipeline(job_id: str, config: dict):
         _input_is_video = _is_video_file(config["image_path"])
         _gesture_video  = config.get("gesture_video", "")  # path do vídeo de gestos selecionado
 
-        # ── PREMIUM MODE — EchoMimic v2 cloud (HeyGen-class half-body w/ gestures) ──
+        # ── PREMIUM MODE — EchoMimic v2 (HeyGen-class half-body w/ gestures) ──
+        # Prefers local install (100% free). Falls back to Replicate cloud if local
+        # not installed AND user provided a replicate_key. Falls back to local
+        # SadTalker pipeline if both fail.
         _echomimic_done = False
         if config.get("engine") == "echomimic_v2" and not _input_is_video:
-            jobs[job_id]["message"] = "EchoMimic v2 Premium: HeyGen-class com gestos..."
+            _echo_settings = config.get("echomimic_settings", {})
+            _echo_runner   = None
+            if check_echomimic_v2():
+                _echo_runner = ("local", run_echomimic_v2_local)
+                jobs[job_id]["message"] = "EchoMimic V2 (local): gerando gestos com mãos..."
+            elif load_settings().get("replicate_key"):
+                _echo_runner = ("cloud", run_echomimic_v2_replicate)
+                jobs[job_id]["message"] = "EchoMimic V2 (cloud): gerando gestos com mãos..."
             jobs[job_id]["progress"] = 38
-            try:
-                run_echomimic_v2_replicate(
-                    config["image_path"], audio_path, avatar_video,
-                    settings=config.get("echomimic_settings", {}),
-                    job_id=job_id,
-                )
-                if not os.path.exists(avatar_video) or os.path.getsize(avatar_video) < 10000:
-                    raise Exception("EchoMimic v2 output missing")
-                _av_ok, _av_reason = _validate_video_output(avatar_video, expected_dur=dur)
-                if not _av_ok:
-                    raise Exception(f"EchoMimic v2 output inválido: {_av_reason}")
-                _echomimic_done = True
-                jobs[job_id]["progress"] = 72
-                print("  [Pipeline] EchoMimic v2 OK — bypass local lip sync stack")
-            except Exception as _echo_err:
-                print(f"  [EchoMimic v2] Falhou ({_echo_err}) — fallback para pipeline local")
-                jobs[job_id]["message"] = f"EchoMimic falhou — usando pipeline local"
-                if os.path.exists(avatar_video): _safe_rm(avatar_video)
+
+            if _echo_runner:
+                _ek_label, _ek_fn = _echo_runner
+                try:
+                    _ek_fn(
+                        config["image_path"], audio_path, avatar_video,
+                        settings=_echo_settings, job_id=job_id,
+                    )
+                    if not os.path.exists(avatar_video) or os.path.getsize(avatar_video) < 10000:
+                        raise Exception("EchoMimic v2 output missing")
+                    _av_ok, _av_reason = _validate_video_output(avatar_video, expected_dur=dur)
+                    if not _av_ok:
+                        raise Exception(f"EchoMimic v2 output inválido: {_av_reason}")
+                    _echomimic_done = True
+                    jobs[job_id]["progress"] = 72
+                    print(f"  [Pipeline] EchoMimic V2 ({_ek_label}) OK — bypass local lip sync stack")
+                except Exception as _echo_err:
+                    print(f"  [EchoMimic v2 {_ek_label}] Falhou ({_echo_err}) — fallback pipeline padrão")
+                    jobs[job_id]["message"] = "EchoMimic indisponível — pipeline local padrão"
+                    if os.path.exists(avatar_video): _safe_rm(avatar_video)
+            else:
+                print("  [EchoMimic v2] não instalado localmente nem replicate_key — fallback pipeline padrão")
 
         # Pre-resize: cap input image at 720px max to keep downstream lip sync + GFPGAN fast.
         # High-res images (1080p+) make Wav2Lip and GFPGAN take 5-10x longer with no quality gain
@@ -5964,6 +6091,8 @@ def api_dashboard():
         "musetalk":         {"ready": check_musetalk(), "engine": "primary" if check_musetalk() else "unavailable"},
         "wav2lip":          {"ready": w2l_ready, "engine": "fallback" if check_musetalk() else ("primary" if w2l_ready else "unavailable")},
         "sadtalker":        {**st_detail, "ready": check_sadtalker(), "engine": "primary" if check_sadtalker() else "unavailable"},
+        "echomimic_v2":     {"ready": check_echomimic_v2(), "engine": "premium" if check_echomimic_v2() else "unavailable",
+                             "feature": "half-body com gestos (HeyGen-class)"},
         "edge_tts":         edge_ok,
         "plan":             load_settings().get("plan", DEFAULT_PLAN),
         "plan_limits":      {k: (v // 60 if v else None) for k, v in PLAN_LIMITS.items()},
