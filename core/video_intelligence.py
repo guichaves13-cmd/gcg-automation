@@ -14,15 +14,15 @@ import os
 import json
 import hashlib
 import time
+import threading
 from datetime import datetime
 
 
 class VideoIntelligence:
-    """Deep video analysis engine using Gemini AI."""
+    """Deep video analysis engine using GLM-5.1 (NVIDIA) + Gemini fallback."""
     
-    def __init__(self, google_api_key: str = "", youtube_api_key: str = ""):
+    def __init__(self, google_api_key: str = ""):
         self.google_api_key = google_api_key
-        self._youtube_api_key = youtube_api_key
         self._client = None
         
     @property
@@ -35,11 +35,18 @@ class VideoIntelligence:
                 print("[VideoIntelligence] google-genai not installed")
         return self._client
     
-    def analyze_video(self, avatar_path: str, output_dir: str, broll_count: int = 30,
-                      on_progress=None) -> dict:
+    def _glm_ask(self, prompt: str, temperature=0.3) -> str:
+        from core.glm_agent import ask
+        result, err = ask(prompt, temperature=temperature, stream=False)
+        if err:
+            print(f"    [GLM] Error: {err}")
+            return ""
+        return result.get("content", "")
+    
+    def analyze_video(self, avatar_path: str, output_dir: str) -> dict:
         """
         COMPLETE video analysis pipeline. Returns a production plan.
-
+        
         Returns:
             {
                 "video_id": unique hash of the video file,
@@ -57,95 +64,49 @@ class VideoIntelligence:
                 "subtitle_srt": "path/to/fresh/subs.srt",
             }
         """
-        def _prog(pct, msg):
-            if on_progress:
-                on_progress(pct, 100, msg)
-
         print(f"\n{'='*60}")
         print(f"  VIDEO INTELLIGENCE ENGINE — Deep Analysis")
         print(f"{'='*60}")
-
+        
         # Generate unique ID for THIS specific video
         video_id = self._get_video_id(avatar_path)
         print(f"  Video ID: {video_id[:16]}...")
         print(f"  File: {os.path.basename(avatar_path)}")
-
+        
         # Step 1: Fresh transcription (NEVER use cache)
-        _prog(5, "Whisper: transcrevendo narração (pode levar 1-3 min)...")
         print(f"\n  [1/5] Transcribing video (fresh — no cache)...")
-        transcription, language = self._transcribe_fresh(avatar_path, output_dir, on_progress=on_progress)
+        transcription, language = self._transcribe_fresh(avatar_path, output_dir)
         full_text = " ".join(seg["text"] for seg in transcription)
-        print(f"    -> {len(transcription)} segments, language: {language}")
-        print(f"    -> First 100 chars: {full_text[:100]}...")
-
+        print(f"    → {len(transcription)} segments, language: {language}")
+        print(f"    → First 100 chars: {full_text[:100]}...")
+        
         # Step 2: Get video duration
         from core.video_processor import get_duration
         duration = get_duration(avatar_path)
-        _prog(8, f"Duracao: {duration:.0f}s ({duration/60:.1f} min). Analisando tema com IA...")
         print(f"\n  [2/5] Duration: {duration:.1f}s ({duration/60:.1f} min)")
-
+        
         # Step 3: Deep theme analysis with Gemini
         print(f"\n  [3/5] Deep theme analysis with AI...")
         analysis = self._deep_analyze(full_text, language)
-        _prog(10, f"Tema: {analysis['theme']}. Criando shot list com IA Diretora...")
-        print(f"    -> Theme: {analysis['theme']}")
-        print(f"    -> Subtopics: {', '.join(analysis['subtopics'][:5])}")
-        print(f"    -> Emotions: {', '.join(analysis['emotions'][:3])}")
-
-        # Step 4: Generate shot list (works even without transcription)
-        _prog(11, f"IA Diretora: planejando {broll_count} shots...")
+        print(f"    → Theme: {analysis['theme']}")
+        print(f"    → Subtopics: {', '.join(analysis['subtopics'][:5])}")
+        print(f"    → Emotions: {', '.join(analysis['emotions'][:3])}")
+        
+        # Step 4: Generate shot list
         print(f"\n  [4/5] Creating detailed shot list...")
-        analysis["_broll_count"] = broll_count
-        shot_list = self._create_shot_list(transcription, analysis, duration, broll_count=broll_count,
-                                           on_progress=on_progress)
-        # If still empty (no transcription + no AI), generate duration-based fallback
-        if not shot_list:
-            theme = analysis["theme"]
-            subtopics = analysis.get("subtopics", [])
-            shot_dur = duration / max(broll_count, 1)
-            shot_list = []
-            for i in range(broll_count):
-                start = i * shot_dur
-                end = min((i + 1) * shot_dur, duration)
-                # Rotate through subtopics to at least get varied terms
-                sub = subtopics[i % len(subtopics)] if subtopics else theme
-                shot_list.append({
-                    "start": start, "end": end,
-                    "text_preview": "",
-                    "search_terms": [sub, f"{theme} {sub}", f"{sub} documentary"],
-                    "visual_description": sub,
-                })
-        _prog(17, f"{len(shot_list)} shots planejados. Descobrindo canais YouTube do nicho...")
-        print(f"    -> {len(shot_list)} shots planned")
+        shot_list = self._create_shot_list(transcription, analysis, duration)
+        print(f"    → {len(shot_list)} shots planned")
         for shot in shot_list[:5]:
             print(f"      [{shot['start']:.0f}s-{shot['end']:.0f}s] {shot['search_terms'][0]}")
         if len(shot_list) > 5:
             print(f"      ... and {len(shot_list) - 5} more shots")
-
-        # Step 4b: Auto-discover YouTube channels for this niche
-        print(f"\n  [4b] Discovering YouTube channels for niche '{analysis['theme']}'...")
-        yt_channels_auto = self._discover_yt_channels(
-            theme=analysis["theme"],
-            subtopics=analysis.get("subtopics", []),
-            target_audience=analysis.get("target_audience", ""),
-            youtube_api_key=getattr(self, "_youtube_api_key", ""),
-        )
-        if yt_channels_auto:
-            print(f"    -> {len(yt_channels_auto)} canais descobertos automaticamente")
-        else:
-            print(f"    -> Sem API YouTube — buscando direto no yt-dlp")
-
-        # Step 5: Generate fresh SRT (only if we have transcription)
-        _prog(19, "Gerando legendas SRT...")
-        srt_path = ""
-        if transcription:
-            print(f"\n  [5/5] Generating fresh subtitles...")
-            srt_path = os.path.join(output_dir, f"subs_{video_id[:8]}.srt")
-            self._generate_srt(transcription, srt_path)
-            print(f"    -> Saved: {srt_path}")
-        else:
-            print(f"\n  [5/5] No transcription available, skipping subtitles.")
-
+        
+        # Step 5: Generate fresh SRT
+        print(f"\n  [5/5] Generating fresh subtitles...")
+        srt_path = os.path.join(output_dir, f"subs_{video_id[:8]}.srt")
+        self._generate_srt(transcription, srt_path)
+        print(f"    → Saved: {srt_path}")
+        
         result = {
             "video_id": video_id,
             "duration": duration,
@@ -158,7 +119,6 @@ class VideoIntelligence:
             "target_audience": analysis.get("target_audience", "general"),
             "shot_list": shot_list,
             "subtitle_srt": srt_path,
-            "youtube_channels_auto": yt_channels_auto,
             "analyzed_at": datetime.now().isoformat(),
         }
         
@@ -182,204 +142,52 @@ class VideoIntelligence:
         h.update(str(os.path.getsize(path)).encode())
         return h.hexdigest()
     
-    def _transcribe_fresh(self, video_path: str, output_dir: str, on_progress=None) -> tuple:
-        """
-        Transcribe video from scratch com resiliencia em 3 niveis.
-
-        Nivel 1 — modelo auto por duracao, timeout completo:
-            <= 8 min  -> 'base'  (6 min timeout)
-            8-20 min  -> 'tiny'  (8 min timeout)
-            > 20 min  -> 'tiny'  (10 min timeout)
-
-        Nivel 2 — se timeout no nivel 1:
-            Tenta de novo com 'tiny' e metade do timeout original.
-
-        Nivel 3 — se timeout no nivel 2:
-            Extrai apenas os primeiros 5 minutos de audio e transcreve.
-            Garante que o pipeline sempre tem pelo menos o inicio da narracao
-            para gerar shot list semanticamente correto.
-
-        Nunca retorna erro — sempre entrega o melhor resultado possivel.
-        """
-        import tempfile as _tf
-        import threading as _th
-        import subprocess as _sp
-        import shutil as _sh
-
-        tmp_dir = _tf.gettempdir()
-        ts = int(time.time())
-        audio_path = os.path.join(tmp_dir, f"sp_audio_{ts}.wav")
-        audio_short = os.path.join(tmp_dir, f"sp_audio_{ts}_short.wav")
-
-        # Clean stale temp files
+    def _transcribe_fresh(self, video_path: str, output_dir: str) -> tuple:
+        """Transcribe video from scratch — NEVER uses cached audio/srt."""
+        from core.video_processor import extract_audio
+        from core.subtitle_generator import transcribe_audio
+        
+        # Use unique filename to prevent any cache collision
+        audio_path = os.path.join(output_dir, f"_fresh_audio_{int(time.time())}.wav")
+        
+        # Clean any old audio files in this directory
         for f in os.listdir(output_dir):
             if f.startswith("_fresh_audio_") or f.startswith("_temp_audio"):
                 try:
                     os.remove(os.path.join(output_dir, f))
-                except Exception:
+                except:
                     pass
-
-        ffmpeg_bin = _sh.which("ffmpeg") or os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ffmpeg", "ffmpeg.exe"
-        )
-
-        # ── Extrair audio completo ──────────────────────────────────────────
-        _r = _sp.run(
-            [ffmpeg_bin, "-y", "-i", video_path,
-             "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1", audio_path],
-            capture_output=True, text=True, timeout=300,
-        )
-        if _r.returncode != 0 or not os.path.exists(audio_path) or os.path.getsize(audio_path) < 1000:
-            print(f"  [WARN] Extracao de audio falhou (rc={_r.returncode}): {_r.stderr[-200:]}")
-            return [], "en"
-
-        audio_size_kb = os.path.getsize(audio_path) // 1024
-        estimated_minutes = audio_size_kb / 1920  # 16kHz mono WAV: ~1920KB/min
-        print(f"    -> Audio: {audio_size_kb}KB ({estimated_minutes:.1f} min estimado)")
-
-        # ── Selecionar modelo e timeout para nivel 1 ────────────────────────
-        if estimated_minutes <= 8:
-            model_l1, timeout_l1 = "base", 360
-        elif estimated_minutes <= 20:
-            model_l1, timeout_l1 = "tiny", 480
-        else:
-            model_l1, timeout_l1 = "tiny", 600
-
-        def _run_whisper_thread(audio, model, holder, err_holder):
-            """Executa Whisper em thread separada. Nunca bloqueia o pipeline."""
-            try:
-                from core.subtitle_generator import transcribe_audio_with_language
-                segs, lang = transcribe_audio_with_language(audio, model_size=model)
-                holder[0], holder[1] = segs, lang
-            except ImportError:
-                err_holder[0] = "Whisper nao instalado (pip install openai-whisper)"
-            except Exception as exc:
-                err_holder[0] = str(exc)
-
-        def _wait_with_progress(thread, timeout_s, label, prog_start, prog_end):
-            """Aguarda thread com ticks de progresso a cada 15s."""
-            elapsed = 0
-            while thread.is_alive() and elapsed < timeout_s:
-                thread.join(timeout=15)
-                elapsed += 15
-                if thread.is_alive() and on_progress:
-                    pct = prog_start + int((elapsed / timeout_s) * (prog_end - prog_start))
-                    on_progress(pct, 100,
-                                f"Whisper {label}: {elapsed}s/{timeout_s}s ({int(elapsed/timeout_s*100)}%)...")
-            return not thread.is_alive()  # True = concluiu, False = timeout
-
-        # ════════════════════════════════════════════════════════════════════
-        # NIVEL 1 — modelo principal, timeout completo
-        # ════════════════════════════════════════════════════════════════════
-        if on_progress:
-            on_progress(6, 100,
-                        f"Whisper nivel 1 ('{model_l1}'): transcrevendo {estimated_minutes:.1f} min...")
-        print(f"    -> Nivel 1: Whisper '{model_l1}' | timeout {timeout_l1}s")
-
-        holder1, err1 = [[], "en"], [None]
-        t1 = _th.Thread(target=_run_whisper_thread,
-                        args=(audio_path, model_l1, holder1, err1), daemon=True)
-        t1.start()
-        done1 = _wait_with_progress(t1, timeout_l1, "nivel 1", 6, 7)
-
-        if done1 and not err1[0] and holder1[0]:
-            segs, lang = holder1[0], holder1[1]
-            print(f"    -> Nivel 1 OK: {len(segs)} segmentos, idioma: {lang}")
-            _cleanup(audio_path, audio_short)
-            return segs, lang
-
-        if err1[0]:
-            print(f"  [WARN] Nivel 1 erro: {err1[0]}")
-        else:
-            print(f"  [WARN] Nivel 1 timeout ({timeout_l1}s) — tentando nivel 2...")
-
-        # ════════════════════════════════════════════════════════════════════
-        # NIVEL 2 — modelo 'tiny', metade do timeout
-        # ════════════════════════════════════════════════════════════════════
-        if err1[0] and "nao instalado" in str(err1[0]):
-            # Whisper nao esta instalado — nivel 2 e 3 tambem vao falhar
-            print("  [ERRO] Whisper nao instalado. Continuando sem transcricao.")
-            print("         Instale com: pip install openai-whisper")
-            _cleanup(audio_path, audio_short)
-            return [], "en"
-
-        timeout_l2 = max(120, timeout_l1 // 2)
-        if on_progress:
-            on_progress(6, 100, f"Whisper nivel 2 ('tiny'): nova tentativa ({timeout_l2}s)...")
-        print(f"    -> Nivel 2: Whisper 'tiny' | timeout {timeout_l2}s")
-
-        holder2, err2 = [[], "en"], [None]
-        t2 = _th.Thread(target=_run_whisper_thread,
-                        args=(audio_path, "tiny", holder2, err2), daemon=True)
-        t2.start()
-        done2 = _wait_with_progress(t2, timeout_l2, "nivel 2", 6, 7)
-
-        if done2 and not err2[0] and holder2[0]:
-            segs, lang = holder2[0], holder2[1]
-            print(f"    -> Nivel 2 OK: {len(segs)} segmentos, idioma: {lang}")
-            _cleanup(audio_path, audio_short)
-            return segs, lang
-
-        print(f"  [WARN] Nivel 2 timeout/erro — tentando nivel 3 (primeiros 5 min)...")
-
-        # ════════════════════════════════════════════════════════════════════
-        # NIVEL 3 — transcreve apenas os primeiros 5 minutos
-        # Garante que o pipeline entende o TEMA e gera shot list semantico
-        # ════════════════════════════════════════════════════════════════════
-        if on_progress:
-            on_progress(6, 100, "Whisper nivel 3: transcrevendo primeiros 5 minutos...")
-        print(f"    -> Nivel 3: Whisper 'tiny' nos primeiros 5 min")
-
-        # Extrai apenas os primeiros 5 min de audio
-        _r2 = _sp.run(
-            [ffmpeg_bin, "-y", "-i", audio_path, "-t", "300",
-             "-acodec", "copy", audio_short],
-            capture_output=True, timeout=30,
-        )
-
-        short_ok = (_r2.returncode == 0
-                    and os.path.exists(audio_short)
-                    and os.path.getsize(audio_short) > 1000)
-
-        if short_ok:
-            holder3, err3 = [[], "en"], [None]
-            t3 = _th.Thread(target=_run_whisper_thread,
-                            args=(audio_short, "tiny", holder3, err3), daemon=True)
-            t3.start()
-            done3 = _wait_with_progress(t3, 150, "nivel 3 (5min)", 6, 7)
-
-            if done3 and not err3[0] and holder3[0]:
-                segs, lang = holder3[0], holder3[1]
-                print(f"    -> Nivel 3 OK: {len(segs)} segmentos dos primeiros 5 min")
-                print(f"       Shot list sera semantico para o inicio; restante usa tema detectado.")
-                _cleanup(audio_path, audio_short)
-                return segs, lang
-
-        # ════════════════════════════════════════════════════════════════════
-        # FALLBACK ABSOLUTO — todos os 3 niveis falharam
-        # Pipeline continua: shot list usa tema (menos preciso mas funcional)
-        # Legendas serao geradas no Step 6 diretamente do video final
-        # ════════════════════════════════════════════════════════════════════
-        print("  [WARN] Todos os 3 niveis de transcricao falharam.")
-        print("         Shot list usara analise de tema. Legendas serao geradas no Step 6.")
-        _cleanup(audio_path, audio_short)
-        return [], "en"
-
-
-def _cleanup(*paths):
-    """Remove arquivos temporarios silenciosamente."""
-    for p in paths:
+        
+        # Extract fresh audio
+        extract_audio(video_path, audio_path)
+        
+        # Transcribe fresh (30 min timeout for long videos on CPU)
+        segments = transcribe_audio(audio_path, language=None, model_size="base", timeout_sec=1800)
+        
+        # Detect language from first segments
+        language = "en"
+        if segments:
+            first_text = " ".join(s["text"] for s in segments[:5]).lower()
+            # Simple language detection
+            pt_words = sum(1 for w in ["que", "não", "como", "para", "você", "isso", "muito", "mais", "uma", "dos"] if w in first_text.split())
+            es_words = sum(1 for w in ["que", "como", "para", "los", "las", "por", "una", "con", "pero", "más"] if w in first_text.split())
+            en_words = sum(1 for w in ["the", "and", "that", "this", "with", "from", "have", "not", "but", "for"] if w in first_text.split())
+            
+            if pt_words > en_words and pt_words > es_words:
+                language = "pt"
+            elif es_words > en_words:
+                language = "es"
+        
+        # Cleanup
         try:
-            if p and os.path.exists(p):
-                os.remove(p)
-        except Exception:
+            os.remove(audio_path)
+        except:
             pass
+        
+        return segments, language
     
     def _deep_analyze(self, full_text: str, language: str) -> dict:
-        """Use Gemini AI for deep video understanding."""
-        if not self.client:
-            return self._fallback_analyze(full_text)
-        
+        """Use GLM-5.1 for deep video understanding (Gemini fallback)."""
         prompt = f"""You are an expert video producer and content analyst.
 
 TRANSCRIPTION OF THE VIDEO:
@@ -401,49 +209,68 @@ Analyze this video deeply and return a JSON object with:
 
 Return ONLY valid JSON, no markdown, no explanation."""
 
-        try:
-            text = self._gemini_call(prompt)
-            if text:
-                # Clean markdown if present
-                if text.startswith("```"):
-                    text = text.split("\n", 1)[1] if "\n" in text else text
-                    text = text.rsplit("```", 1)[0] if "```" in text else text
-                return json.loads(text.strip())
-        except Exception as e:
-            print(f"    Gemini analysis error: {e}")
+        # Try GLM-5.1 first
+        glm_text = self._glm_ask(prompt, temperature=0.3)
+        if glm_text:
+            try:
+                if glm_text.startswith("```"):
+                    glm_text = glm_text.split("\n", 1)[1] if "\n" in glm_text else glm_text
+                    glm_text = glm_text.rsplit("```", 1)[0] if "```" in glm_text else glm_text
+                return json.loads(glm_text.strip())
+            except Exception as e:
+                print(f"    GLM JSON parse error: {e}")
+        
+        # Fallback to Gemini
+        if self.client:
+            try:
+                result_container = []
+                def _call_gemini():
+                    r = self.client.models.generate_content(
+                        model="gemini-2.0-flash",
+                        contents=prompt,
+                    )
+                    result_container.append(r)
+                t = threading.Thread(target=_call_gemini, daemon=True)
+                t.start()
+                t.join(timeout=60)
+                if t.is_alive():
+                    raise TimeoutError("Gemini analysis timed out after 60s")
+                response = result_container[0] if result_container else None
+                if response and response.text:
+                    text = response.text.strip()
+                    if text.startswith("```"):
+                        text = text.split("\n", 1)[1] if "\n" in text else text
+                        text = text.rsplit("```", 1)[0] if "```" in text else text
+                    return json.loads(text.strip())
+            except Exception as e:
+                print(f"    Gemini analysis error: {e}")
         
         return self._fallback_analyze(full_text)
     
     def _fallback_analyze(self, full_text: str) -> dict:
-        """Fallback analysis without AI."""
+        """Fallback analysis without AI — covers 200+ niches via theme_database."""
         text = full_text.lower()
         
-        # Simple theme detection
-        themes = {
-            "health supplements": ["supplement", "vitamin", "omega", "capsule", "nutrient", "health", "body"],
-            "eye health": ["eye", "vision", "cataract", "retina", "ophthalmologist", "glaucoma", "blur"],
-            "sleep health": ["sleep", "insomnia", "rest", "bed", "night", "melatonin", "dream"],
-            "gut health": ["gut", "bacteria", "microbiome", "intestine", "probiotic", "digest"],
-            "heart health": ["heart", "cardiac", "blood", "pressure", "cholesterol", "artery"],
-            "war history": ["war", "battle", "soldier", "army", "conquest", "military"],
-            "ancient civilization": ["empire", "ancient", "civilization", "pharaoh", "roman", "egypt"],
-            "nature wildlife": ["ocean", "forest", "animal", "ecosystem", "wildlife", "marine"],
-            "space science": ["planet", "galaxy", "universe", "astronaut", "star", "nasa"],
-            "technology": ["computer", "software", "robot", "digital", "internet", "AI"],
-            "finance economy": ["market", "economy", "stock", "investment", "bank", "money"],
-            "food nutrition": ["food", "diet", "fruit", "vegetable", "cooking", "recipe"],
-            "crime investigation": ["crime", "police", "detective", "murder", "prison", "court"],
-            "psychology": ["brain", "mind", "anxiety", "depression", "therapy", "mental"],
-            "construction": ["building", "construction", "architect", "concrete", "steel", "house"],
-        }
+        # Import massive theme + emotion database
+        from core.theme_database import THEME_DB, EMOTION_DB
         
+        # Score every theme category
         best_theme = "general documentary"
         best_score = 0
-        for theme, keywords in themes.items():
+        for theme, keywords in THEME_DB.items():
             score = sum(1 for k in keywords if k in text)
             if score > best_score:
                 best_score = score
                 best_theme = theme
+        
+        # Smart emotion detection using expanded triggers
+        detected_emotions = ["informative"]
+        for emotion, triggers in EMOTION_DB.items():
+            if any(t in text for t in triggers):
+                detected_emotions.append(emotion)
+        
+        # Cap at 4 emotions
+        detected_emotions = detected_emotions[:4]
         
         # Extract subtopics (most frequent meaningful words)
         words = text.split()
@@ -460,420 +287,276 @@ Return ONLY valid JSON, no markdown, no explanation."""
         return {
             "theme": best_theme,
             "subtopics": subtopics,
-            "emotions": ["informative"],
+            "emotions": detected_emotions[:4],
             "target_audience": "general",
             "visual_style": "documentary",
             "key_moments": [],
         }
     
-    def _discover_yt_channels(self, theme: str, subtopics: list,
-                               target_audience: str = "", youtube_api_key: str = "") -> list:
-        """
-        Usa Gemini para descobrir os melhores nomes de canais YouTube para este nicho,
-        depois busca os IDs reais desses canais via YouTube Data API.
-        Retorna lista de channel IDs prontos para usar como fonte de B-roll.
-        """
-        if not self.client:
-            return []
-
-        # 1. Gemini sugere os melhores tipos/nomes de canais para o nicho
-        subtopics_str = ", ".join(subtopics[:6]) if subtopics else theme
-        prompt = f"""You are a YouTube expert helping find B-roll footage channels.
-
-VIDEO NICHE: {theme}
-SUBTOPICS: {subtopics_str}
-AUDIENCE: {target_audience}
-
-List the 6 best YouTube CHANNEL NAMES that would have authentic, high-quality video footage
-for this exact niche. These channels should publish documentary-style, educational, or
-demonstrative videos — NOT reaction videos, vlogs, or opinion content.
-
-Think: what channels would a filmmaker use to find B-roll footage for a video about "{theme}"?
-
-Return ONLY a JSON array of channel name strings (no IDs, just names), for example:
-["Mayo Clinic", "Harvard Medical School", "National Geographic", "BBC Earth"]
-
-Return ONLY valid JSON array, no markdown, no explanation."""
-
-        channel_names = []
-        try:
-            text = self._gemini_call(prompt)
-            text = text.strip("`").strip()
-            if text.startswith("json"):
-                text = text[4:].strip()
-            channel_names = json.loads(text)
-            if not isinstance(channel_names, list):
-                channel_names = []
-            channel_names = [str(n).strip() for n in channel_names if n][:6]
-        except Exception as e:
-            print(f"    [yt_discover] Gemini erro: {e}")
-            return []
-
-        if not channel_names:
-            return []
-
-        print(f"    -> Gemini sugeriu canais: {channel_names}")
-
-        # Sempre armazena os nomes para uso como boost nas queries yt-dlp
-        self._yt_channel_names = channel_names
-
-        # 2. Sem YouTube API key → retorna vazio (nomes ficam em self._yt_channel_names)
-        if not youtube_api_key:
-            return []
-
-        # 3. Com YouTube API key → busca os IDs reais via YouTube Data API
-        import requests
-        channel_ids = []
-        for name in channel_names:
-            try:
-                r = requests.get(
-                    "https://www.googleapis.com/youtube/v3/search",
-                    params={
-                        "part": "snippet",
-                        "q": name,
-                        "type": "channel",
-                        "maxResults": 1,
-                        "key": youtube_api_key,
-                    },
-                    timeout=8,
-                )
-                items = r.json().get("items", [])
-                if items:
-                    cid = items[0].get("id", {}).get("channelId", "")
-                    if cid:
-                        channel_ids.append(cid)
-                        print(f"      ✓ '{name}' → {cid}")
-            except Exception as e:
-                print(f"      [yt_discover] Erro buscando '{name}': {e}")
-
-        return channel_ids
-
-    def _gemini_call(self, prompt: str, model: str = "gemini-2.5-flash", max_retries: int = 3) -> str:
-        """Gemini call with automatic 429 retry using the API-provided wait time."""
-        import re as _re
-        for attempt in range(max_retries):
-            try:
-                resp = self.client.models.generate_content(model=model, contents=prompt)
-                return (resp.text or "").strip()
-            except Exception as e:
-                err_str = str(e)
-                if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
-                    # Parse "Please retry in X.Xs" from the error message
-                    m = _re.search(r"retry in (\d+(?:\.\d+)?)s", err_str)
-                    wait = float(m.group(1)) + 5 if m else 65
-                    print(f"  [Gemini] Rate limit — aguardando {wait:.0f}s antes de tentar novamente (tentativa {attempt+1}/{max_retries})...")
-                    time.sleep(wait)
-                else:
-                    raise
-        raise RuntimeError(f"Gemini falhou após {max_retries} tentativas")
-
-    def _create_shot_list(self, transcription: list, analysis: dict, duration: float,
-                          broll_count: int = 30, on_progress=None) -> list:
-        """
-        Sistema de 3 IAs em cadeia para B-roll 100% coerente:
-        1. IA Diretora (Gemini 2.5 Flash) — le narracao completa, cria shot list como editor profissional
-        2. IA Revisora (Gemini 2.5 Flash) — revisa termos, corrige literalismo/metaforas/abstracoes
-        3. Fallback: individual por shot se necessario
-        """
-        if not self.client:
-            return self._fallback_shot_list(transcription, analysis)
-
+    def _create_shot_list(self, transcription: list, analysis: dict, duration: float) -> list:
+        """SEMANTIC shot list — analyzes ENTIRE video with emotion + shot type variety."""
+        full_text = " ".join(seg["text"] for seg in transcription)
         theme = analysis["theme"]
+        emotions = ", ".join(analysis.get("emotions", ["informative"])[:3])
         subtopics = ", ".join(analysis.get("subtopics", [])[:8])
-        target_audience = analysis.get("target_audience", "general audience")
-        shot_interval = duration / max(broll_count, 1)
+        
+        # Calculate ideal segment count (5-9 seconds each, dynamic based on content)
+        ideal_segment_dur = 7  # seconds avg
+        num_segments = max(3, int(duration / ideal_segment_dur))
+        
+        prompt = f"""You are a SENIOR video editor creating a CINEMATIC shot list for a documentary.
+Your goal is PERFECT VISUAL COHERENCE — every B-roll clip MUST visually match what the narrator is saying.
 
-        # Transcrição completa com timestamps exatos
-        lines = []
-        for seg in transcription:
-            lines.append(f"[{seg['start']:.1f}s-{seg['end']:.1f}s] {seg['text'].strip()}")
-        full_transcript = "\n".join(lines)
-        if len(full_transcript) > 10000:
-            full_transcript = full_transcript[:10000] + "\n[... truncated]"
+FULL NARRATION:
+\"\"\"{full_text[:5000]}\"\"\"
 
-        print(f"  [IA Diretora] Iniciando análise: {broll_count} shots, {duration:.0f}s...")
+VIDEO INFO:
+- Theme: {theme}
+- Key topics: {subtopics}
+- Emotional tone: {emotions}
+- Duration: {duration:.0f}s
+- Target: {num_segments} segments (5-9 seconds each)
 
-        # ══════════════════════════════════════════════════════════
-        # IA 1 — DIRETORA: pensa como editor profissional de vídeo
-        # ══════════════════════════════════════════════════════════
-        ex_end1 = round(shot_interval)
-        ex_end2 = round(shot_interval * 2)
+CREATE a shot list where each segment has:
+1. "terms": 2 UNIQUE stock footage search queries (English, 2-5 words)
+2. "shot_type": one of "wide", "closeup", "aerial", "detail", "pov", "diagram"
+3. "mood": one of "dramatic", "calm", "urgent", "mysterious", "hopeful", "informative"
 
-        prompt_diretor = f"""You are a SENIOR VIDEO EDITOR with 20 years of experience in documentary and health/educational content. You are building a B-roll shot list for a video.
+═══ CRITICAL: SEMANTIC VISUAL MATCHING RULES ═══
 
-VIDEO TOPIC: {theme}
-TARGET AUDIENCE: {target_audience}
-SUBTOPICS: {subtopics}
-TOTAL DURATION: {duration:.0f}s | SHOTS NEEDED: {broll_count} | INTERVAL: ~{shot_interval:.0f}s per shot
+YOU MUST understand the MEANING behind words and choose visuals that a VIEWER would expect to see:
 
-FULL NARRATION WITH TIMESTAMPS:
-{full_transcript}
+✅ CORRECT EXAMPLES:
+  Narration: "millions died from the Black Plague" → "medieval plague victims illustration" (NOT "number millions")
+  Narration: "the ocean is 11 kilometers deep" → "deep ocean trench submarine footage" (NOT "water surface beach")
+  Narration: "ancient Egyptians built the pyramids" → "pyramid construction workers ancient Egypt" (NOT "modern construction site")
+  Narration: "the human brain processes information" → "brain neural network animation medical" (NOT "person thinking")
+  Narration: "stock markets crashed in 2008" → "wall street traders panic financial crisis" (NOT "falling graph")
+  Narration: "these supplements contain omega-3" → "fish oil capsules laboratory closeup" (NOT "fish swimming ocean")
+  Narration: "soldiers fought in the trenches" → "world war trench warfare soldiers" (NOT "modern army marching")
+  Narration: "the amazon rainforest is disappearing" → "deforestation Amazon burning trees aerial" (NOT "green forest nature")
 
-━━━ YOUR JOB ━━━
-For each time window, read the EXACT words being spoken and decide what a professional editor would CUT TO.
-Think: "What does a real stock footage LIBRARIAN search for when this line is spoken?"
+❌ NEVER DO:
+  - Literal word matching (hearing "cold" → DON'T search "ice cube")
+  - Generic filler (DON'T use "beautiful scenery", "people talking", "city skyline")
+  - Abstract concepts (DON'T use "freedom", "hope", "power" as search terms)
+  - Repeated patterns (DON'T use the same shot_type 3 times in a row)
 
-━━━ CRITICAL: METAPHOR TRANSLATION RULE ━━━
-When narration uses NON-LITERAL language to describe biology/health, you MUST translate to what ACTUALLY EXISTS:
-- "electric system in the brain" → NEVER "electrical equipment" → ALWAYS "brain neuron scan", "MRI brain scan doctor"
-- "brain on fire" → NEVER "fire flames" → ALWAYS "brain inflammation MRI", "neurologist examining brain scan"
-- "gut bacteria army" → NEVER "army soldiers" → ALWAYS "probiotic capsule", "digestive health supplement"
-- "heart is a pump" → NEVER "water pump" → ALWAYS "heart ultrasound echocardiogram", "cardiologist patient"
-- "nerve highways" → NEVER "highway road" → ALWAYS "spinal cord MRI", "neurology clinic doctor"
-- "brain fog" → NEVER "fog mist" → ALWAYS "elderly confused face", "senior memory difficulty"
-- "domino effect in body" → NEVER "dominos falling" → ALWAYS "doctor explaining diagnosis", "medical chart"
-- "silent killer" → NEVER "person hiding" → ALWAYS "blood pressure cuff", "hypertension medical check"
-- "aging clock" → NEVER "clock watch" → ALWAYS "elderly person face closeup", "senior aging skin"
-- "body signals" → NEVER "traffic signal" → ALWAYS "doctor reading test results", "medical diagnosis"
+ADDITIONAL RULES:
+- Every search term must describe a CONCRETE VISUAL SCENE that exists as stock footage
+- Terms must be 2-5 words, specific enough to find on Pexels/Pixabay/YouTube
+- VISUAL VARIETY: cycle through shot types: wide → closeup → detail → wide → aerial → pov
+- MOOD MATCHING: dramatic narration → dramatic/urgent mood, calm facts → calm/informative
 
-━━━ WHAT EXISTS ON PEXELS/PIXABAY (USE THESE) ━━━
-People: elderly person, senior couple, doctor patient, scientist lab, nurse hospital
-Medical: MRI scanner, stethoscope, blood pressure cuff, microscope, pill bottle, x-ray
-Actions: doctor examining patient, blood test, pill taking, elderly walking, brain scan screen
-Anatomy shown: brain MRI image on screen, x-ray lightbox, anatomy chart poster
-Supplements: vitamin bottle, fish oil capsule, omega-3 pill, probiotic yogurt
-Lifestyle: elderly confused, senior exercise, older adult cooking, couple outdoors
-
-━━━ WHAT DOES NOT EXIST (NEVER USE) ━━━
-Abstract: "silent damage", "misfiring", "chain reaction", "brain fog"
-Metaphors taken literally: "electric wires", "dominos", "fire in brain", "army bacteria"
-Specific institutions: "Harvard study", "Mayo Clinic building", "Lancet journal"
-Animations: "myelin animation", "molecular diagram", "signal pathway"
-Feelings: "urgent concern", "hidden epidemic", "mental slowness"
-
-━━━ OUTPUT FORMAT — JSON ARRAY ONLY ━━━
+Return ONLY valid JSON array (no markdown):
 [
-  {{"start": 0, "end": {ex_end1}, "narration": "exact words spoken here", "terms": ["most specific filmable scene", "second option same topic", "third option broader", "fourth broader fallback", "fifth generic fallback"]}},
-  {{"start": {ex_end1}, "end": {ex_end2}, "narration": "exact words spoken here", "terms": ["...", "...", "...", "...", "..."]}},
-  ... exactly {broll_count} objects covering 0s to {duration:.0f}s
-]
-
-Each term = what a CAMERA CAN PHOTOGRAPH. Not concepts. Not metaphors. Real scenes."""
-
-        if on_progress:
-            on_progress(12, 100, "IA Diretora: analisando narracao completa...")
-
-        shot_list = []
-        try:
-            raw1 = self._gemini_call(prompt_diretor)
-            print(f"  [IA Diretora] Resposta: {len(raw1)} chars")
-
-            import json as _json, re as _re
-            raw1_clean = _re.sub(r'```(?:json)?\s*', '', raw1).strip().strip('`')
-            m1 = _re.search(r'\[.*\]', raw1_clean, _re.DOTALL)
-            if m1:
-                data1 = _json.loads(m1.group())
-                for item in data1:
-                    s = float(item.get("start", 0))
-                    e = float(item.get("end", s + shot_interval))
-                    raw_terms = item.get("terms", [])
-                    seen_shot = set()
-                    terms = []
-                    for t in raw_terms:
-                        t = str(t).strip().strip('"\'')
-                        if 3 < len(t) < 80 and t.lower() not in seen_shot:
-                            terms.append(t)
-                            seen_shot.add(t.lower())
-                    if not terms:
-                        continue
-                    narration_at_shot = item.get("narration", "") or " ".join(
-                        seg["text"] for seg in transcription
-                        if seg.get("end", 0) > s and seg.get("start", 0) < e
-                    )[:150]
-                    shot_list.append({
-                        "start": s, "end": e,
-                        "text_preview": narration_at_shot[:150],
-                        "search_terms": terms[:5],
-                        "visual_description": terms[0],
-                    })
-                print(f"  [IA Diretora] {len(shot_list)} shots gerados")
-        except Exception as e:
-            print(f"  [IA Diretora] Erro: {e}")
-
-        # ══════════════════════════════════════════════════════════
-        # IA 2 — REVISORA: detecta e corrige termos errados
-        # ══════════════════════════════════════════════════════════
-        if shot_list:
-            if on_progress:
-                on_progress(14, 100, f"IA Revisora: validando {len(shot_list)} shots...")
-            shot_list = self._ia_revisora(shot_list, theme)
-
-        # Valida cobertura
-        if shot_list:
-            last_end = max(s["end"] for s in shot_list)
-            coverage_ok = last_end >= duration * 0.75
-            count_ok = len(shot_list) >= broll_count * 0.80
-            if count_ok and coverage_ok:
-                print(f"  [shot_list] OK: {len(shot_list)} shots (cobertura {last_end:.0f}s/{duration:.0f}s)")
-                for s in shot_list[:8]:
-                    print(f"    [{s['start']:.0f}s] \"{s['text_preview'][:50]}\" → {s['search_terms'][0]}")
-                return shot_list
-            print(f"  [shot_list] Insuficiente ({len(shot_list)}/{broll_count}, {last_end:.0f}s/{duration:.0f}s) → fallback individual")
-
-        # Fallback: shot por shot com IA individual
-        print("  [shot_list] Fallback: IA individual por shot")
-        if on_progress:
-            on_progress(14, 100, "Fallback: gerando keywords por shot individualmente...")
-        chunks = []
-        for i in range(broll_count):
-            start = i * shot_interval
-            end = min((i + 1) * shot_interval, duration)
-            text = " ".join(
-                seg["text"] for seg in transcription
-                if seg.get("end", 0) > start and seg.get("start", 0) < end
-            ).strip()
-            chunks.append({"start": start, "end": end, "text": text})
-        return self._individual_generate_search_terms(chunks, theme, analysis, on_progress=on_progress)
-
-    def _ia_revisora(self, shot_list: list, theme: str) -> list:
-        """
-        IA 2 — Revisora: verifica cada termo gerado pela IA Diretora.
-        Detecta e corrige: termos literais de metáforas, abstrações não filmáveis,
-        termos genéricos sem relação com a narração.
-        Processa em lotes de 15 shots por chamada Gemini.
-        """
-        if not self.client or not shot_list:
-            return shot_list
-
-        print(f"  [IA Revisora] Revisando {len(shot_list)} shots...")
-
-        # Monta lista compacta para revisão
-        batch_size = 15
-        revised_shots = []
-
-        for batch_start in range(0, len(shot_list), batch_size):
-            batch = shot_list[batch_start: batch_start + batch_size]
-            shots_text = ""
-            for i, s in enumerate(batch):
-                shots_text += (
-                    f"SHOT {batch_start+i}: [{s['start']:.0f}s] "
-                    f"narration=\"{s['text_preview'][:80]}\" "
-                    f"terms={s['search_terms'][:3]}\n"
-                )
-
-            prompt_rev = f"""You are a QUALITY CONTROL AI for a video production system. Review these B-roll search terms and FIX any that are WRONG.
-
-VIDEO THEME: {theme}
-
-SHOTS TO REVIEW:
-{shots_text}
-
-WHAT IS WRONG (must fix):
-1. LITERAL METAPHOR: narration="electric system in brain" but term="electrical equipment" → FIX to "brain MRI scan", "neuron brain activity"
-2. ABSTRACT/UNFINDABLE: "silent killer", "domino effect", "brain fog", "misfiring neurons" → FIX to real filmable scene
-3. GENERIC/UNRELATED: narration talks about supplements but term="nature landscape" → FIX to match narration
-4. INSTITUTION NAME: "Harvard research building", "Mayo Clinic exterior" → FIX to "medical research lab", "scientist microscope"
-
-WHAT IS CORRECT (keep as is):
-- "elderly person confused", "doctor MRI scan", "vitamin pill bottle", "blood test tube" — these are filmable
-
-For EACH shot, output the corrected terms. If terms are already correct, keep them unchanged.
-
-Return ONLY a JSON array — one entry per shot in the same order:
-[
-  {{"shot": 0, "terms": ["corrected term 1", "corrected term 2", "corrected term 3", "broader fallback", "broadest fallback"]}},
-  {{"shot": 1, "terms": ["...", "...", "...", "...", "..."]}},
+  {{"start": 0, "end": 7, "terms": ["ocean waves aerial view", "deep sea creature closeup"], "shot_type": "wide", "mood": "mysterious"}},
   ...
 ]"""
 
+        def _parse_and_validate(text):
+            if text.startswith("```"):
+                text = text.split("\n", 1)[1] if "\n" in text else text
+                text = text.rsplit("```", 1)[0] if "```" in text else text
+            shot_list = json.loads(text.strip())
+            validated = []
+            used_terms = set()
+            last_shot_types = []
+            valid_types = {"wide", "closeup", "aerial", "detail", "pov", "diagram"}
+            valid_moods = {"dramatic", "calm", "urgent", "mysterious", "hopeful", "informative"}
+            
+            for shot in shot_list:
+                shot["start"] = float(shot.get("start", 0))
+                shot["end"] = float(shot.get("end", shot["start"] + 8))
+                terms = shot.get("terms", [])
+                unique_terms = []
+                for t in terms:
+                    t_lower = t.lower().strip()
+                    if t_lower not in used_terms and 2 < len(t) < 60:
+                        used_terms.add(t_lower)
+                        unique_terms.append(t)
+                
+                # Validate shot_type
+                st = shot.get("shot_type", "wide").lower()
+                if st not in valid_types:
+                    st = "wide"
+                # Prevent 3+ same shot types in a row
+                if len(last_shot_types) >= 2 and all(x == st for x in last_shot_types[-2:]):
+                    alternatives = list(valid_types - {st})
+                    st = alternatives[len(validated) % len(alternatives)]
+                last_shot_types.append(st)
+                
+                # Validate mood
+                mood = shot.get("mood", "informative").lower()
+                if mood not in valid_moods:
+                    mood = "informative"
+                
+                shot["search_terms"] = unique_terms[:2]
+                shot["shot_type"] = st
+                shot["mood"] = mood
+                shot["text_preview"] = ""
+                shot["visual_description"] = f"[{st.upper()}] {unique_terms[0] if unique_terms else 'b-roll'}"
+                validated.append(shot)
+            return validated, used_terms
+
+        # Generate global shot list with Gemini
+        if self.client:
             try:
-                # max_retries=1: nao espera 65s em rate limit — pula o lote se necessario
-                raw = self._gemini_call(prompt_rev, max_retries=1)
-                import json as _json, re as _re
-                raw_clean = _re.sub(r'```(?:json)?\s*', '', raw).strip().strip('`')
-                m = _re.search(r'\[.*\]', raw_clean, _re.DOTALL)
-                if m:
-                    revisions = _json.loads(m.group())
-                    for rev in revisions:
-                        idx = rev.get("shot", -1)
-                        if 0 <= idx < len(shot_list):
-                            new_terms = [str(t).strip().strip('"\'') for t in rev.get("terms", []) if str(t).strip()]
-                            if new_terms:
-                                old = shot_list[idx]["search_terms"][0]
-                                shot_list[idx]["search_terms"] = new_terms[:5]
-                                shot_list[idx]["visual_description"] = new_terms[0]
-                                if new_terms[0] != old:
-                                    print(f"    [IA Revisora] Shot {idx}: '{old}' -> '{new_terms[0]}'")
-                    revised_shots.extend(batch)
+                response = self.client.models.generate_content(
+                    model="gemini-2.0-flash",
+                    contents=prompt,
+                )
+                if response and response.text:
+                    validated, used_terms = _parse_and_validate(response.text.strip())
+                    print(f"    → Global shot list: {len(validated)} segments, {len(used_terms)} unique terms")
+                    return validated
             except Exception as e:
-                print(f"  [IA Revisora] Lote {batch_start} pulado ({e}) — usando termos originais")
-                revised_shots.extend(batch)
+                print(f"    Gemini shot list error: {e}")
 
-        print(f"  [IA Revisora] Revisão concluída")
-        return shot_list
 
-    def _individual_generate_search_terms(self, chunks: list, theme: str, analysis: dict,
-                                           on_progress=None) -> list:
-        """Fallback individual: uma chamada Gemini por shot com foco em traducao semantica.
-        Respeita rate limit de 20 req/min com 4s de delay entre chamadas.
-        """
-        import re as _re
+        # Fallback: per-chunk analysis (with batching for efficiency)
+        print(f"    → Falling back to per-chunk analysis...")
+        chunks = []
+        current = {"start": 0, "end": 0, "text": ""}
+        for seg in transcription:
+            if seg["start"] - current["start"] >= 6 and current["text"]:
+                current["end"] = seg["start"]
+                chunks.append(dict(current))
+                current = {"start": seg["start"], "end": seg["end"], "text": ""}
+            current["text"] += " " + seg["text"]
+            current["end"] = seg["end"]
+        if current["text"].strip():
+            current["end"] = duration
+            chunks.append(current)
+        
         shot_list = []
-        CALL_DELAY = 4.0  # 20 req/min = 1 req per 3s; 4s para margem de seguranca
-        total = len(chunks)
-
-        for i, chunk in enumerate(chunks):
-            if on_progress:
-                pct = 14 + int((i / max(total, 1)) * 5)
-                on_progress(pct, 100, f"Shot {i+1}/{total}: '{chunk.get('text','')[:40]}'...")
-
-            text = chunk["text"].strip()
-            text_display = text[:300] if text else f"(sem narracao em {chunk['start']:.0f}s)"
-
-            prompt = f"""You are a professional video editor choosing B-roll footage.
-
-The narrator says at {chunk['start']:.0f}s-{chunk['end']:.0f}s:
-"{text_display}"
+        gemini_ok = 0
+        gemini_fail = 0
+        used_terms = set()
+        
+        # Process chunks in batches of 5 for efficiency (reduces API calls by 5x)
+        batch_size = 5
+        for batch_start in range(0, len(chunks), batch_size):
+            batch = chunks[batch_start:batch_start + batch_size]
+            
+            batch_timeline = "\n".join(
+                f"Seg {j+1} ({c['start']:.0f}s-{c['end']:.0f}s): \"{c['text'].strip()[:200]}\""
+                for j, c in enumerate(batch)
+            )
+            
+            prompt = f"""You are a SEMANTIC B-roll matcher. Find stock footage for EACH segment below.
 
 VIDEO THEME: {theme}
 
-TASK: Write 5 Pexels/Pixabay search terms for footage to show during this narration.
+SEGMENTS:
+{batch_timeline}
 
-CRITICAL RULES:
-1. If narration uses METAPHORS (electric brain, fire in gut, army of bacteria), translate to MEDICAL REALITY:
-   - "electric system brain" → "brain MRI scan doctor", "neurology clinic patient"
-   - "gut bacteria army" → "probiotic capsule gut", "digestive supplement pill"
-   - "heart pump" → "heart ultrasound", "cardiologist patient"
-2. Terms must describe something a CAMERA CAN FILM (people, objects, places, actions)
-3. Terms must DIRECTLY relate to what is being SAID RIGHT NOW — not the general topic
-
-Return ONLY 5 lines, one term per line, no numbers, no explanation:"""
-
-            try:
-                raw = self._gemini_call(prompt)
+For EACH segment, provide exactly 2 stock footage search terms (English, 2-5 words each).
+Search the VISUAL MEANING, not literal words.
+Every term must be UNIQUE across all segments.
+Return ONLY terms, 2 per segment, in order. No explanation, no numbers."""
+            
+            batch_terms = []
+            for attempt in range(2):
+                try:
+                    rc = []
+                    def _call_batch():
+                        r = self.client.models.generate_content(
+                            model="gemini-2.0-flash",
+                            contents=prompt,
+                        )
+                        rc.append(r)
+                    t = threading.Thread(target=_call_batch, daemon=True)
+                    t.start()
+                    # Adaptive timeout: 15s per chunk in batch
+                    t.join(timeout=max(30, len(batch) * 15))
+                    if t.is_alive():
+                        raise TimeoutError("Gemini batch analysis timed out")
+                    response = rc[0] if rc else None
+                    if response and response.text:
+                        raw = [t.strip().lstrip("0123456789.-) ").strip("\"'*•–—")
+                               for t in response.text.strip().split("\n") if t.strip()]
+                        batch_terms = [t for t in raw if 2 < len(t) < 60 and t.lower() not in used_terms]
+                        if batch_terms:
+                            break
+                except Exception as e:
+                    err_str = str(e).lower()
+                    if "429" in err_str or "quota" in err_str or "rate" in err_str:
+                        time.sleep(5)
+                    elif attempt == 0:
+                        time.sleep(2)
+                    else:
+                        print(f"    Batch error at {batch[0]['start']:.0f}s: {e}")
+            
+            # Assign terms to chunks
+            term_idx = 0
+            for chunk in batch:
                 terms = []
-                for ln in raw.split("\n"):
-                    t = ln.strip().lstrip("0123456789.-) *#").strip().strip('"\'`')
-                    t = _re.sub(r'^[\*\-]+\s*', '', t).strip()
-                    if 3 < len(t) < 80 and t.lower() not in [x.lower() for x in terms]:
+                # Take up to 2 terms from the batch result
+                while term_idx < len(batch_terms) and len(terms) < 2:
+                    t = batch_terms[term_idx]
+                    term_idx += 1
+                    if t.lower() not in used_terms:
+                        used_terms.add(t.lower())
                         terms.append(t)
-                terms = terms[:5]
-                if not terms:
-                    words = text.split()[:4] if text else [theme]
-                    terms = [" ".join(words), f"{theme} doctor patient", f"{theme} medical"]
-            except Exception as e:
-                print(f"    [individual] Shot {i}: Gemini indisponível — usando keywords da transcrição")
-                words = text.split()[:3] if text else [theme]
-                terms = [" ".join(words) or theme, f"{theme} doctor", f"{theme} medical"]
-
-            shot_list.append({
-                "start": chunk["start"],
-                "end": chunk["end"],
-                "text_preview": text[:120],
-                "search_terms": terms,
-                "visual_description": terms[0],
-            })
-            print(f"    [{chunk['start']:.0f}s-{chunk['end']:.0f}s] → {terms[0]}")
-            time.sleep(CALL_DELAY)
-
+                
+                if terms:
+                    gemini_ok += 1
+                else:
+                    gemini_fail += 1
+                    terms = self._extract_visual_keywords_from_text(chunk["text"].strip()[:400], theme)
+                    for t in terms:
+                        used_terms.add(t.lower())
+                
+                shot_list.append({
+                    "start": chunk["start"],
+                    "end": chunk["end"],
+                    "text_preview": chunk["text"].strip()[:100],
+                    "search_terms": terms[:2],
+                    "visual_description": f"Scene for: {chunk['text'].strip()[:60]}",
+                })
+            
+            time.sleep(0.5)  # Brief pause between batches
+        
+        print(f"    → Gemini OK: {gemini_ok}, Fallback: {gemini_fail}")
         return shot_list
-
+    
+    def _extract_visual_keywords_from_text(self, text: str, theme: str) -> list:
+        """Extract meaningful visual keywords from transcript text when Gemini fails."""
+        stop = {"the", "a", "an", "is", "are", "was", "were", "be", "to", "of", "in",
+                "for", "on", "with", "at", "by", "from", "and", "but", "or", "not", "this",
+                "that", "it", "you", "he", "she", "we", "they", "i", "my", "your", "his",
+                "her", "its", "our", "their", "has", "have", "had", "do", "does", "did",
+                "will", "would", "could", "should", "can", "may", "might", "shall",
+                "about", "just", "also", "very", "really", "more", "most", "much",
+                "many", "some", "any", "all", "no", "every", "each", "one", "two",
+                "like", "know", "think", "going", "want", "need", "look", "make",
+                "thing", "things", "because", "when", "what", "how", "which", "where",
+                "people", "something", "actually", "right", "even", "still", "well"}
+        
+        words = [w.strip(".,!?;:\"'()-[]").lower() for w in text.split()]
+        meaningful = [w for w in words if len(w) > 3 and w not in stop]
+        
+        # Count frequency
+        freq = {}
+        for w in meaningful:
+            freq[w] = freq.get(w, 0) + 1
+        
+        top = sorted(freq, key=freq.get, reverse=True)[:4]
+        
+        if len(top) >= 2:
+            return [f"{top[0]} {top[1]}", f"{top[2]} {top[3] if len(top) > 3 else top[0]}"]
+        elif top:
+            return [f"{top[0]} {theme.split()[0] if theme else 'footage'}"]
+        else:
+            return [f"{theme} documentary"]
+    
     def _fallback_shot_list(self, transcription: list, analysis: dict) -> list:
-        """Fallback shot list sem IA — usa chunks de 6s para consistência."""
+        """Create shot list without AI using smart keyword extraction."""
         from core.smart_broll import _group_segments, _extract_smart_keywords
-
-        total_dur = transcription[-1]["end"] if transcription else 60
-        chunks = _group_segments(transcription, 6.0, total_dur)
+        
+        chunks = _group_segments(transcription, 10.0, 
+                                transcription[-1]["end"] if transcription else 60)
         keywords = _extract_smart_keywords(chunks, analysis["theme"].replace(" ", "_"))
         
         shot_list = []
@@ -905,283 +588,50 @@ Return ONLY 5 lines, one term per line, no numbers, no explanation:"""
         ms = int((seconds % 1) * 1000)
         return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
     
-    def generate_veo3_prompts(self, shot_list: list, theme: str, language: str = "en") -> list:
-        """
-        Generate VEO3 video generation prompts from the shot list.
-        Each prompt describes a specific visual scene to generate with AI video.
-
-        Returns list of {"start", "end", "prompt"} dicts.
-        """
-        if not self.client or not shot_list:
-            return self._fallback_veo3_prompts(shot_list, theme)
-
-        segments_text = ""
-        for i, shot in enumerate(shot_list):
-            segments_text += f"SEGMENT {i+1} [{shot['start']:.0f}s-{shot['end']:.0f}s]: {shot.get('text_preview','')[:150]}\n"
-
-        prompt = f"""You are a professional AI video director creating prompts for Google VEO3 video generation.
-
-VIDEO THEME: {theme}
-NARRATION LANGUAGE: {language}
-
-TASK: For each narration segment, write a VEO3 video generation prompt that creates a visually stunning B-roll clip.
-
-VEO3 PROMPT RULES:
-- Start with camera movement: "Close-up shot of...", "Aerial view of...", "Cinematic tracking shot of..."
-- Describe specific objects/people/places relevant to the narration
-- Include lighting: "golden hour lighting", "soft medical lighting", "dramatic shadows"
-- Include mood: "cinematic", "documentary style", "4K ultra-realistic"
-- Keep it 15-30 words per prompt
-- Make it visually specific, NOT conceptual
-- NEVER mention text, subtitles, or voiceover in the prompt
-
-ANTI-GENERIC RULES:
-- Health video: "Close-up of pharmacist's hands counting omega-3 capsules on white surface, soft studio lighting" NOT "healthy person"
-- History video: "Cinematic aerial view of Roman Colosseum at sunset, dramatic clouds" NOT "ancient ruins"
-- Science video: "Macro shot of DNA helix model rotating slowly, blue laboratory lighting" NOT "science"
-
-SEGMENTS:
-{segments_text}
-
-OUTPUT FORMAT:
-SEGMENT 1: [VEO3 prompt here]
-SEGMENT 2: [VEO3 prompt here]
-[...for ALL segments]
-
-Return ONLY the formatted output."""
-
-        try:
-            response = self.client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=prompt,
-            )
-            if not response or not response.text:
-                return self._fallback_veo3_prompts(shot_list, theme)
-
-            result = []
-            for line in response.text.strip().split("\n"):
-                line = line.strip()
-                if line.upper().startswith("SEGMENT"):
-                    parts = line.split(":", 1)
-                    if len(parts) == 2:
-                        try:
-                            num = int(''.join(c for c in parts[0] if c.isdigit())) - 1
-                            if 0 <= num < len(shot_list):
-                                shot = shot_list[num]
-                                veo_prompt = parts[1].strip().strip('"\'[]')
-                                if len(veo_prompt) > 10:
-                                    result.append({
-                                        "start": shot["start"],
-                                        "end": shot["end"],
-                                        "prompt": veo_prompt,
-                                    })
-                        except Exception:
-                            continue
-
-            return result if result else self._fallback_veo3_prompts(shot_list, theme)
-
-        except Exception as e:
-            print(f"  [VEO3 prompts] Error: {e}")
-            return self._fallback_veo3_prompts(shot_list, theme)
-
-    def _fallback_veo3_prompts(self, shot_list: list, theme: str) -> list:
-        """Generate basic VEO3 prompts from shot search terms without AI."""
-        result = []
-        camera_moves = [
-            "Close-up shot of", "Cinematic aerial view of", "Tracking shot of",
-            "Wide establishing shot of", "Macro close-up of", "Slow motion shot of",
-        ]
-        lighting = ["golden hour lighting", "soft studio lighting", "dramatic side lighting",
-                    "natural daylight", "blue medical lighting", "cinematic warm tones"]
-        import random
-        rng = random.Random(42)
-        for i, shot in enumerate(shot_list):
-            terms = shot.get("search_terms", [theme])
-            term = terms[0] if terms else theme
-            move = camera_moves[i % len(camera_moves)]
-            light = rng.choice(lighting)
-            result.append({
-                "start": shot["start"],
-                "end": shot["end"],
-                "prompt": f"{move} {term}, {light}, 4K ultra-realistic documentary style",
-            })
-        return result
-
-    def validate_clip(self, clip_path: str, expected_keywords: list,
-                      text_preview: str = "", theme: str = "") -> float:
-        """
-        IA Validadora — usa Gemini Vision para verificar se o clip baixado
-        corresponde à narração que está sendo dita. Retorna score 0.0-1.0.
+    def validate_clip(self, clip_path: str, expected_keywords: list, theme: str) -> float:
+        """Validate if a downloaded clip matches the expected content. Returns score 0-1.
+        
+        Uses Gemini Vision for images, file heuristics for videos.
         """
         if not os.path.exists(clip_path) or os.path.getsize(clip_path) < 1000:
             return 0.0
-
-        if not self.client:
-            return 0.8  # Sem IA, confia nos resultados de busca
-
-        ext = os.path.splitext(clip_path)[1].lower()
-        frame_path = clip_path + "_val.jpg"
-        is_temp_frame = False
-
-        try:
-            if ext in (".mp4", ".mov", ".avi", ".mkv", ".webm"):
-                try:
-                    from core.video_processor import get_duration, _find_ffmpeg
-                    import subprocess as _sp
-                    dur = get_duration(clip_path)
-                    t = max(0.5, dur * 0.4)
-                    cmd = [_find_ffmpeg(), "-y", "-ss", str(round(t, 2)),
-                           "-i", clip_path, "-vframes", "1", "-q:v", "4", frame_path]
-                    _sp.run(cmd, capture_output=True, timeout=20)
-                    is_temp_frame = os.path.exists(frame_path) and os.path.getsize(frame_path) > 500
-                except Exception:
-                    return 0.7
-            elif ext in (".jpg", ".jpeg", ".png", ".webp"):
-                frame_path = clip_path
-            else:
-                return 0.7
-
-            if not os.path.exists(frame_path) or os.path.getsize(frame_path) < 500:
-                return 0.6
-
-            with open(frame_path, "rb") as f:
-                image_bytes = f.read()
-
-            keyword = expected_keywords[0] if expected_keywords else "?"
-            context_line = f'Narração sendo dita: "{text_preview}"' if text_preview else ""
-
-            prompt = (
-                f"Você é um editor de vídeo profissional verificando se um clipe de B-roll corresponde à narração.\n\n"
-                f"Keyword buscado: \"{keyword}\"\n"
-                f"{context_line}\n\n"
-                f"Analise este frame do clipe baixado.\n"
-                f"Ele representa visualmente o que está sendo descrito?\n\n"
-                f"Responda APENAS com uma linha:\n"
-                f"MATCH - se o frame mostra claramente o conteúdo relevante\n"
-                f"PARTIAL - se é relacionado mas não ideal\n"
-                f"MISMATCH - se mostra algo não relacionado ou incorreto\n\n"
-                f"Depois um traço e razão muito curta (max 8 palavras)."
-            )
-
+        
+        # For images: use Gemini Vision to validate
+        is_image = clip_path.lower().endswith(('.jpg', '.jpeg', '.png', '.webp', '.bmp'))
+        if is_image and self.client:
             try:
-                from google.genai import types as _gtypes
-                # Try with image frame first, fall back to text-only
-                try:
-                    import re as _re2
-                    text_response = ""
-                    for attempt in range(3):
-                        try:
-                            resp_v = self.client.models.generate_content(
-                                model="gemini-2.5-flash",
-                                contents=[
-                                    _gtypes.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
-                                    prompt,
-                                ],
-                            )
-                            text_response = (resp_v.text or "").strip()
-                            break
-                        except Exception as _ev:
-                            if "429" in str(_ev) or "RESOURCE_EXHAUSTED" in str(_ev):
-                                m429 = _re2.search(r"retry in (\d+(?:\.\d+)?)s", str(_ev))
-                                wait429 = float(m429.group(1)) + 3 if m429 else 65
-                                print(f"    [IA Validadora] Rate limit — aguardando {wait429:.0f}s...")
-                                time.sleep(wait429)
-                            else:
-                                raise
-                    raw_verdict = text_response
-                except Exception:
-                    raw_verdict = self._gemini_call(prompt)
-            except Exception:
-                raw_verdict = self._gemini_call(prompt)
-
-            if raw_verdict:
-                verdict = raw_verdict.strip().upper()
-                if verdict.startswith("MATCH"):
-                    score = 1.0
-                elif verdict.startswith("PARTIAL"):
-                    score = 0.6
-                elif verdict.startswith("MISMATCH"):
-                    score = 0.1
-                else:
-                    score = 0.7
-                short = raw_verdict.strip().split("\n")[0][:60]
-                print(f"    [IA Validadora] '{keyword}' → {short} (score={score:.1f})")
-                return score
-
-        except Exception as e:
-            print(f"    [IA Validadora] Erro: {e}")
-        finally:
-            if is_temp_frame and os.path.exists(frame_path):
-                try:
-                    os.remove(frame_path)
-                except Exception:
-                    pass
-
-        return 0.7
-
-    def gerente_geral_audit(self, mapped_clips: list, shot_list: list) -> list:
-        """
-        IA Gerente Geral — revisa TODAS as atribuições de B-roll de uma vez
-        e retorna lista de índices problemáticos para re-download.
-        """
-        if not self.client or not mapped_clips:
-            return []
-
-        print("\n  [IA Gerente Geral] Auditando todas as atribuições de B-roll...")
-
-        lines = []
-        for i, clip in enumerate(mapped_clips):
-            t = clip.get("timeline_start", 0)
-            kw = clip.get("keyword", "?")
-            txt = clip.get("text_preview", "")[:80]
-            lines.append(f"[{i:02d}] t={t:.0f}s | Narração: \"{txt}\" | Keyword buscado: \"{kw}\"")
-
-        assignments_text = "\n".join(lines)
-
-        prompt = f"""Você é o Gerente Geral de uma produtora de vídeo profissional de alto nível.
-Sua função: auditar atribuições de B-roll e identificar INCOMPATIBILIDADES ÓBVIAS.
-
-REGRAS DE INCOMPATIBILIDADE (sinalize apenas erros claros):
-- "fish oil" / "óleo de peixe" → deve mostrar cápsulas/suplemento, NÃO peixe nadando
-- "eye pressure" / "pressão ocular" → deve mostrar oftalmologista, NÃO olho genérico
-- "gut bacteria" / "bactéria intestinal" → deve mostrar microscópio/intestino, NÃO bactéria em placa
-- "blood pressure" → monitor de pressão, NÃO sangue/violência
-- "omega 3" → cápsulas de suplemento, NÃO peixe
-- Narração médica → sempre contexto médico/laboratorial
-- Narração histórica → visuais da era específica (Roma = legionários/coliseu)
-- Narração de natureza → natureza OK
-- Narração de tecnologia → tecnologia OK
-- SINALIZE apenas onde o keyword é SEMANTICAMENTE ERRADO para a narração
-
-ATRIBUIÇÕES:
-{assignments_text}
-
-Retorne APENAS os números de índice das atribuições problemáticas separados por vírgula.
-Se tudo estiver correto, responda: NENHUM
-Exemplos: 3, 7, 15  ou  NENHUM"""
-
+                from google.genai import types
+                with open(clip_path, 'rb') as f:
+                    img_data = f.read()
+                
+                kw_text = ", ".join(expected_keywords[:3])
+                response = self.client.models.generate_content(
+                    model="gemini-2.0-flash",
+                    contents=[
+                        types.Part.from_bytes(data=img_data, mime_type="image/jpeg"),
+                        f"Does this image match these keywords: '{kw_text}'? "
+                        f"Context: {theme}. Reply ONLY with a score 0-10."
+                    ],
+                )
+                if response and response.text:
+                    import re
+                    match = re.search(r'(\d+)', response.text)
+                    if match:
+                        score = int(match.group(1)) / 10.0
+                        if score < 0.3:
+                            print(f"    [validate_clip] LOW SCORE ({score:.1f}): '{kw_text}' does not match image")
+                        return score
+            except Exception as e:
+                print(f"    [validate_clip] Vision error: {e}")
+        
+        # For videos: validate file integrity + basic heuristics
         try:
-            text = self._gemini_call(prompt)
-            if text:
-                if "NENHUM" in text.upper() or not any(c.isdigit() for c in text):
-                    print("  [IA Gerente Geral] ✅ Todas as atribuições aprovadas!")
-                    return []
-
-                bad_indices = []
-                for token in text.replace(",", " ").split():
-                    digits = "".join(c for c in token if c.isdigit())
-                    if digits:
-                        try:
-                            idx = int(digits)
-                            if 0 <= idx < len(mapped_clips):
-                                bad_indices.append(idx)
-                        except ValueError:
-                            continue
-
-                bad_indices = sorted(set(bad_indices))
-                print(f"  [IA Gerente Geral] ⚠️  {len(bad_indices)} atribuições reprovadas: {bad_indices}")
-                return bad_indices
-        except Exception as e:
-            print(f"  [IA Gerente Geral] Erro: {e}")
-
-        return []
+            from core.video_processor import get_duration, get_resolution
+            dur = get_duration(clip_path)
+            w, h = get_resolution(clip_path)
+            # Video should be at least 3 seconds and have reasonable resolution
+            if dur < 2.0 or w < 320 or h < 240:
+                return 0.3
+            return 0.8  # Can't fully validate video content without more analysis
+        except Exception:
+            return 0.5  # Can't validate, assume OK

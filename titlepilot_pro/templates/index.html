@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>G.C.G analysis — Viral Title Intelligence</title>
+<title>TitlePilot Pro — Viral Title Intelligence</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/style.css">
 </head>
@@ -12,7 +12,7 @@
   <nav class="sidebar">
     <div class="logo">
       <span class="logo-icon">🎯</span>
-      <span class="logo-text">G.C.G<span class="pro">analysis</span></span>
+      <span class="logo-text">TitlePilot<span class="pro">PRO</span></span>
     </div>
     <div class="nav-items">
       <button class="nav-btn active" data-page="analyzer" onclick="showPage('analyzer')">
@@ -20,6 +20,12 @@
       </button>
       <button class="nav-btn" data-page="generator" onclick="showPage('generator')">
         <span>⚡</span> AI Generator
+      </button>
+      <button class="nav-btn" data-page="hook" onclick="showPage('hook')">
+        <span>🪝</span> Hook Analyzer
+      </button>
+      <button class="nav-btn" data-page="seo" onclick="showPage('seo')">
+        <span>🔎</span> SEO Optimizer
       </button>
       <button class="nav-btn" data-page="subniche" onclick="showPage('subniche')">
         <span>🔥</span> Subniche Finder
@@ -30,6 +36,9 @@
       <button class="nav-btn" data-page="strategy" onclick="showPage('strategy')">
         <span>🏆</span> Channel Strategy
       </button>
+      <button class="nav-btn" data-page="remix" onclick="showPage('remix')">
+        <span>🔀</span> Strategy Remix (A/B)
+      </button>
       <button class="nav-btn" data-page="batch" onclick="showPage('batch')">
         <span>📋</span> Batch Analysis
       </button>
@@ -39,10 +48,20 @@
       <button class="nav-btn" data-page="youtube" onclick="showPage('youtube')">
         <span>🔍</span> YouTube Scanner
       </button>
+      <button class="nav-btn" data-page="ai-monitor" onclick="showPage('ai-monitor');loadAiMonitor()">
+        <span>🧠</span> AI Monitor
+      </button>
     </div>
     <div class="sidebar-footer">
-      <div class="ai-badge">🤖 Gemini Pro AI</div>
-      <div class="version">v3.0 - AI Advanced Market Research</div>
+      <div class="ai-badge" id="ai-badge" title="Click to check AI status" style="cursor:pointer" onclick="checkAiStatus()">🤖 Multi-AI Engine</div>
+      <div class="version">v3.0</div>
+      
+      <div style="margin-top:12px;padding:8px;background:rgba(255,255,255,0.05);border-radius:8px">
+        <div style="font-size:10px;color:var(--dim);margin-bottom:6px">🧠 Sua Chave Gemini (Opcional)</div>
+        <input type="password" id="global-ai-key" placeholder="Gemini API Key..." style="width:100%;font-size:11px;padding:6px;margin-bottom:6px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px">
+        <button class="btn-primary" style="width:100%;font-size:10px;padding:4px" onclick="saveAIKey()">💾 Salvar Chave</button>
+        <div style="font-size:9px;color:var(--dim);margin-top:6px;text-align:center"><a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--accent);text-decoration:none">Pegar grátis aqui</a></div>
+      </div>
     </div>
   </nav>
 
@@ -65,7 +84,7 @@
     <div class="page" id="page-generator">
       <div class="page-header">
         <h1>⚡ AI Title Generator</h1>
-        <p>Generate 15 viral title variants using Gemini AI</p>
+        <p>Generate 15 viral title variants using Multi-AI Engine</p>
       </div>
       <div class="input-row">
         <input type="text" id="gen-topic" placeholder="Topic (e.g., Dangerous Volcanoes)">
@@ -78,6 +97,36 @@
       <div id="gen-result" class="result-area"></div>
     </div>
 
+    <!-- HOOK ANALYZER PAGE -->
+    <div class="page" id="page-hook">
+      <div class="page-header">
+        <h1>🪝 Hook Analyzer (Retention Predictor)</h1>
+        <p>Paste the first 30 seconds of your script. Titles get clicks, hooks get views.</p>
+      </div>
+      <textarea id="hook-input" placeholder="Paste your video intro script here (the first 50-100 words)..." rows="6" style="width:100%;margin-bottom:12px"></textarea>
+      <div class="input-row">
+        <input type="text" id="hook-title" placeholder="What is the Video Title? (Crucial for context)" style="flex:2">
+        <select id="hook-lang" style="flex:1"><option>English</option><option>Portuguese</option><option>Spanish</option></select>
+      </div>
+      <button class="btn-primary btn-full" onclick="analyzeHook()" style="margin-top:12px">🪝 ANALYZE 30s RETENTION</button>
+      <div id="hook-result" class="result-area"></div>
+    </div>
+
+    <!-- SEO OPTIMIZER PAGE -->
+    <div class="page" id="page-seo">
+      <div class="page-header">
+        <h1>🔎 SEO & Description Optimizer</h1>
+        <p>Generate highly-optimized YouTube descriptions, timestamps, and tags to rank higher in search.</p>
+      </div>
+      <div class="input-row">
+        <input type="text" id="seo-title" placeholder="Your Video Title" style="flex:2">
+        <select id="seo-lang" style="flex:1"><option>English</option><option>Portuguese</option><option>Spanish</option></select>
+      </div>
+      <textarea id="seo-context" placeholder="Briefly describe what the video is about, or paste your hook/intro script..." rows="4" style="width:100%;margin-top:12px"></textarea>
+      <button class="btn-primary btn-full" onclick="generateSEO()" style="margin-top:12px">🔎 GENERATE SEO PACKAGE</button>
+      <div id="seo-result" class="result-area"></div>
+    </div>
+
     <!-- SUBNICHE PAGE -->
     <div class="page" id="page-subniche">
       <div class="page-header">
@@ -85,8 +134,18 @@
         <p>Discover high-demand, low-competition subniches with AI</p>
       </div>
       <div class="input-row">
-        <input type="text" id="sub-theme" placeholder="Theme (e.g., Ocean, History, Health) or leave empty for all">
-        <select id="sub-lang"><option>English</option><option>Portuguese</option><option>Spanish</option></select>
+        <select id="sub-theme" style="flex:2">
+          <option value="">All Themes (Auto-Discover)</option>
+          <option value="History">History & Ancient Civilizations</option>
+          <option value="Ocean">Ocean & Deep Sea</option>
+          <option value="Space">Space & Universe</option>
+          <option value="True Crime">True Crime & Mysteries</option>
+          <option value="Construction">Megaprojects & Construction</option>
+          <option value="Health">Health & Psychology</option>
+          <option value="Finance">Finance & Wealth</option>
+        </select>
+        <input type="text" id="sub-theme-custom" placeholder="Or type a custom theme..." style="flex:2">
+        <select id="sub-lang" style="flex:1"><option>English</option><option>Portuguese</option><option>Spanish</option></select>
         <button class="btn-primary" onclick="findSubniches()">🔍 Find Subniches</button>
       </div>
       <div id="sub-result" class="result-area"></div>
@@ -127,6 +186,26 @@
       <textarea id="strat-titles" placeholder="Paste your current video titles (one per line) for analysis..." rows="5" style="width:100%;margin-bottom:12px"></textarea>
       <button class="btn-primary btn-full" onclick="getStrategy()">🏆 GENERATE STRATEGY</button>
       <div id="strat-result" class="result-area"></div>
+    </div>
+
+    <!-- STRATEGY REMIX (CAMINHO A/B) PAGE -->
+    <div class="page" id="page-remix">
+      <div class="page-header">
+        <h1>🔀 Strategy Remix (Caminho A/B)</h1>
+        <p>Generate a dual-path title generation engine. Compare two distinct emotional angles (e.g., Fear vs. Greed, Curiosity vs. Superlative) to find the ultimate viral hook.</p>
+      </div>
+      <div class="input-row">
+        <input type="text" id="remix-topic" placeholder="Topic or Video Idea (e.g., The deepest hole on earth)">
+        <select id="remix-lang">
+          <option>English</option><option>Portuguese</option><option>Spanish</option>
+        </select>
+      </div>
+      <div class="input-row" style="margin-top:12px">
+        <input type="text" id="remix-path-a" placeholder="Path A Angle (e.g., Fear & Danger)">
+        <input type="text" id="remix-path-b" placeholder="Path B Angle (e.g., Money & Corruption)">
+      </div>
+      <button class="btn-primary btn-full" onclick="generateRemix()" style="margin-top:12px">🔀 GENERATE A/B STRATEGY</button>
+      <div id="remix-result" class="result-area"></div>
     </div>
 
     <!-- BATCH PAGE -->
@@ -212,7 +291,27 @@
         <button class="btn-primary yt-tab active" data-yttab="yt-channel" onclick="showYtTab('yt-channel')">📊 Channel Analyzer</button>
         <button class="btn-secondary yt-tab" data-yttab="yt-niche" onclick="showYtTab('yt-niche')">🎯 Niche Deep Dive</button>
         <button class="btn-secondary yt-tab" data-yttab="yt-trending" onclick="showYtTab('yt-trending')">🔥 Trending Now</button>
+        <button class="btn-secondary yt-tab" data-yttab="yt-newborn" onclick="showYtTab('yt-newborn')">🚀 Newborn Virals</button>
         <button class="btn-secondary yt-tab" data-yttab="yt-compare" onclick="showYtTab('yt-compare')">⚔️ Compare</button>
+        <button class="btn-secondary yt-tab" data-yttab="yt-saved" onclick="showYtTab('yt-saved');loadSavedChannels()">💾 Saved Emerging</button>
+      </div>
+
+      <!-- NEWBORN VIRALS (NEW SMALL CHANNELS BLOWING UP) -->
+      <div class="yt-panel" id="yt-newborn">
+        <div class="input-row">
+          <input type="text" id="yt-newborn-q" placeholder="Enter theme or niche (e.g., 'oceano', 'construção', 'espaço')">
+          <button class="btn-primary" onclick="scanNewbornVirals()">🚀 Scan Newborn Virals</button>
+        </div>
+        <div id="yt-newborn-result" class="result-area"></div>
+      </div>
+
+      <!-- SAVED EMERGING CHANNELS -->
+      <div class="yt-panel" id="yt-saved">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <h3 style="color:var(--accent)">💾 Tracked Emerging Channels</h3>
+          <button class="btn-primary" onclick="loadSavedChannels()" style="padding:6px 12px;font-size:12px">🔄 Refresh</button>
+        </div>
+        <div id="yt-saved-list" class="result-area"></div>
       </div>
 
       <!-- CHANNEL ANALYZER -->
@@ -270,11 +369,49 @@
         <div id="yt-compare-result" class="result-area"></div>
       </div>
     </div>
+
+    <!-- AI MONITOR PAGE -->
+    <div class="page" id="page-ai-monitor">
+      <div class="page-header">
+        <h1>🧠 AI Engine Monitor</h1>
+        <p>Real-time status of all 5 AI providers — Multi-Model Failover Engine v3</p>
+      </div>
+      
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-bottom:20px">
+        <div class="section" style="text-align:center;padding:16px">
+          <div style="font-size:28px;font-weight:800" id="mon-health">---</div>
+          <div style="font-size:11px;color:#888">System Health</div>
+        </div>
+        <div class="section" style="text-align:center;padding:16px">
+          <div style="font-size:28px;font-weight:800;color:#4ecca3" id="mon-available">-/-</div>
+          <div style="font-size:11px;color:#888">Providers Online</div>
+        </div>
+        <div class="section" style="text-align:center;padding:16px">
+          <div style="font-size:28px;font-weight:800;color:#FFD700" id="mon-calls">0</div>
+          <div style="font-size:11px;color:#888">Total AI Calls</div>
+        </div>
+        <div class="section" style="text-align:center;padding:16px">
+          <div style="font-size:28px;font-weight:800;color:#8b5cf6" id="mon-cache">0</div>
+          <div style="font-size:11px;color:#888">Cache Hits</div>
+        </div>
+      </div>
+
+      <div class="section" style="margin-bottom:16px">
+        <h3>📡 Provider Status</h3>
+        <div id="mon-providers" style="display:grid;gap:8px;margin-top:12px"></div>
+      </div>
+
+      <div style="display:flex;gap:8px">
+        <button class="btn-primary" onclick="loadAiMonitor()">🔄 Refresh</button>
+        <button class="btn-secondary" onclick="resetAiEngine()">⚠️ Reset All Cooldowns</button>
+      </div>
+      <div id="mon-log" class="result-area" style="margin-top:16px;font-size:12px"></div>
+    </div>
   </main>
 </div>
 <div class="loading-overlay" id="loading" style="display:none">
   <div class="spinner"></div>
-  <p id="loading-text">Analyzing with Gemini AI...</p>
+  <p id="loading-text">Processing with Multi-AI Engine...</p>
 </div>
 <script src="/static/app.js"></script>
 </body>
