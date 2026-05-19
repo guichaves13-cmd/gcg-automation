@@ -7312,7 +7312,8 @@ def _watchdog_loop():
                         created_str = jdata.get("created", "")
                         if created_str:
                             try:
-                                age_min = (_now - datetime.fromisoformat(created_str)).seconds / 60
+                                # Use total_seconds() — .seconds wraps every 24h (timedelta quirk)
+                                age_min = (_now - datetime.fromisoformat(created_str)).total_seconds() / 60
                                 if age_min > _STUCK_JOB_TIMEOUT_MIN:
                                     stuck.append(jid)
                             except Exception:
