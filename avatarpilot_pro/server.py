@@ -5220,7 +5220,11 @@ def api_generate():
 
     script          = request.form.get("script", "")
     voice           = request.form.get("voice", "en-US-GuyNeural")
-    engine          = request.form.get("engine", "edge-tts")
+    # Legacy: "engine" param was TTS engine. New: prefer "tts_engine" + "video_engine"
+    engine          = request.form.get("tts_engine") or request.form.get("engine", "edge-tts")
+    # Video engine (lip-sync/animation). Default auto = SadTalker+MuseTalk pipeline.
+    # Options: "auto" | "echomimic_v2" (HeyGen-class half-body with gestures, requires local install)
+    video_engine    = request.form.get("video_engine", "auto")
     voice_id        = request.form.get("voice_id", "")
     preprocess      = request.form.get("preprocess", "crop")
     still_mode      = request.form.get("still_mode") == "true"
@@ -5373,8 +5377,16 @@ def api_generate():
             gesture_video_path = _gv_full
 
     job_id = uuid.uuid4().hex[:12]
+    # Voice cloning reference (F5-TTS local) — path provided by /api/voices/f5_clone
+    voice_ref_audio = request.form.get("voice_ref_audio", "")
+    voice_ref_text  = request.form.get("voice_ref_text", "")
+    # EchoMimic V2 pose template name (when video_engine=echomimic_v2)
+    echo_pose       = request.form.get("echo_pose", "01")
     config = {
         "script": script, "voice": voice, "tts_engine": engine,
+        "engine": video_engine,
+        "voice_ref_audio": voice_ref_audio, "voice_ref_text": voice_ref_text,
+        "echomimic_settings": {"pose": echo_pose},
         "voice_id": voice_id, "image_path": img_path,
         "audio_upload": audio_upload, "preprocess": preprocess,
         "still_mode": still_mode, "expression_scale": expression_scale,
