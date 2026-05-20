@@ -5378,7 +5378,10 @@ def swap_face_on_gesture_video(
         if job_id and job_id in jobs:
             jobs[job_id]["message"] = "Face Swap: carregando modelo InsightFace..."
 
-        face_app = FaceAnalysis(name="buffalo_l")
+        # Force CUDA providers for InsightFace (10-50x speedup vs CPU).
+        # Falls back to CPU automatically if CUDA unavailable.
+        _onnx_providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+        face_app = FaceAnalysis(name="buffalo_l", providers=_onnx_providers)
         face_app.prepare(ctx_id=0, det_size=(640, 640))
 
         # Carregar modelo inswapper
@@ -8205,7 +8208,7 @@ def api_face_swap():
             import cv2 as _cv2
             import numpy as _np
 
-            app_face = FaceAnalysis(name="buffalo_l")
+            app_face = FaceAnalysis(name="buffalo_l", providers=["CUDAExecutionProvider", "CPUExecutionProvider"])
             app_face.prepare(ctx_id=0, det_size=(640, 640))
 
             src_img = _cv2.imdecode(_np.frombuffer(open(src_path, "rb").read(), dtype=_np.uint8), _cv2.IMREAD_COLOR)
