@@ -245,8 +245,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           sendResponse({ success: false, error: chrome.runtime.lastError.message });
           return;
         }
-        chrome.debugger.detach({ tabId }, () => {
-          sendResponse({ success: true });
+        // Force React to register the input by simulating a real Space keypress
+        chrome.debugger.sendCommand({ tabId }, 'Input.dispatchKeyEvent', {
+          type: 'keyDown', text: ' ', unmodifiedText: ' ', windowsVirtualKeyCode: 32, key: ' ', code: 'Space'
+        }, () => {
+          chrome.debugger.sendCommand({ tabId }, 'Input.dispatchKeyEvent', {
+            type: 'keyUp', windowsVirtualKeyCode: 32, key: ' ', code: 'Space'
+          }, () => {
+            chrome.debugger.detach({ tabId }, () => {
+              sendResponse({ success: true });
+            });
+          });
         });
       });
     };
