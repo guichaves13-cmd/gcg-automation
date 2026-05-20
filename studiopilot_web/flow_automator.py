@@ -28,7 +28,7 @@ SESSION_TAG = datetime.now().strftime("%Y%m%d_%H%M%S")
 
 def load_cfg(acct=1):
     try:
-        with open(VEO_CONFIG) as f: return json.load(f).get(f"veo{acct}", {})
+        with open(VEO_CONFIG, encoding="utf-8-sig") as f: return json.load(f).get(f"veo{acct}", {})
     except: return {}
 
 def save_st(s):
