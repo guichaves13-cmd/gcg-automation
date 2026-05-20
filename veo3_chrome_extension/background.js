@@ -458,19 +458,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  // Press Enter using CDP
-  if (message.type === 'cdp-press-enter') {
+  // Press Ctrl+Enter using CDP (reliable fallback for Slate.js editors)
+  if (message.type === 'cdp-ctrl-enter') {
     const tabId = sender.tab.id;
     
-    const doEnter = () => {
+    const doCtrlEnter = () => {
       chrome.debugger.sendCommand({ tabId }, 'Input.dispatchKeyEvent', {
-        type: 'rawKeyDown', windowsVirtualKeyCode: 13, key: 'Enter', code: 'Enter'
+        type: 'rawKeyDown', modifiers: 2, windowsVirtualKeyCode: 13, key: 'Enter', code: 'Enter'
       }, () => {
         chrome.debugger.sendCommand({ tabId }, 'Input.dispatchKeyEvent', {
-          type: 'char', text: '\r', unmodifiedText: '\r', windowsVirtualKeyCode: 13, key: 'Enter', code: 'Enter'
+          type: 'char', modifiers: 2, text: '\r', unmodifiedText: '\r', windowsVirtualKeyCode: 13, key: 'Enter', code: 'Enter'
         }, () => {
           chrome.debugger.sendCommand({ tabId }, 'Input.dispatchKeyEvent', {
-            type: 'keyUp', windowsVirtualKeyCode: 13, key: 'Enter', code: 'Enter'
+            type: 'keyUp', modifiers: 2, windowsVirtualKeyCode: 13, key: 'Enter', code: 'Enter'
           }, () => {
             chrome.debugger.detach({ tabId }, () => {
               sendResponse({ success: true });
@@ -484,13 +484,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (chrome.runtime.lastError) {
         const errMsg = chrome.runtime.lastError.message || '';
         if (errMsg.includes('Already attached') || errMsg.includes('already being inspected')) {
-          doEnter();
+          doCtrlEnter();
         } else {
           sendResponse({ success: false, error: errMsg });
         }
         return;
       }
-      doEnter();
+      doCtrlEnter();
     });
     return true;
   }

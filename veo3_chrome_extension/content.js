@@ -1160,46 +1160,46 @@
     // AFTER the debugger is attached (so coordinates account for the infobar shift)
     const findButtonScript = `
       (function() {
-        var btns = document.querySelectorAll('button, [role="button"], [aria-label="Submit"], [aria-label="Criar"], [aria-label="Enviar"]');
         var best = null;
         var bestRect = null;
         
-        var textbox = document.querySelector('[role="textbox"]') || document.querySelector('[contenteditable="true"]');
-        if (textbox) {
-          var tbRect = textbox.getBoundingClientRect();
-          var maxRight = -1;
-          
-          for (var i = 0; i < btns.length; i++) {
-            var r = btns[i].getBoundingClientRect();
-            if (r.width <= 0 || r.height <= 0) continue;
-            
-            // Check if button is vertically aligned with the textbox (within a 60px margin)
-            var isVerticallyAligned = (r.top > tbRect.top - 60) && (r.bottom < tbRect.bottom + 60);
-            
-            // The submit button is to the right of the textbox
-            var isToTheRight = (r.left > tbRect.left + 50); // It's on the right side of the container
-            
-            if (isVerticallyAligned && isToTheRight) {
-              if (r.right > maxRight) {
-                maxRight = r.right;
-                best = btns[i];
-                bestRect = r;
-              }
+        // 1. Look for the arrow_forward or send icon exactly
+        var icons = document.querySelectorAll('.google-symbols, .material-symbols-outlined, i, span');
+        for (var i = 0; i < icons.length; i++) {
+          var t = (icons[i].textContent || '').trim().toLowerCase();
+          if (t === 'arrow_forward' || t === 'send') {
+            var r = icons[i].getBoundingClientRect();
+            if (r.top > window.innerHeight * 0.5 && r.width > 0) {
+              best = icons[i];
+              bestRect = r;
+              break;
             }
           }
         }
         
-        // Strategy fallback: find arrow_forward icon if spatial check fails
+        // 2. If no icon found, find the absolute rightmost clickable element near the textbox
         if (!best) {
-          for (var i = 0; i < btns.length; i++) {
-            var rect = btns[i].getBoundingClientRect();
-            if (rect.width <= 0 || rect.height <= 0) continue;
-            var text = (btns[i].textContent || '').toLowerCase();
-            if (text.includes('arrow_forward')) {
-              if (rect.top > window.innerHeight * 0.5) {
-                best = btns[i];
-                bestRect = rect;
-                break;
+          var textbox = document.querySelector('[role="textbox"]') || document.querySelector('[contenteditable="true"]');
+          if (textbox) {
+            var tbRect = textbox.getBoundingClientRect();
+            var all = document.querySelectorAll('*');
+            var maxRight = -1;
+            for (var j = 0; j < all.length; j++) {
+              var el = all[j];
+              var r = el.getBoundingClientRect();
+              if (r.width > 10 && r.width < 100 && r.height > 10 && r.height < 100) {
+                if (r.top > tbRect.top - 30 && r.bottom < tbRect.bottom + 30) {
+                  if (r.left > tbRect.right) {
+                    if (r.right > maxRight) {
+                      var style = window.getComputedStyle(el);
+                      if (style.cursor === 'pointer' || el.tagName === 'BUTTON' || el.tagName === 'SVG') {
+                        maxRight = r.right;
+                        best = el;
+                        bestRect = r;
+                      }
+                    }
+                  }
+                }
               }
             }
           }
@@ -1210,9 +1210,7 @@
           found: true,
           x: Math.round(bestRect.left + bestRect.width / 2),
           y: Math.round(bestRect.top + bestRect.height / 2),
-          text: (best.textContent || '').trim().substring(0, 30),
-          w: Math.round(bestRect.width),
-          h: Math.round(bestRect.height)
+          text: (best.textContent || '').trim().substring(0, 30)
         });
       })()
     `;
@@ -1235,6 +1233,25 @@
       }
     } catch (e) {
       log(`CDP find-and-click erro: ${e.message}`, 'warning');
+    }
+
+    // Fallback 1: Try Ctrl+Enter (Native Flow Shortcut)
+    log('Fallback: Tentando enviar via Ctrl+Enter...', 'warning');
+    const inputElement = findPromptInput();
+    if (inputElement) {
+      inputElement.focus();
+      await delay(300);
+    }
+    
+    try {
+      const enterResult = await chrome.runtime.sendMessage({ type: 'cdp-ctrl-enter' });
+      if (enterResult && enterResult.success) {
+        await delay(2000);
+        log('Prompt enviado (Ctrl+Enter)!', 'success');
+        return true;
+      }
+    } catch (e) {
+      log(`Ctrl+Enter falhou: ${e.message}`, 'warning');
     }
 
     throw new Error('Nao foi possivel enviar o prompt');
