@@ -1148,85 +1148,85 @@
   }
 
   // Submit prompt using CDP trusted events
-  // The submit button contains text "arrow_forward\nCriar" and is the rightmost button in the prompt bar
-  // We MUST use CDP dispatchMouseEvent for trusted clicks — DOM .click() is ignored by Google Flow
+  // CRITICAL: We send a JS snippet to background.js, which:
+  //   1. Attaches debugger (Chrome shows infobar, page shifts down)
+  //   2. Uses Runtime.evaluate to find the button WITH FRESH coordinates (after shift)
+  //   3. Clicks at those exact coordinates
+  // This avoids the bug where coordinates calculated before attach become wrong after attach.
   async function submitPrompt() {
     log('Enviando prompt...');
 
-    // Step 1: Find the submit button in the DOM to get its coordinates
-    const allButtons = document.querySelectorAll('button');
-    let submitBtn = null;
-    let submitRect = null;
-    
-    for (const btn of allButtons) {
-      const rect = btn.getBoundingClientRect();
-      if (rect.width <= 0 || rect.height <= 0) continue;
-      
-      const text = (btn.textContent || '').toLowerCase();
-      
-      // The submit button contains "arrow_forward" material icon text + "criar"
-      if (text.includes('arrow_forward') || 
-          (text.includes('criar') && !text.includes('apagar'))) {
-        // Make sure it's in the bottom area of the screen
-        if (rect.top > window.innerHeight * 0.6) {
-          submitBtn = btn;
-          submitRect = rect;
-          log(`Botao submit encontrado: "${text.substring(0,30).trim()}" em (${Math.round(rect.left + rect.width/2)}, ${Math.round(rect.top + rect.height/2)})`, 'info');
-          break;
-        }
-      }
-    }
-
-    // If text match failed, find the rightmost small button in the bottom bar
-    if (!submitBtn) {
-      let maxRight = 0;
-      for (const btn of allButtons) {
-        const rect = btn.getBoundingClientRect();
-        if (rect.width <= 0 || rect.height <= 0) continue;
-        if (rect.top < window.innerHeight * 0.7) continue;
-        if (rect.width > 150 || rect.height > 60) continue;
+    // JavaScript code that background.js will run via Runtime.evaluate
+    // AFTER the debugger is attached (so coordinates account for the infobar shift)
+    const findButtonScript = `
+      (function() {
+        var btns = document.querySelectorAll('button');
+        var best = null;
+        var bestRect = null;
         
-        if (rect.right > maxRight) {
-          maxRight = rect.right;
-          submitBtn = btn;
-          submitRect = rect;
+        // Strategy 1: Find button with arrow_forward or criar text
+        for (var i = 0; i < btns.length; i++) {
+          var rect = btns[i].getBoundingClientRect();
+          if (rect.width <= 0 || rect.height <= 0) continue;
+          var text = (btns[i].textContent || '').toLowerCase();
+          if (text.includes('arrow_forward') || (text.includes('criar') && !text.includes('apagar'))) {
+            if (rect.top > window.innerHeight * 0.5) {
+              best = btns[i];
+              bestRect = rect;
+              break;
+            }
+          }
         }
-      }
-      if (submitBtn) {
-        log(`Usando botao mais a direita como submit: right=${Math.round(maxRight)}`, 'info');
-      }
-    }
+        
+        // Strategy 2: Rightmost small button in bottom bar
+        if (!best) {
+          var maxRight = 0;
+          for (var j = 0; j < btns.length; j++) {
+            var r = btns[j].getBoundingClientRect();
+            if (r.width <= 0 || r.height <= 0) continue;
+            if (r.top < window.innerHeight * 0.6) continue;
+            if (r.width > 150 || r.height > 60) continue;
+            if (r.right > maxRight) {
+              maxRight = r.right;
+              best = btns[j];
+              bestRect = r;
+            }
+          }
+        }
+        
+        if (!best || !bestRect) return JSON.stringify({ found: false });
+        return JSON.stringify({
+          found: true,
+          x: Math.round(bestRect.left + bestRect.width / 2),
+          y: Math.round(bestRect.top + bestRect.height / 2),
+          text: (best.textContent || '').trim().substring(0, 30),
+          w: Math.round(bestRect.width),
+          h: Math.round(bestRect.height)
+        });
+      })()
+    `;
 
-    if (!submitBtn || !submitRect) {
-      log('ERRO: Botao submit nao encontrado na pagina!', 'error');
-      throw new Error('Botao submit nao encontrado');
-    }
-
-    // Step 2: Click the submit button via CDP (trusted mouse events)
-    const x = Math.round(submitRect.left + submitRect.width / 2);
-    const y = Math.round(submitRect.top + submitRect.height / 2);
-    log(`CDP click em (${x}, ${y})...`, 'info');
-    
+    // Send to background.js which will attach debugger, find button, and click
     try {
       const clickResult = await chrome.runtime.sendMessage({ 
-        type: 'cdp-click', 
-        x: x, 
-        y: y 
+        type: 'cdp-find-and-click', 
+        findScript: findButtonScript 
       });
       
       if (clickResult && clickResult.success) {
+        log(`Botao clicado em (${clickResult.x}, ${clickResult.y}) — "${clickResult.text || ''}"`, 'info');
         await delay(2000);
-        log('Prompt enviado (CDP click)!', 'success');
+        log('Prompt enviado!', 'success');
         return true;
       } else {
-        log(`CDP click retornou erro: ${clickResult?.error || 'unknown'}`, 'warning');
+        log(`CDP find-and-click falhou: ${clickResult?.error || 'unknown'}`, 'warning');
       }
     } catch (e) {
-      log(`CDP click falhou: ${e.message}`, 'warning');
+      log(`CDP find-and-click erro: ${e.message}`, 'warning');
     }
 
-    // Step 3: Fallback — focus the input and press Enter via CDP
-    log('Tentando Enter via CDP como fallback...', 'warning');
+    // Fallback: try CDP Enter
+    log('Tentando Enter via CDP...', 'warning');
     const inputElement = findPromptInput();
     if (inputElement) {
       inputElement.focus();
@@ -1244,24 +1244,7 @@
       log(`Enter CDP falhou: ${e.message}`, 'warning');
     }
 
-    // Step 4: Last resort — try dispatching MouseEvent directly on the button
-    log('Tentando dispatchEvent no botao...', 'warning');
-    const evtInit = {
-      bubbles: true, cancelable: true, view: window,
-      clientX: x, clientY: y
-    };
-    submitBtn.dispatchEvent(new PointerEvent('pointerdown', { ...evtInit, pointerId: 1 }));
-    await delay(30);
-    submitBtn.dispatchEvent(new MouseEvent('mousedown', evtInit));
-    await delay(30);
-    submitBtn.dispatchEvent(new PointerEvent('pointerup', { ...evtInit, pointerId: 1 }));
-    await delay(30);
-    submitBtn.dispatchEvent(new MouseEvent('mouseup', evtInit));
-    await delay(30);
-    submitBtn.dispatchEvent(new MouseEvent('click', evtInit));
-    await delay(2000);
-    log('Prompt enviado (dispatchEvent)!', 'success');
-    return true;
+    throw new Error('Nao foi possivel enviar o prompt');
   }
 
   // Format time remaining

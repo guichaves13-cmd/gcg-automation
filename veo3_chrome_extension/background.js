@@ -360,6 +360,77 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  // Find and click using CDP (resolves the infobar shift issue)
+  if (message.type === 'cdp-find-and-click') {
+    const tabId = sender.tab.id;
+    const findScript = message.findScript;
+    
+    const doFindAndClick = () => {
+      // Allow a small delay for the layout shift to finish (infobar animation)
+      setTimeout(() => {
+        chrome.debugger.sendCommand({ tabId }, 'Runtime.evaluate', {
+          expression: findScript,
+          returnByValue: true
+        }, (result) => {
+          if (chrome.runtime.lastError || !result || !result.result || !result.result.value) {
+            chrome.debugger.detach({ tabId });
+            sendResponse({ success: false, error: chrome.runtime.lastError ? chrome.runtime.lastError.message : 'Evaluation failed' });
+            return;
+          }
+          
+          try {
+            const data = JSON.parse(result.result.value);
+            if (!data.found) {
+              chrome.debugger.detach({ tabId });
+              sendResponse({ success: false, error: 'Element not found by script' });
+              return;
+            }
+            
+            const { x, y, text } = data;
+            
+            // Now click at the calculated coordinates
+            chrome.debugger.sendCommand({ tabId }, 'Input.dispatchMouseEvent', {
+              type: 'mouseMoved', x, y, button: 'none'
+            }, () => {
+              setTimeout(() => {
+                chrome.debugger.sendCommand({ tabId }, 'Input.dispatchMouseEvent', {
+                  type: 'mousePressed', x, y, button: 'left', clickCount: 1, buttons: 1, pointerType: 'mouse'
+                }, () => {
+                  setTimeout(() => {
+                    chrome.debugger.sendCommand({ tabId }, 'Input.dispatchMouseEvent', {
+                      type: 'mouseReleased', x, y, button: 'left', clickCount: 1, buttons: 0, pointerType: 'mouse'
+                    }, () => {
+                      chrome.debugger.detach({ tabId }, () => {
+                        sendResponse({ success: true, x, y, text });
+                      });
+                    });
+                  }, 50);
+                });
+              }, 30);
+            });
+          } catch (e) {
+            chrome.debugger.detach({ tabId });
+            sendResponse({ success: false, error: 'JSON parse error: ' + e.message });
+          }
+        });
+      }, 300); // 300ms delay to allow infobar layout shift
+    };
+    
+    chrome.debugger.attach({ tabId }, '1.3', () => {
+      if (chrome.runtime.lastError) {
+        const errMsg = chrome.runtime.lastError.message || '';
+        if (errMsg.includes('Already attached') || errMsg.includes('already being inspected')) {
+          doFindAndClick();
+        } else {
+          sendResponse({ success: false, error: errMsg });
+        }
+        return;
+      }
+      doFindAndClick();
+    });
+    return true;
+  }
+
   // Press Enter using CDP
   if (message.type === 'cdp-press-enter') {
     const tabId = sender.tab.id;
