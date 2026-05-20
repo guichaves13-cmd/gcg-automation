@@ -1147,96 +1147,93 @@
     return true;
   }
 
-  // Submit prompt by pressing Enter via CDP (trusted keyboard event)
-  // Google Flow 2026: submit button is the → arrow icon at the far right of the prompt bar
+  // Submit prompt using CDP (trusted events only!)
+  // Google Flow 2026 IGNORES untrusted .click() events from extensions
+  // We MUST use CDP dispatchKeyEvent/dispatchMouseEvent for trusted interaction
   async function submitPrompt() {
     log('Enviando prompt...');
 
     const inputElement = findPromptInput();
     if (inputElement) {
       inputElement.focus();
-      await delay(300);
+      await delay(500);
     }
 
-    // Strategy 1: Find the rightmost button in the bottom bar area
-    // The submit button (→) is ALWAYS the rightmost button near the prompt input
+    // Strategy 1: Press Enter via CDP (trusted keyboard event)
+    // This is the most reliable method — if the input is focused, Enter submits
+    log('Tentando Enter via CDP...', 'info');
+    try {
+      const enterResult = await chrome.runtime.sendMessage({ type: 'cdp-press-enter' });
+      if (enterResult && enterResult.success) {
+        await delay(2000);
+        log('Prompt enviado (Enter CDP)!', 'success');
+        return true;
+      }
+    } catch (e) {
+      log(`Enter CDP falhou: ${e.message}`, 'warning');
+    }
+
+    // Strategy 2: Find submit button and click via CDP coordinates (trusted mouse event)
+    log('Enter falhou, tentando CDP click no botao submit...', 'warning');
     const allButtons = document.querySelectorAll('button');
-    let candidates = [];
+    let submitBtn = null;
+    let submitRight = 0;
     
     for (const btn of allButtons) {
       const rect = btn.getBoundingClientRect();
       if (rect.width <= 0 || rect.height <= 0) continue;
+      if (rect.top < window.innerHeight * 0.7) continue; // Bottom area only
+      if (rect.width > 200 || rect.height > 80) continue; // Small buttons only
       
-      // Only buttons in the bottom 25% of the screen (prompt bar area)
-      if (rect.top < window.innerHeight * 0.75) continue;
-      
-      // Only buttons that are reasonably small (icon buttons, not large panels)
-      if (rect.width > 200 || rect.height > 80) continue;
-      
-      const text = (btn.textContent || '').trim().toLowerCase();
-      const ariaLabel = (btn.getAttribute('aria-label') || '').toLowerCase();
-      
-      candidates.push({
-        el: btn,
-        right: rect.right,
-        text: text,
-        ariaLabel: ariaLabel,
-        // Score: higher = more likely to be submit
-        score: 0 +
-          (text.includes('arrow_forward') ? 100 : 0) +
-          (text.includes('send') ? 90 : 0) +
-          (text.includes('criar') ? 90 : 0) +
-          (text.includes('create') ? 90 : 0) +
-          (text.includes('enviar') ? 90 : 0) +
-          (ariaLabel.includes('send') ? 80 : 0) +
-          (ariaLabel.includes('criar') ? 80 : 0) +
-          (ariaLabel.includes('submit') ? 80 : 0) +
-          (ariaLabel.includes('enviar') ? 80 : 0) +
-          (text === '→' || text === '➡' ? 100 : 0) +
-          (text.length < 5 ? 20 : 0) + // Small text = likely icon
-          (rect.right > window.innerWidth * 0.6 ? 30 : 0) // Right side of screen
-      });
+      // The submit button is always the rightmost button in the prompt bar
+      if (rect.right > submitRight) {
+        submitRight = rect.right;
+        submitBtn = btn;
+      }
     }
 
-    // Sort by score DESC, then by rightmost position
-    candidates.sort((a, b) => {
-      if (b.score !== a.score) return b.score - a.score;
-      return b.right - a.right;
-    });
-
-    if (candidates.length > 0) {
-      const best = candidates[0];
-      log(`Submit encontrado: text="${best.text.substring(0,20)}" score=${best.score} right=${Math.round(best.right)}`, 'info');
+    if (submitBtn) {
+      const rect = submitBtn.getBoundingClientRect();
+      const x = Math.round(rect.left + rect.width / 2);
+      const y = Math.round(rect.top + rect.height / 2);
+      log(`CDP click no submit em (${x}, ${y})`, 'info');
       
-      // If best candidate has score > 0, click it directly
-      if (best.score > 0) {
-        best.el.click();
-        await delay(1000);
-        log('Prompt enviado (botao submit)!', 'success');
-        return true;
+      try {
+        const clickResult = await chrome.runtime.sendMessage({ 
+          type: 'cdp-click', 
+          x: x, 
+          y: y 
+        });
+        if (clickResult && clickResult.success) {
+          await delay(2000);
+          log('Prompt enviado (CDP click)!', 'success');
+          return true;
+        }
+      } catch (e) {
+        log(`CDP click falhou: ${e.message}`, 'warning');
       }
-      
-      // If no scored match, click the rightmost button in the bottom bar
-      // (The → submit button is always the last button on the right)
-      const rightmost = candidates.reduce((a, b) => a.right > b.right ? a : b);
-      log(`Clicando botao mais a direita: text="${rightmost.text.substring(0,20)}" right=${Math.round(rightmost.right)}`, 'info');
-      rightmost.el.click();
-      await delay(1000);
-      log('Prompt enviado (botao direito)!', 'success');
+    }
+
+    // Strategy 3: Last resort — dispatch trusted mouse events manually
+    log('Tentando dispatchEvent manual...', 'warning');
+    if (submitBtn) {
+      const rect = submitBtn.getBoundingClientRect();
+      const evtInit = {
+        bubbles: true, cancelable: true, view: window,
+        clientX: rect.left + rect.width / 2,
+        clientY: rect.top + rect.height / 2
+      };
+      submitBtn.dispatchEvent(new MouseEvent('mousedown', evtInit));
+      await delay(50);
+      submitBtn.dispatchEvent(new MouseEvent('mouseup', evtInit));
+      await delay(50);
+      submitBtn.dispatchEvent(new MouseEvent('click', evtInit));
+      await delay(2000);
+      log('Prompt enviado (dispatchEvent)!', 'success');
       return true;
     }
 
-    // Strategy 2: Fallback to Enter key via CDP
-    log('Nenhum botao submit encontrado, tentando Enter via CDP...', 'warning');
-    const result = await chrome.runtime.sendMessage({ type: 'cdp-press-enter' });
-    
-    if (!result || !result.success) {
-      throw new Error(`Falha ao pressionar Enter: ${result?.error || 'erro desconhecido'}`);
-    }
-
-    await delay(1000);
-    log('Prompt enviado (via Enter)!', 'success');
-    return true;
+    throw new Error('Nao foi possivel enviar o prompt — nenhum metodo funcionou');
   }
 
   // Format time remaining
