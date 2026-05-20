@@ -1207,6 +1207,27 @@
     `;
 
     // Send to background.js which will attach debugger, find button, and click
+    // NEW STRATEGY: Try Enter first, since it is more reliable in the new React UI
+    log('Tentando enviar via tecla Enter (CDP)...', 'info');
+    const inputElement = findPromptInput();
+    if (inputElement) {
+      inputElement.focus();
+      await delay(300);
+    }
+    
+    try {
+      const enterResult = await chrome.runtime.sendMessage({ type: 'cdp-press-enter' });
+      if (enterResult && enterResult.success) {
+        await delay(2000);
+        log('Prompt enviado (Enter CDP)!', 'success');
+        return true;
+      }
+    } catch (e) {
+      log(`Enter CDP falhou: ${e.message}`, 'warning');
+    }
+
+    // Fallback: cdp-find-and-click
+    log('Fallback: Tentando encontrar e clicar no botao...', 'warning');
     try {
       const clickResult = await chrome.runtime.sendMessage({ 
         type: 'cdp-find-and-click', 
@@ -1223,25 +1244,6 @@
       }
     } catch (e) {
       log(`CDP find-and-click erro: ${e.message}`, 'warning');
-    }
-
-    // Fallback: try CDP Enter
-    log('Tentando Enter via CDP...', 'warning');
-    const inputElement = findPromptInput();
-    if (inputElement) {
-      inputElement.focus();
-      await delay(300);
-    }
-    
-    try {
-      const enterResult = await chrome.runtime.sendMessage({ type: 'cdp-press-enter' });
-      if (enterResult && enterResult.success) {
-        await delay(2000);
-        log('Prompt enviado (Enter CDP)!', 'success');
-        return true;
-      }
-    } catch (e) {
-      log(`Enter CDP falhou: ${e.message}`, 'warning');
     }
 
     throw new Error('Nao foi possivel enviar o prompt');
