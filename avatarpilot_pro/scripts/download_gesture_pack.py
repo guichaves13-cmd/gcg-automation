@@ -91,8 +91,14 @@ def best_video_file(video_meta: dict) -> dict | None:
 
 def preprocess_video(src: str, dest: str, ffmpeg: str) -> bool:
     """Trim, resize, re-encode to standard template format."""
-    # Probe duration
-    ffprobe = ffmpeg.replace("ffmpeg", "ffprobe")
+    # Probe duration — only replace filename, not full path
+    ff_dir = os.path.dirname(ffmpeg)
+    ff_base = os.path.basename(ffmpeg)
+    probe_base = ff_base.replace("ffmpeg", "ffprobe")
+    ffprobe = os.path.join(ff_dir, probe_base) if ff_dir else "ffprobe"
+    if not os.path.isfile(ffprobe):
+        # Fallback: try PATH
+        ffprobe = shutil.which("ffprobe") or "ffprobe"
     try:
         r = subprocess.run(
             [ffprobe, "-v", "error", "-show_entries", "format=duration",
@@ -100,10 +106,16 @@ def preprocess_video(src: str, dest: str, ffmpeg: str) -> bool:
             capture_output=True, text=True, timeout=15
         )
         dur = float(r.stdout.strip() or 0)
-    except Exception:
+    except Exception as _pe:
+        print(f"  ffprobe error: {_pe}")
         dur = 0
     if dur < MIN_DURATION:
-        print(f"  skip (too short: {dur:.1f}s)")
+        # Validate that source file actually exists/has content
+        try:
+            sz = os.path.getsize(src)
+            print(f"  skip (probed dur={dur:.1f}s, file size={sz} bytes, ffprobe={ffprobe})")
+        except Exception:
+            print(f"  skip (no file)")
         return False
     # Trim to MAX_DURATION starting from frame that's safer (skip first 1s)
     seek = 1.0 if dur > MAX_DURATION + 1 else 0
