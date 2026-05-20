@@ -528,31 +528,82 @@ def save_templates(templates):
 # ============================================================================
 # TTS ENGINES
 # ============================================================================
+def _validate_tts_input(text: str) -> str:
+    """Validate and sanitize text before sending to TTS. Raises ValueError if invalid."""
+    if text is None:
+        raise ValueError("Roteiro vazio: digite o texto que o avatar deve falar.")
+    t = str(text).strip()
+    if not t:
+        raise ValueError("Roteiro vazio: digite o texto que o avatar deve falar.")
+    # Remove control characters that break Edge-TTS
+    t = "".join(ch for ch in t if ch.isprintable() or ch in " \n\t")
+    # If after sanitization only punctuation remains, that also fails Edge-TTS
+    if not any(ch.isalnum() for ch in t):
+        raise ValueError("Roteiro precisa conter palavras (apenas pontuação não funciona).")
+    return t
+
+
 async def _edge_tts_generate(text, voice, output_path):
     import edge_tts
     communicate = edge_tts.Communicate(text, voice)
     await communicate.save(output_path)
 
+
+def _edge_with_retry(coro_factory, voice: str, output_path: str, label: str = "edge-tts"):
+    """
+    Run an edge-tts coroutine with up to 3 retries and clearer error messages.
+    Handles transient `NoAudioReceived` from the Microsoft service (very common).
+    """
+    import time as _t
+    last_err = None
+    for attempt in range(3):
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(coro_factory())
+            # Verify output is non-trivial
+            if os.path.exists(output_path) and os.path.getsize(output_path) > 200:
+                return output_path
+            last_err = Exception("Edge-TTS retornou áudio vazio")
+        except Exception as e:
+            last_err = e
+            name = type(e).__name__
+            print(f"  [Edge-TTS] {label} attempt {attempt+1}/3 voice={voice} -> {name}: {e}")
+        finally:
+            loop.close()
+        _t.sleep(1.5 * (attempt + 1))  # backoff: 1.5s, 3s, 4.5s
+
+    # All retries failed — raise a clear PT-BR error
+    msg = str(last_err) if last_err else "unknown"
+    if "No audio was received" in msg or "NoAudioReceived" in msg:
+        raise Exception(
+            f"Voz '{voice}' não conseguiu gerar áudio (servidor Microsoft Edge-TTS). "
+            f"Soluções: 1) Tente outra voz; 2) Reduza o tamanho do texto; "
+            f"3) Verifique conexão de internet; 4) Tente em alguns minutos (rate limit)."
+        )
+    raise Exception(f"Edge-TTS falhou após 3 tentativas (voz={voice}): {msg}")
+
+
 def edge_tts_generate(text, voice, output_path):
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        loop.run_until_complete(_edge_tts_generate(text, voice, output_path))
-    finally:
-        loop.close()
+    text = _validate_tts_input(text)
+    return _edge_with_retry(
+        lambda: _edge_tts_generate(text, voice, output_path),
+        voice=voice, output_path=output_path, label="basic"
+    )
+
 
 async def _edge_tts_advanced(text, voice, output_path, rate="+0%", pitch="+0Hz"):
     import edge_tts
     communicate = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
     await communicate.save(output_path)
 
+
 def edge_tts_generate_advanced(text, voice, output_path, rate="+0%", pitch="+0Hz"):
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        loop.run_until_complete(_edge_tts_advanced(text, voice, output_path, rate, pitch))
-    finally:
-        loop.close()
+    text = _validate_tts_input(text)
+    return _edge_with_retry(
+        lambda: _edge_tts_advanced(text, voice, output_path, rate, pitch),
+        voice=voice, output_path=output_path, label=f"advanced(rate={rate},pitch={pitch})"
+    )
 
 
 # ─── F5-TTS — SOTA voice cloning (5s reference audio → cloned voice) ───────
@@ -4049,9 +4100,35 @@ def run_pipeline(job_id: str, config: dict):
             # Apply voice preset rate/pitch if set
             rate  = config.get("voice_rate", "+0%")
             pitch = config.get("voice_pitch", "+0Hz")
-            edge_tts_generate_advanced(
-                config["script"], voice, audio_path, rate=rate, pitch=pitch
-            )
+            # Voice fallback list: same locale alternatives if primary voice fails
+            _voice_fallbacks = {
+                "pt-BR": ["pt-BR-AntonioNeural", "pt-BR-FranciscaNeural", "pt-BR-ThalitaNeural"],
+                "pt-PT": ["pt-PT-DuarteNeural", "pt-PT-RaquelNeural"],
+                "en-US": ["en-US-GuyNeural", "en-US-AriaNeural", "en-US-JennyNeural"],
+                "es-MX": ["es-MX-JorgeNeural", "es-MX-DaliaNeural"],
+                "es-ES": ["es-ES-AlvaroNeural", "es-ES-ElviraNeural"],
+            }
+            _locale = voice.rsplit("-", 1)[0] if "-" in voice else "en-US"
+            _candidates = [voice] + [v for v in _voice_fallbacks.get(_locale, []) if v != voice]
+            _last_err = None
+            for _v in _candidates:
+                try:
+                    edge_tts_generate_advanced(
+                        config["script"], _v, audio_path, rate=rate, pitch=pitch
+                    )
+                    if _v != voice:
+                        print(f"  [VoiceFallback] Voz '{voice}' falhou, usando '{_v}' (mesmo idioma)")
+                    voice = _v  # store final voice that worked
+                    break
+                except Exception as _ve:
+                    _last_err = _ve
+                    print(f"  [VoiceFallback] {_v} falhou: {_ve}")
+            else:
+                # All voices failed
+                raise Exception(
+                    f"Nenhuma voz do idioma {_locale} funcionou. Último erro: {_last_err}. "
+                    f"Tente reduzir o texto ou verificar sua conexão."
+                )
             jobs[job_id]["progress"] = 25
 
         # ── Step 1b: Audio normalization ───────────────────────────────────
@@ -5219,6 +5296,17 @@ def api_generate():
         return jsonify({"error": "API key inválida ou ausente. Inclua X-API-Key no header."}), 401
 
     script          = request.form.get("script", "")
+    # Validate script early — unless user uploaded their own audio (audio_upload path)
+    _has_audio = bool(request.files.get("audio"))
+    _script_valid = bool(script and script.strip() and any(c.isalnum() for c in script))
+    if not _has_audio and not _script_valid:
+        return jsonify({
+            "error": "Roteiro vazio: digite o texto que o avatar deve falar (mínimo uma palavra)."
+        }), 400
+    if script and len(script) > 15000:
+        return jsonify({
+            "error": f"Roteiro muito longo ({len(script)} chars). Máximo: 15.000 caracteres."
+        }), 400
     voice           = request.form.get("voice", "en-US-GuyNeural")
     # Legacy: "engine" param was TTS engine. New: prefer "tts_engine" + "video_engine"
     engine          = request.form.get("tts_engine") or request.form.get("engine", "edge-tts")
@@ -5312,10 +5400,10 @@ def api_generate():
 
     # Image
     if "image" not in request.files:
-        return jsonify({"error": "No image uploaded"}), 400
+        return jsonify({"error": "Imagem não enviada. Selecione um avatar (foto ou vídeo) antes de gerar."}), 400
     img_file = request.files["image"]
     if not img_file.filename:
-        return jsonify({"error": "Empty image filename"}), 400
+        return jsonify({"error": "Arquivo de imagem inválido (nome vazio). Tente fazer upload novamente."}), 400
     _img_ext_raw = os.path.splitext(img_file.filename)[1].lower()
     _video_exts  = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".m4v"}
     _image_exts  = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
