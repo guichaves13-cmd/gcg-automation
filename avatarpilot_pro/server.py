@@ -1565,6 +1565,19 @@ def _loop_video_to_duration(video_path: str, audio_path: str, out_path: str) -> 
 
 MUSETALK_DIR = os.path.join(MODELS_DIR, "MuseTalk")
 
+def check_face_swap_ready() -> bool:
+    """Returns True if InsightFace + inswapper_128.onnx are available locally."""
+    try:
+        import insightface  # noqa: F401
+    except ImportError:
+        return False
+    candidates = [
+        os.path.join(MODELS_DIR, "inswapper_128.onnx"),
+        os.path.join(MODELS_DIR, "SadTalker", "inswapper_128.onnx"),
+    ]
+    return any(os.path.exists(p) for p in candidates)
+
+
 def check_musetalk() -> bool:
     """Check if MuseTalk 1.5 is installed and core models are present."""
     unet    = os.path.join(MUSETALK_DIR, "models", "musetalkV15", "unet.pth")
@@ -4552,13 +4565,43 @@ def run_pipeline(job_id: str, config: dict):
                     raise Exception(f"Avatar video inválido após SadTalker/Wav2Lip: {_av_reason}")
 
             else:
-                # Long clips (>90s): SadTalker base animation → loop → Wav2Lip on moving video
-                # This gives real body movement + better lip sync than static image approach
+                # Long clips (>90s) — Quality strategy in order of preference:
+                # 1. GESTURE PACK: if templates exist in static/gesture_videos/, use them.
+                #    Each chunk uses a different template → real human body + hand gestures,
+                #    HeyGen-class output. Face swap with InsightFace + lip sync with MuseTalk.
+                # 2. SADTALKER LOOP: 60s SadTalker base + bounce loop. Talking head only.
+                #    Used when no gesture pack available.
                 _ffmpeg_bin = _ffmpeg_path()
                 _base_video = ""
-
                 _loop_dir = ""
-                if _sadtalker_ok:
+
+                # Try gesture pack first (HeyGen-quality path)
+                _gesture_pack = _list_gesture_templates()
+                _user_gesture = config.get("gesture_video", "")
+                if _user_gesture and os.path.exists(_user_gesture):
+                    _gesture_pack = [_user_gesture] + _gesture_pack
+                if _gesture_pack and check_face_swap_ready():
+                    try:
+                        import tempfile as _lptmp
+                        _loop_dir = _lptmp.mkdtemp(prefix="avp_loop_")
+                        jobs[job_id]["message"] = f"Gesture Pack: {len(_gesture_pack)} templates disponíveis. Montando..."
+                        _seq_video = os.path.join(_loop_dir, "sequence.mp4")
+                        _build_long_gesture_sequence(dur, _gesture_pack, _seq_video, job_id=job_id)
+                        # Face swap onto the assembled gesture sequence
+                        jobs[job_id]["message"] = "Face swap: aplicando rosto do cliente em todos os gestos..."
+                        _swapped = os.path.join(_loop_dir, "swapped.mp4")
+                        swap_face_on_gesture_video(
+                            config["image_path"], _seq_video, _swapped, job_id=job_id
+                        )
+                        if os.path.exists(_swapped) and os.path.getsize(_swapped) > 100_000:
+                            _base_video = _swapped
+                            print(f"  [Pipeline] Gesture pack OK ({len(_gesture_pack)} tpls): {_swapped}")
+                    except Exception as _gpe:
+                        print(f"  [Pipeline] Gesture pack falhou ({_gpe}) — fallback SadTalker loop")
+                        _base_video = ""
+
+                # Fallback: SadTalker base loop (talking head only)
+                if not _base_video and _sadtalker_ok:
                     import tempfile as _ltmp
                     _loop_dir = _ltmp.mkdtemp(prefix="avp_loop_")
                     try:
@@ -5204,6 +5247,98 @@ def add_body_sway_to_video(input_path: str, output_path: str, intensity: float =
 # ============================================================================
 GESTURE_VIDEOS_DIR = os.path.join(BASE_DIR, "static", "gesture_videos")
 os.makedirs(GESTURE_VIDEOS_DIR, exist_ok=True)
+
+
+def _list_gesture_templates() -> list:
+    """List available gesture template videos for multi-template pipeline."""
+    if not os.path.isdir(GESTURE_VIDEOS_DIR):
+        return []
+    valid = []
+    for f in os.listdir(GESTURE_VIDEOS_DIR):
+        if f.startswith(".") or f.startswith("_"): continue  # skip manifest, tmps
+        if f.lower().endswith((".mp4", ".mov", ".webm", ".mkv")):
+            p = os.path.join(GESTURE_VIDEOS_DIR, f)
+            if os.path.isfile(p) and os.path.getsize(p) > 100_000:
+                valid.append(p)
+    return valid
+
+
+def _build_long_gesture_sequence(audio_dur: float, templates: list,
+                                  out_path: str, job_id: str = None) -> str:
+    """
+    For long videos, build a sequence of gesture templates concatenated to cover
+    the audio duration. Uses different templates per chunk to avoid visible repetition.
+    Output: silent video of length ~audio_dur using gesture templates.
+
+    Returns path to the assembled video (no audio yet — audio added by lip sync step).
+    """
+    import tempfile as _tgs, random as _rgs
+    ff  = _ffmpeg_path()
+    ffp = _ffprobe_path()
+    if not templates:
+        raise Exception("Nenhum gesture template disponível.")
+
+    # Get duration of each template
+    template_info = []
+    for tpl in templates:
+        try:
+            r = subprocess.run(
+                [ffp, "-v", "error", "-show_entries", "format=duration",
+                 "-of", "default=noprint_wrappers=1:nokey=1", tpl],
+                capture_output=True, text=True, timeout=10
+            )
+            dur = float(r.stdout.strip() or 0)
+            if dur >= 5:
+                template_info.append((tpl, dur))
+        except Exception:
+            continue
+    if not template_info:
+        raise Exception("Templates inválidos (sem duração).")
+
+    tmp = _tgs.mkdtemp(prefix="gesture_seq_")
+    try:
+        # Build sequence by picking templates in randomized order until audio_dur is covered.
+        # Each template can be used multiple times but never consecutively.
+        rng = _rgs.Random(42)  # deterministic for reproducibility
+        sequence = []
+        accumulated = 0.0
+        last_pick = None
+        while accumulated < audio_dur + 1:
+            choices = [t for t in template_info if t[0] != last_pick] or template_info
+            pick = rng.choice(choices)
+            sequence.append(pick)
+            accumulated += pick[1]
+            last_pick = pick[0]
+
+        if job_id and job_id in jobs:
+            jobs[job_id]["message"] = f"Gesture Pack: montando sequência ({len(sequence)} templates)..."
+        print(f"  [GesturePack] Sequence: {len(sequence)} templates totaling {accumulated:.0f}s")
+
+        # Concat using crossfade between segments for smooth transitions.
+        # First standardize all clips to same resolution/fps (already done in download_gesture_pack
+        # but defensive re-encode in case user mixes uploaded videos).
+        # Simple concat (cuts) is faster — use crossfade only between templates.
+        concat_txt = os.path.join(tmp, "concat.txt")
+        with open(concat_txt, "w") as f:
+            for tpl, _ in sequence:
+                # ffmpeg concat demuxer needs forward-slash paths
+                tpl_safe = tpl.replace("\\", "/").replace("'", "")
+                f.write(f"file '{tpl_safe}'\n")
+
+        # Concat (re-encode required because templates may differ in fps/codec params)
+        cmd = [ff, "-y", "-f", "concat", "-safe", "0", "-i", concat_txt,
+               "-t", str(round(audio_dur + 0.5, 3)),
+               "-c:v", "libx264", "-preset", "fast", "-crf", "20",
+               "-pix_fmt", "yuv420p", "-an", out_path]
+        r = subprocess.run(cmd, capture_output=True,
+                           timeout=max(600, int(audio_dur * 2)))
+        if r.returncode != 0 or not os.path.exists(out_path):
+            err = (r.stderr or b"").decode("utf-8", errors="replace")[-300:]
+            raise Exception(f"Gesture sequence concat falhou: {err}")
+        return out_path
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
 
 def swap_face_on_gesture_video(
     src_photo: str, gesture_video: str, output_path: str,
@@ -6484,7 +6619,52 @@ def api_gesture_videos():
                 "thumb": thumb_url,
                 "duration": round(dur_g, 1),
             })
-    return jsonify({"gesture_videos": videos})
+    return jsonify({"gesture_videos": videos, "face_swap_ready": check_face_swap_ready()})
+
+
+@app.route("/api/admin/gesture_pack/download", methods=["POST"])
+def api_admin_gesture_pack_download():
+    """
+    Admin-only: download a gesture-pack from Pexels (CC0 commercial-free).
+    Body: {"pexels_key": "...", "count": 20}
+    Async — returns immediately. Status polled via /api/gesture_videos.
+    """
+    if not _require_admin(request):
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json(silent=True) or {}
+    key = data.get("pexels_key", "").strip()
+    if not key or len(key) < 10:
+        return jsonify({"error": "pexels_key required (get free at pexels.com/api)"}), 400
+    count = int(data.get("count", 20))
+
+    script = os.path.join(BASE_DIR, "scripts", "download_gesture_pack.py")
+    if not os.path.exists(script):
+        return jsonify({"error": "download_gesture_pack.py missing"}), 500
+
+    # Run in background — uses main venv (has requests)
+    venv_py = sys.executable
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "utf-8"
+    log_path = os.path.join(BASE_DIR, "logs", "gesture_pack_download.log")
+    os.makedirs(os.path.dirname(log_path), exist_ok=True)
+
+    def _runner():
+        try:
+            with open(log_path, "w", encoding="utf-8") as lf:
+                subprocess.run(
+                    [venv_py, script, "--key", key, "--count", str(count)],
+                    stdout=lf, stderr=subprocess.STDOUT, timeout=3600, env=env,
+                )
+            print(f"  [GesturePack] Download complete — see {log_path}", flush=True)
+        except Exception as _e:
+            print(f"  [GesturePack] Download failed: {_e}", flush=True)
+
+    Thread(target=_runner, daemon=True).start()
+    return jsonify({
+        "ok": True,
+        "message": f"Download started (background). Check /api/gesture_videos to see progress.",
+        "log_path": log_path,
+    })
 
 @app.route("/api/gesture_videos/upload", methods=["POST"])
 def api_upload_gesture_video():
