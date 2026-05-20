@@ -1160,36 +1160,47 @@
     // AFTER the debugger is attached (so coordinates account for the infobar shift)
     const findButtonScript = `
       (function() {
-        var btns = document.querySelectorAll('button');
+        var btns = document.querySelectorAll('button, [role="button"], [aria-label="Submit"], [aria-label="Criar"], [aria-label="Enviar"]');
         var best = null;
         var bestRect = null;
         
-        // Strategy 1: Find button with arrow_forward or criar text
-        for (var i = 0; i < btns.length; i++) {
-          var rect = btns[i].getBoundingClientRect();
-          if (rect.width <= 0 || rect.height <= 0) continue;
-          var text = (btns[i].textContent || '').toLowerCase();
-          if (text.includes('arrow_forward') || (text.includes('criar') && !text.includes('apagar'))) {
-            if (rect.top > window.innerHeight * 0.5) {
-              best = btns[i];
-              bestRect = rect;
-              break;
+        var textbox = document.querySelector('[role="textbox"]') || document.querySelector('[contenteditable="true"]');
+        if (textbox) {
+          var tbRect = textbox.getBoundingClientRect();
+          var maxRight = -1;
+          
+          for (var i = 0; i < btns.length; i++) {
+            var r = btns[i].getBoundingClientRect();
+            if (r.width <= 0 || r.height <= 0) continue;
+            
+            // Check if button is vertically aligned with the textbox (within a 60px margin)
+            var isVerticallyAligned = (r.top > tbRect.top - 60) && (r.bottom < tbRect.bottom + 60);
+            
+            // The submit button is to the right of the textbox
+            var isToTheRight = (r.left > tbRect.left + 50); // It's on the right side of the container
+            
+            if (isVerticallyAligned && isToTheRight) {
+              if (r.right > maxRight) {
+                maxRight = r.right;
+                best = btns[i];
+                bestRect = r;
+              }
             }
           }
         }
         
-        // Strategy 2: Rightmost small button in bottom bar
+        // Strategy fallback: find arrow_forward icon if spatial check fails
         if (!best) {
-          var maxRight = 0;
-          for (var j = 0; j < btns.length; j++) {
-            var r = btns[j].getBoundingClientRect();
-            if (r.width <= 0 || r.height <= 0) continue;
-            if (r.top < window.innerHeight * 0.6) continue;
-            if (r.width > 150 || r.height > 60) continue;
-            if (r.right > maxRight) {
-              maxRight = r.right;
-              best = btns[j];
-              bestRect = r;
+          for (var i = 0; i < btns.length; i++) {
+            var rect = btns[i].getBoundingClientRect();
+            if (rect.width <= 0 || rect.height <= 0) continue;
+            var text = (btns[i].textContent || '').toLowerCase();
+            if (text.includes('arrow_forward')) {
+              if (rect.top > window.innerHeight * 0.5) {
+                best = btns[i];
+                bestRect = rect;
+                break;
+              }
             }
           }
         }
@@ -1207,27 +1218,7 @@
     `;
 
     // Send to background.js which will attach debugger, find button, and click
-    // NEW STRATEGY: Try Enter first, since it is more reliable in the new React UI
-    log('Tentando enviar via tecla Enter (CDP)...', 'info');
-    const inputElement = findPromptInput();
-    if (inputElement) {
-      inputElement.focus();
-      await delay(300);
-    }
-    
-    try {
-      const enterResult = await chrome.runtime.sendMessage({ type: 'cdp-press-enter' });
-      if (enterResult && enterResult.success) {
-        await delay(2000);
-        log('Prompt enviado (Enter CDP)!', 'success');
-        return true;
-      }
-    } catch (e) {
-      log(`Enter CDP falhou: ${e.message}`, 'warning');
-    }
-
-    // Fallback: cdp-find-and-click
-    log('Fallback: Tentando encontrar e clicar no botao...', 'warning');
+    log('Tentando encontrar e clicar no botao de enviar...', 'info');
     try {
       const clickResult = await chrome.runtime.sendMessage({ 
         type: 'cdp-find-and-click', 
