@@ -70,7 +70,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let categories = ['Geral'];
 
   // Owner email — always valid, no remote check needed
-  const OWNER_EMAILS = ['guilhermegmvv@gmail.com'];
+  const OWNER_EMAILS = ['guilhermegmvv@gmail.com', 'guichaves13040797@gmail.com'];
 
   // Check if user has a saved license key and if it's still valid
   chrome.storage.local.get(['licenseKey', 'lastValidation'], async (result) => {

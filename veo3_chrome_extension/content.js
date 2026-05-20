@@ -1148,49 +1148,86 @@
   }
 
   // Submit prompt by pressing Enter via CDP (trusted keyboard event)
-  // Google Flow 2026: submit button has icon "arrow_forward" + text "Criar"
+  // Google Flow 2026: submit button is the → arrow icon at the far right of the prompt bar
   async function submitPrompt() {
     log('Enviando prompt...');
 
     const inputElement = findPromptInput();
     if (inputElement) {
       inputElement.focus();
-      await delay(100);
+      await delay(300);
     }
 
-    // Strategy 1: Try clicking the submit button directly (more reliable than Enter)
+    // Strategy 1: Find the rightmost button in the bottom bar area
+    // The submit button (→) is ALWAYS the rightmost button near the prompt input
     const allButtons = document.querySelectorAll('button');
-    let submitClicked = false;
+    let candidates = [];
     
     for (const btn of allButtons) {
+      const rect = btn.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) continue;
+      
+      // Only buttons in the bottom 25% of the screen (prompt bar area)
+      if (rect.top < window.innerHeight * 0.75) continue;
+      
+      // Only buttons that are reasonably small (icon buttons, not large panels)
+      if (rect.width > 200 || rect.height > 80) continue;
+      
       const text = (btn.textContent || '').trim().toLowerCase();
       const ariaLabel = (btn.getAttribute('aria-label') || '').toLowerCase();
-      const rect = btn.getBoundingClientRect();
       
-      if (rect.width <= 0 || rect.height <= 0) continue;
-      if (rect.top < window.innerHeight * 0.5) continue; // Only bottom buttons
-      
-      // Match: arrow_forward icon, "Criar", "Create", "Send", "Enviar"
-      if (text.includes('arrow_forward') || text.includes('criar') || text.includes('create') ||
-          text.includes('send') || text.includes('enviar') ||
-          ariaLabel.includes('criar') || ariaLabel.includes('create') ||
-          ariaLabel.includes('send') || ariaLabel.includes('enviar')) {
-        // Prefer the rightmost button (submit is usually far right)
-        if (!submitClicked || rect.right > 900) {
-          btn.click();
-          submitClicked = true;
-          log('Submit button clicked!', 'success');
-        }
-      }
+      candidates.push({
+        el: btn,
+        right: rect.right,
+        text: text,
+        ariaLabel: ariaLabel,
+        // Score: higher = more likely to be submit
+        score: 0 +
+          (text.includes('arrow_forward') ? 100 : 0) +
+          (text.includes('send') ? 90 : 0) +
+          (text.includes('criar') ? 90 : 0) +
+          (text.includes('create') ? 90 : 0) +
+          (text.includes('enviar') ? 90 : 0) +
+          (ariaLabel.includes('send') ? 80 : 0) +
+          (ariaLabel.includes('criar') ? 80 : 0) +
+          (ariaLabel.includes('submit') ? 80 : 0) +
+          (ariaLabel.includes('enviar') ? 80 : 0) +
+          (text === '→' || text === '➡' ? 100 : 0) +
+          (text.length < 5 ? 20 : 0) + // Small text = likely icon
+          (rect.right > window.innerWidth * 0.6 ? 30 : 0) // Right side of screen
+      });
     }
 
-    if (submitClicked) {
+    // Sort by score DESC, then by rightmost position
+    candidates.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return b.right - a.right;
+    });
+
+    if (candidates.length > 0) {
+      const best = candidates[0];
+      log(`Submit encontrado: text="${best.text.substring(0,20)}" score=${best.score} right=${Math.round(best.right)}`, 'info');
+      
+      // If best candidate has score > 0, click it directly
+      if (best.score > 0) {
+        best.el.click();
+        await delay(1000);
+        log('Prompt enviado (botao submit)!', 'success');
+        return true;
+      }
+      
+      // If no scored match, click the rightmost button in the bottom bar
+      // (The → submit button is always the last button on the right)
+      const rightmost = candidates.reduce((a, b) => a.right > b.right ? a : b);
+      log(`Clicando botao mais a direita: text="${rightmost.text.substring(0,20)}" right=${Math.round(rightmost.right)}`, 'info');
+      rightmost.el.click();
       await delay(1000);
-      log('Prompt enviado!', 'success');
+      log('Prompt enviado (botao direito)!', 'success');
       return true;
     }
 
     // Strategy 2: Fallback to Enter key via CDP
+    log('Nenhum botao submit encontrado, tentando Enter via CDP...', 'warning');
     const result = await chrome.runtime.sendMessage({ type: 'cdp-press-enter' });
     
     if (!result || !result.success) {
