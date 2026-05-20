@@ -145,16 +145,15 @@ async def run(prompts, account=1, model="veo31lite", mult=1):
                 ctx = browser  # persistent context IS the context
                 page = await ctx.new_page()
                 
-                # Inject cookies from config INTO the persistent profile
-                # (first run or when cookies are refreshed)
+                # ALWAYS inject cookies from config — this is the definitive fix.
+                # Even if the profile has old cookies, we overwrite with fresh ones
+                # from veo_accounts.json every time. This prevents stale sessions.
                 if pw_cookies:
-                    existing = await ctx.cookies()
-                    has_session = any(c.get("name","").endswith("session-token") for c in existing)
-                    if not has_session:
-                        log("[COOKIES] Injetando cookies no perfil persistente...")
-                        await ctx.add_cookies(pw_cookies)
-                    else:
-                        log("[COOKIES] Perfil ja tem sessao ativa — reutilizando!")
+                    log("[COOKIES] Injetando cookies frescos no perfil...")
+                    await ctx.add_cookies(pw_cookies)
+                    log(f"[COOKIES] {len(pw_cookies)} cookies injetados com sucesso!")
+                else:
+                    log("[COOKIES] Nenhum cookie no config — usando sessao existente do perfil.")
                         
             except Exception as e:
                 log(f"[NAV] Perfil persistente falhou ({str(e)[:50]}), usando fallback...")
@@ -184,12 +183,30 @@ async def run(prompts, account=1, model="veo31lite", mult=1):
         page.on("pageerror", lambda err: js_errors.append(f"[PAGE_ERROR] {str(err)[:100]}"))
         log("[NAV] Conectado ao Google Flow...")
 
-        # Open page
-        try:
-            await page.goto("https://labs.google/fx/pt/tools/flow", wait_until="domcontentloaded", timeout=45000)
-        except Exception as e:
-            log(f"[NAV] Timeout/erro no load: {str(e)[:60]}")
-        await asyncio.sleep(5)
+        # Open page — try multiple URL patterns for Google Flow 2026
+        flow_urls = [
+            "https://labs.google/fx/pt/tools/flow",
+            "https://labs.google.com/fx/pt/tools/flow",
+            "https://labs.google/fx/tools/flow",
+        ]
+        page_loaded = False
+        for flow_url in flow_urls:
+            try:
+                await page.goto(flow_url, wait_until="domcontentloaded", timeout=45000)
+                page_loaded = True
+                break
+            except Exception as e:
+                log(f"[NAV] URL {flow_url} falhou: {str(e)[:40]}, tentando proxima...")
+                continue
+        
+        if not page_loaded:
+            log("[NAV] Todas as URLs falharam. Tentando URL padrao...")
+            try:
+                await page.goto(flow_urls[0], wait_until="commit", timeout=60000)
+            except Exception as e:
+                log(f"[NAV] Timeout/erro no load: {str(e)[:60]}")
+        
+        await asyncio.sleep(7)  # Wait longer for Flow to fully initialize
 
         # Detect hard rate limits (Error code 253) immediately on load
         try:
@@ -205,38 +222,55 @@ async def run(prompts, account=1, model="veo31lite", mult=1):
                 return
         except: pass
 
-        # Detect login redirect (expired cookies)
+        # Detect login redirect (expired cookies) — with retry
         current_url = page.url.lower()
-        if "accounts.google.com" in current_url or "signin" in current_url or "login" in current_url:
-            if not use_profile:
-                # Try one more time with fresh cookies from file
-                log("[COOKIES] Tentando recarregar cookies do arquivo...")
-                fresh_cfg = load_cfg(account)
-                fresh_cookies = []
-                for c in fresh_cfg.get("cookies", []):
-                    ck = {"name": c["name"], "value": c["value"],
-                          "domain": c.get("domain","labs.google"), "path": c.get("path","/")}
-                    if c.get("expirationDate"): ck["expires"] = c["expirationDate"]
-                    if c.get("secure"): ck["secure"] = True
-                    if c.get("httpOnly"): ck["httpOnly"] = True
-                    ss = str(c.get("sameSite","lax")).lower()
-                    ck["sameSite"] = {"lax":"Lax","strict":"Strict","none":"None"}.get(ss,"Lax")
-                    fresh_cookies.append(ck)
+        is_login_page = "accounts.google.com" in current_url or "signin" in current_url or "login" in current_url
+        
+        if is_login_page:
+            log("[COOKIES] Detectado redirect para login. Tentando reinjetar cookies...")
+            
+            # Re-read cookies from file (user might have updated them)
+            fresh_cfg = load_cfg(account)
+            fresh_cookies = []
+            for c in fresh_cfg.get("cookies", []):
+                ck = {"name": c["name"], "value": c["value"],
+                      "domain": c.get("domain","labs.google"), "path": c.get("path","/")}
+                if c.get("expirationDate"): ck["expires"] = c["expirationDate"]
+                if c.get("secure"): ck["secure"] = True
+                if c.get("httpOnly"): ck["httpOnly"] = True
+                ss = str(c.get("sameSite","lax")).lower()
+                ck["sameSite"] = {"lax":"Lax","strict":"Strict","none":"None"}.get(ss,"Lax")
+                fresh_cookies.append(ck)
+            
+            if fresh_cookies:
+                await ctx.add_cookies(fresh_cookies)
+                log(f"[COOKIES] {len(fresh_cookies)} cookies reinjetados. Recarregando...")
+                await page.goto(flow_urls[0], wait_until="domcontentloaded", timeout=45000)
+                await asyncio.sleep(7)
+                current_url = page.url.lower()
+            
+            # Check again after retry
+            if "accounts.google.com" in current_url or "signin" in current_url:
+                # Last resort: clear profile and try clean injection
+                log("[COOKIES] Ainda no login. Limpando perfil e tentando de novo...")
+                await ctx.clear_cookies()
                 if fresh_cookies:
                     await ctx.add_cookies(fresh_cookies)
-                    await page.goto("https://labs.google/fx/pt/tools/flow", wait_until="domcontentloaded", timeout=45000)
-                    await asyncio.sleep(5)
-                    current_url = page.url.lower()
-            
-            if "accounts.google.com" in current_url or "signin" in current_url:
-                log("[ERRO] Cookies expirados! Re-conecte a conta com cookies novos.")
-                log("[DICA] Feche o Chrome completamente e rode novamente - usará seu perfil logado.")
-                st["running"] = False
-                st["phase"] = "error"
-                st["error"] = "Cookies expirados! Feche o Chrome e rode novamente, ou cole cookies novos."
-                save_st(st)
-                await browser.close()
-                return
+                elif pw_cookies:
+                    await ctx.add_cookies(pw_cookies)
+                await page.goto(flow_urls[0], wait_until="domcontentloaded", timeout=45000)
+                await asyncio.sleep(7)
+                current_url = page.url.lower()
+                
+                if "accounts.google.com" in current_url or "signin" in current_url:
+                    log("[ERRO] Cookies expirados! Re-conecte a conta com cookies novos.")
+                    log("[DICA] Feche o Chrome completamente e rode novamente - usará seu perfil logado.")
+                    st["running"] = False
+                    st["phase"] = "error"
+                    st["error"] = "Cookies expirados! Feche o Chrome e rode novamente, ou cole cookies novos."
+                    save_st(st)
+                    await browser.close()
+                    return
 
         # Ensure we're on a project page
         if "/project/" not in current_url:
