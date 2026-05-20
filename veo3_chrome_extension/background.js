@@ -232,136 +232,163 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  // Insert text using Chrome DevTools Protocol (creates trusted input events)
-  if (message.type === 'cdp-insert-text') {
+  // ============ ATOMIC CDP: Full prompt submission in ONE debugger session ============
+  // This eliminates race conditions from multiple attach/detach cycles.
+  // Sequence: Click textbox → Ctrl+A+Delete → Input.insertText → Wait → Click submit
+  if (message.type === 'cdp-full-prompt') {
     const tabId = sender.tab.id;
     const text = message.text;
     
-    const doInsert = async () => {
-      try {
-        for (let i = 0; i < text.length; i++) {
-          const char = text[i];
-          
-          await new Promise((resolve, reject) => {
-            chrome.debugger.sendCommand({ tabId }, 'Input.dispatchKeyEvent', {
-              type: 'keyDown', text: char, unmodifiedText: char, key: char
-            }, () => {
-              if (chrome.runtime.lastError) return reject(chrome.runtime.lastError);
-              
-              chrome.debugger.sendCommand({ tabId }, 'Input.dispatchKeyEvent', {
-                type: 'char', text: char, unmodifiedText: char, key: char
-              }, () => {
-                if (chrome.runtime.lastError) return reject(chrome.runtime.lastError);
-                
-                chrome.debugger.sendCommand({ tabId }, 'Input.dispatchKeyEvent', {
-                  type: 'keyUp', key: char
-                }, () => {
-                  if (chrome.runtime.lastError) return reject(chrome.runtime.lastError);
-                  resolve();
-                });
-              });
-            });
-          });
-          
-          // Small delay between characters for React to catch up
-          await new Promise(r => setTimeout(r, 2));
-        }
-        
-        chrome.debugger.detach({ tabId }, () => {
-          sendResponse({ success: true });
-        });
-      } catch (err) {
-        console.log('[Veo3] Typing error:', err.message);
-        chrome.debugger.detach({ tabId }, () => {
-          sendResponse({ success: false, error: err.message });
-        });
-      }
-    };
-    
-    chrome.debugger.attach({ tabId }, '1.3', () => {
-      if (chrome.runtime.lastError) {
-        const errMsg = chrome.runtime.lastError.message || '';
-        if (errMsg.includes('Already attached') || errMsg.includes('already being inspected')) {
-          doInsert();
-        } else {
-          console.log('[Veo3] Debugger attach error:', errMsg);
-          sendResponse({ success: false, error: errMsg });
-        }
-        return;
-      }
-      doInsert();
-    });
-    return true;
-  }
-
-  // Clear text field using CDP backspace keys
-  if (message.type === 'cdp-clear-field') {
-    const tabId = sender.tab.id;
-    
-    const doClear = () => {
-      // Select all with Ctrl+A then delete
-      chrome.debugger.sendCommand({ tabId }, 'Input.dispatchKeyEvent', {
-        type: 'keyDown', modifiers: 2, windowsVirtualKeyCode: 65, key: 'a', code: 'KeyA'
-      }, () => {
-        chrome.debugger.sendCommand({ tabId }, 'Input.dispatchKeyEvent', {
-          type: 'keyUp', modifiers: 2, windowsVirtualKeyCode: 65, key: 'a', code: 'KeyA'
-        }, () => {
-          chrome.debugger.sendCommand({ tabId }, 'Input.dispatchKeyEvent', {
-            type: 'keyDown', windowsVirtualKeyCode: 8, key: 'Backspace', code: 'Backspace'
-          }, () => {
-            chrome.debugger.sendCommand({ tabId }, 'Input.dispatchKeyEvent', {
-              type: 'keyUp', windowsVirtualKeyCode: 8, key: 'Backspace', code: 'Backspace'
-            }, () => {
-              chrome.debugger.detach({ tabId }, () => {
-                sendResponse({ success: true });
-              });
-            });
-          });
+    // Helper: send a CDP command as a Promise
+    function cdp(method, params) {
+      return new Promise((resolve, reject) => {
+        chrome.debugger.sendCommand({ tabId }, method, params || {}, (result) => {
+          if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+          else resolve(result);
         });
       });
+    }
+    
+    // Helper: click at coordinates
+    async function clickAt(x, y) {
+      await cdp('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'none' });
+      await new Promise(r => setTimeout(r, 30));
+      await cdp('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1, buttons: 1, pointerType: 'mouse' });
+      await new Promise(r => setTimeout(r, 50));
+      await cdp('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1, buttons: 0, pointerType: 'mouse' });
+    }
+
+    const doFullPrompt = async () => {
+      try {
+        // Wait for infobar animation
+        await new Promise(r => setTimeout(r, 400));
+        
+        // Step 1: Find textbox and click it to get Slate.js focus
+        const tbResult = await cdp('Runtime.evaluate', {
+          expression: `(function() {
+            var tb = document.querySelector('[role="textbox"]') || document.querySelector('[contenteditable="true"]');
+            if (!tb) return JSON.stringify({found: false});
+            var r = tb.getBoundingClientRect();
+            return JSON.stringify({ found: true, x: Math.round(r.left + 20), y: Math.round(r.top + r.height / 2) });
+          })()`,
+          returnByValue: true
+        });
+        
+        const tbData = JSON.parse(tbResult.result.value);
+        if (!tbData.found) throw new Error('Textbox not found');
+        
+        await clickAt(tbData.x, tbData.y);
+        await new Promise(r => setTimeout(r, 300));
+        
+        // Step 2: Clear existing text (Ctrl+A then Backspace)
+        await cdp('Input.dispatchKeyEvent', { type: 'rawKeyDown', modifiers: 2, windowsVirtualKeyCode: 65, key: 'a', code: 'KeyA' });
+        await cdp('Input.dispatchKeyEvent', { type: 'keyUp', modifiers: 2, windowsVirtualKeyCode: 65, key: 'a', code: 'KeyA' });
+        await cdp('Input.dispatchKeyEvent', { type: 'rawKeyDown', windowsVirtualKeyCode: 8, key: 'Backspace', code: 'Backspace' });
+        await cdp('Input.dispatchKeyEvent', { type: 'keyUp', windowsVirtualKeyCode: 8, key: 'Backspace', code: 'Backspace' });
+        await new Promise(r => setTimeout(r, 200));
+        
+        // Step 3: Insert text using Input.insertText (generates trusted beforeinput events for Slate.js)
+        await cdp('Input.insertText', { text: text });
+        await new Promise(r => setTimeout(r, 500));
+        
+        // Step 4: Find and click submit button (coordinates are fresh, post-infobar)
+        const btnResult = await cdp('Runtime.evaluate', {
+          expression: `(function() {
+            var best = null, bestRect = null;
+            
+            // Strategy 1: Find arrow_forward or send icon
+            var icons = document.querySelectorAll('.google-symbols, .material-symbols-outlined, i, span');
+            for (var i = 0; i < icons.length; i++) {
+              var t = (icons[i].textContent || '').trim().toLowerCase();
+              if (t === 'arrow_forward' || t === 'send') {
+                var r = icons[i].getBoundingClientRect();
+                if (r.top > window.innerHeight * 0.4 && r.width > 0) {
+                  var parent = icons[i].closest('button, [role="button"]');
+                  best = parent || icons[i];
+                  bestRect = best.getBoundingClientRect();
+                  break;
+                }
+              }
+            }
+            
+            // Strategy 2: Rightmost button aligned with textbox
+            if (!best) {
+              var tb = document.querySelector('[role="textbox"]');
+              if (tb) {
+                var tbR = tb.getBoundingClientRect();
+                var btns = document.querySelectorAll('button, [role="button"]');
+                var maxR = -1;
+                for (var j = 0; j < btns.length; j++) {
+                  var r = btns[j].getBoundingClientRect();
+                  if (r.width > 10 && r.width < 80 && r.height > 10 && r.height < 80) {
+                    if (r.top > tbR.top - 40 && r.bottom < tbR.bottom + 40 && r.left > tbR.left + 50) {
+                      if (r.right > maxR) { maxR = r.right; best = btns[j]; bestRect = r; }
+                    }
+                  }
+                }
+              }
+            }
+            
+            if (!best || !bestRect) return JSON.stringify({found: false});
+            return JSON.stringify({
+              found: true,
+              x: Math.round(bestRect.left + bestRect.width / 2),
+              y: Math.round(bestRect.top + bestRect.height / 2),
+              text: (best.textContent || '').trim().substring(0, 30)
+            });
+          })()`,
+          returnByValue: true
+        });
+        
+        const btnData = JSON.parse(btnResult.result.value);
+        if (!btnData.found) {
+          console.log('[Veo3] Submit button not found after text insertion');
+          chrome.debugger.detach({ tabId });
+          sendResponse({ success: false, error: 'Submit button not found - text may not have been registered' });
+          return;
+        }
+        
+        await clickAt(btnData.x, btnData.y);
+        await new Promise(r => setTimeout(r, 300));
+        
+        chrome.debugger.detach({ tabId }, () => {
+          sendResponse({ success: true, x: btnData.x, y: btnData.y, text: btnData.text });
+        });
+        
+      } catch (err) {
+        console.log('[Veo3] Full prompt error:', err.message);
+        try { chrome.debugger.detach({ tabId }); } catch(e) {}
+        sendResponse({ success: false, error: err.message });
+      }
     };
     
     chrome.debugger.attach({ tabId }, '1.3', () => {
       if (chrome.runtime.lastError) {
         const errMsg = chrome.runtime.lastError.message || '';
         if (errMsg.includes('Already attached') || errMsg.includes('already being inspected')) {
-          doClear();
+          doFullPrompt();
         } else {
           sendResponse({ success: false, error: errMsg });
         }
         return;
       }
-      doClear();
+      doFullPrompt();
     });
     return true;
   }
 
-  // Click at coordinates using CDP (trusted click)
-  // CRITICAL: Must send mouseMoved BEFORE mousePressed for Chrome to register the click target
+  // Simple CDP click (still needed for image inclusion)
   if (message.type === 'cdp-click') {
     const tabId = sender.tab.id;
     const { x, y } = message;
     
     const doClick = () => {
-      // Step 1: Move mouse to target (required for Chrome to know WHERE to click)
-      chrome.debugger.sendCommand({ tabId }, 'Input.dispatchMouseEvent', {
-        type: 'mouseMoved', x, y, button: 'none'
-      }, () => {
-        // Step 2: Small delay for move to register
+      chrome.debugger.sendCommand({ tabId }, 'Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'none' }, () => {
         setTimeout(() => {
-          // Step 3: mousePressed
-          chrome.debugger.sendCommand({ tabId }, 'Input.dispatchMouseEvent', {
-            type: 'mousePressed', x, y, button: 'left', clickCount: 1, buttons: 1, pointerType: 'mouse'
-          }, () => {
-            // Step 4: Small delay between press and release (natural click behavior)
+          chrome.debugger.sendCommand({ tabId }, 'Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1, buttons: 1, pointerType: 'mouse' }, () => {
             setTimeout(() => {
-              // Step 5: mouseReleased
-              chrome.debugger.sendCommand({ tabId }, 'Input.dispatchMouseEvent', {
-                type: 'mouseReleased', x, y, button: 'left', clickCount: 1, buttons: 0, pointerType: 'mouse'
-              }, () => {
-                chrome.debugger.detach({ tabId }, () => {
-                  sendResponse({ success: true });
-                });
+              chrome.debugger.sendCommand({ tabId }, 'Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1, buttons: 0, pointerType: 'mouse' }, () => {
+                chrome.debugger.detach({ tabId }, () => { sendResponse({ success: true }); });
               });
             }, 50);
           });
@@ -371,126 +398,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     
     chrome.debugger.attach({ tabId }, '1.3', () => {
       if (chrome.runtime.lastError) {
-        // Debugger may already be attached — try detach first then re-attach
         const errMsg = chrome.runtime.lastError.message || '';
-        if (errMsg.includes('Already attached') || errMsg.includes('already being inspected')) {
-          // Already attached, just proceed with click
-          doClick();
-        } else {
-          console.log('[Veo3] CDP attach error:', errMsg);
-          sendResponse({ success: false, error: errMsg });
-        }
+        if (errMsg.includes('Already attached') || errMsg.includes('already being inspected')) { doClick(); }
+        else { sendResponse({ success: false, error: errMsg }); }
         return;
       }
       doClick();
-    });
-    return true;
-  }
-
-  // Find and click using CDP (resolves the infobar shift issue)
-  if (message.type === 'cdp-find-and-click') {
-    const tabId = sender.tab.id;
-    const findScript = message.findScript;
-    
-    const doFindAndClick = () => {
-      // Allow a small delay for the layout shift to finish (infobar animation)
-      setTimeout(() => {
-        chrome.debugger.sendCommand({ tabId }, 'Runtime.evaluate', {
-          expression: findScript,
-          returnByValue: true
-        }, (result) => {
-          if (chrome.runtime.lastError || !result || !result.result || !result.result.value) {
-            chrome.debugger.detach({ tabId });
-            sendResponse({ success: false, error: chrome.runtime.lastError ? chrome.runtime.lastError.message : 'Evaluation failed' });
-            return;
-          }
-          
-          try {
-            const data = JSON.parse(result.result.value);
-            if (!data.found) {
-              chrome.debugger.detach({ tabId });
-              sendResponse({ success: false, error: 'Element not found by script' });
-              return;
-            }
-            
-            const { x, y, text } = data;
-            
-            // Now click at the calculated coordinates
-            chrome.debugger.sendCommand({ tabId }, 'Input.dispatchMouseEvent', {
-              type: 'mouseMoved', x, y, button: 'none'
-            }, () => {
-              setTimeout(() => {
-                chrome.debugger.sendCommand({ tabId }, 'Input.dispatchMouseEvent', {
-                  type: 'mousePressed', x, y, button: 'left', clickCount: 1, buttons: 1, pointerType: 'mouse'
-                }, () => {
-                  setTimeout(() => {
-                    chrome.debugger.sendCommand({ tabId }, 'Input.dispatchMouseEvent', {
-                      type: 'mouseReleased', x, y, button: 'left', clickCount: 1, buttons: 0, pointerType: 'mouse'
-                    }, () => {
-                      chrome.debugger.detach({ tabId }, () => {
-                        sendResponse({ success: true, x, y, text });
-                      });
-                    });
-                  }, 50);
-                });
-              }, 30);
-            });
-          } catch (e) {
-            chrome.debugger.detach({ tabId });
-            sendResponse({ success: false, error: 'JSON parse error: ' + e.message });
-          }
-        });
-      }, 300); // 300ms delay to allow infobar layout shift
-    };
-    
-    chrome.debugger.attach({ tabId }, '1.3', () => {
-      if (chrome.runtime.lastError) {
-        const errMsg = chrome.runtime.lastError.message || '';
-        if (errMsg.includes('Already attached') || errMsg.includes('already being inspected')) {
-          doFindAndClick();
-        } else {
-          sendResponse({ success: false, error: errMsg });
-        }
-        return;
-      }
-      doFindAndClick();
-    });
-    return true;
-  }
-
-  // Press Ctrl+Enter using CDP (reliable fallback for Slate.js editors)
-  if (message.type === 'cdp-ctrl-enter') {
-    const tabId = sender.tab.id;
-    
-    const doCtrlEnter = () => {
-      chrome.debugger.sendCommand({ tabId }, 'Input.dispatchKeyEvent', {
-        type: 'rawKeyDown', modifiers: 2, windowsVirtualKeyCode: 13, key: 'Enter', code: 'Enter'
-      }, () => {
-        chrome.debugger.sendCommand({ tabId }, 'Input.dispatchKeyEvent', {
-          type: 'char', modifiers: 2, text: '\r', unmodifiedText: '\r', windowsVirtualKeyCode: 13, key: 'Enter', code: 'Enter'
-        }, () => {
-          chrome.debugger.sendCommand({ tabId }, 'Input.dispatchKeyEvent', {
-            type: 'keyUp', modifiers: 2, windowsVirtualKeyCode: 13, key: 'Enter', code: 'Enter'
-          }, () => {
-            chrome.debugger.detach({ tabId }, () => {
-              sendResponse({ success: true });
-            });
-          });
-        });
-      });
-    };
-    
-    chrome.debugger.attach({ tabId }, '1.3', () => {
-      if (chrome.runtime.lastError) {
-        const errMsg = chrome.runtime.lastError.message || '';
-        if (errMsg.includes('Already attached') || errMsg.includes('already being inspected')) {
-          doCtrlEnter();
-        } else {
-          sendResponse({ success: false, error: errMsg });
-        }
-        return;
-      }
-      doCtrlEnter();
     });
     return true;
   }

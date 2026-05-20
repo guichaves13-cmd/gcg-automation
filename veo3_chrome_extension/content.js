@@ -1113,194 +1113,33 @@
     return null;
   }
 
-  // Enter prompt using Chrome DevTools Protocol (trusted input events)
-  async function enterPrompt(promptText) {
-    log('Inserindo prompt via CDP...');
+  // Enter AND submit prompt in one atomic CDP operation
+  // background.js handles: focus textbox → clear → insert text → find submit button → click
+  async function enterAndSubmitPrompt(promptText) {
+    log('Enviando prompt atomicamente via CDP...');
 
-    const inputElement = findPromptInput();
-    if (!inputElement) {
-      throw new Error('Não foi possível encontrar o campo de texto para o prompt');
-    }
-
-    // Passo 1: Focar a caixa de texto usando CDP nativo (Click físico)
-    // Isso é vital para o Slate.js inicializar o cursor/seleção internamente.
-    const focusScript = `
-      (function() {
-        var tb = document.querySelector('[role="textbox"]') || document.querySelector('[contenteditable="true"]');
-        if (!tb) return JSON.stringify({found: false});
-        var r = tb.getBoundingClientRect();
-        return JSON.stringify({
-          found: true,
-          x: Math.round(r.left + 20),
-          y: Math.round(r.top + 10),
-          text: 'textbox'
-        });
-      })()
-    `;
-    
-    try {
-      await chrome.runtime.sendMessage({ type: 'cdp-find-and-click', findScript: focusScript });
-      await delay(300);
-    } catch (e) {
-      log('Aviso: falha no clique CDP da textbox', 'warning');
-    }
-
-    // Passo 2: Limpar via CDP
-    try {
-      await chrome.runtime.sendMessage({ type: 'cdp-clear-field' });
-      await delay(200);
-    } catch (e) {}
-
-    // Passo 3: Digitação letra por letra via CDP (Única forma aceita pelo React/Slate)
-    const result = await chrome.runtime.sendMessage({ type: 'cdp-insert-text', text: promptText });
+    const result = await chrome.runtime.sendMessage({ type: 'cdp-full-prompt', text: promptText });
     
     if (!result || !result.success) {
-      // Se CDP falhou, lançar erro para parar a automação (evita o texto fantasma)
-      throw new Error(`Falha ao inserir texto via CDP: ${result?.error || 'erro desconhecido'}`);
+      throw new Error(`CDP full-prompt falhou: ${result?.error || 'erro desconhecido'}`);
     }
 
-    await delay(300);
-    log('Prompt inserido perfeitamente no Slate.js.', 'success');
+    log(`Prompt enviado! Botao clicado em (${result.x}, ${result.y})`, 'success');
     return true;
   }
 
-  // Submit prompt using CDP trusted events
-  // CRITICAL: We send a JS snippet to background.js, which:
-  //   1. Attaches debugger (Chrome shows infobar, page shifts down)
-  //   2. Uses Runtime.evaluate to find the button WITH FRESH coordinates (after shift)
-  //   3. Clicks at those exact coordinates
-  // This avoids the bug where coordinates calculated before attach become wrong after attach.
+  // Keep enterPrompt and submitPrompt as wrappers for backward compatibility
+  async function enterPrompt(promptText) {
+    // This is now handled by enterAndSubmitPrompt, but we keep it for callers
+    // that still use the two-step flow
+    log('enterPrompt chamado (delegando para atomico)...');
+    return true; // No-op, enterAndSubmitPrompt does everything
+  }
+
   async function submitPrompt() {
-    log('Enviando prompt...');
-
-    const findButtonScript = `
-      (function() {
-        var best = null;
-        var bestRect = null;
-        var isDisabled = false;
-        
-        var icons = document.querySelectorAll('.google-symbols, .material-symbols-outlined, i, span');
-        for (var i = 0; i < icons.length; i++) {
-          var t = (icons[i].textContent || '').trim().toLowerCase();
-          if (t === 'arrow_forward' || t === 'send') {
-            var r = icons[i].getBoundingClientRect();
-            if (r.top > window.innerHeight * 0.5 && r.width > 0) {
-              best = icons[i];
-              bestRect = r;
-              // Check if parent button is disabled
-              var parentBtn = best.closest('button, [role="button"]');
-              if (parentBtn && (parentBtn.disabled || parentBtn.hasAttribute('disabled'))) {
-                isDisabled = true;
-              }
-              break;
-            }
-          }
-        }
-        
-        if (!best) {
-          var textbox = document.querySelector('[role="textbox"]') || document.querySelector('[contenteditable="true"]');
-          if (textbox) {
-            var tbRect = textbox.getBoundingClientRect();
-            var all = document.querySelectorAll('*');
-            var maxRight = -1;
-            for (var j = 0; j < all.length; j++) {
-              var el = all[j];
-              var r = el.getBoundingClientRect();
-              if (r.width > 10 && r.width < 100 && r.height > 10 && r.height < 100) {
-                if (r.top > tbRect.top - 30 && r.bottom < tbRect.bottom + 30) {
-                  if (r.left > tbRect.right) {
-                    if (r.right > maxRight) {
-                      var style = window.getComputedStyle(el);
-                      if (style.cursor === 'pointer' || el.tagName === 'BUTTON' || el.tagName === 'SVG') {
-                        maxRight = r.right;
-                        best = el;
-                        bestRect = r;
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-        
-        if (!best || !bestRect) return JSON.stringify({ found: false });
-        return JSON.stringify({
-          found: true,
-          disabled: isDisabled,
-          x: Math.round(bestRect.left + bestRect.width / 2),
-          y: Math.round(bestRect.top + bestRect.height / 2),
-          text: (best.textContent || '').trim().substring(0, 30)
-        });
-      })()
-    `;
-
-    let buttonFoundAndClicked = false;
-    log('Tentando encontrar e clicar no botao de enviar...', 'info');
-    try {
-      const clickResult = await chrome.runtime.sendMessage({ type: 'cdp-find-and-click', findScript: findButtonScript });
-      
-      if (clickResult && clickResult.success) {
-        if (clickResult.disabled) {
-          log('ALERTA: O botao de enviar foi encontrado mas parece estar DESABILITADO pelo Google Flow!', 'error');
-        }
-        log(`Botao clicado em (${clickResult.x}, ${clickResult.y})`, 'info');
-        buttonFoundAndClicked = true;
-        await delay(1000); // Wait briefly before considering it fully successful
-      } else {
-        log(`CDP find-and-click falhou: ${clickResult?.error || 'unknown'}`, 'warning');
-      }
-    } catch (e) {
-      log(`CDP find-and-click erro: ${e.message}`, 'warning');
-    }
-
-    if (!buttonFoundAndClicked) {
-      log('Fallback: Tentando enviar via Ctrl+Enter...', 'warning');
-      const inputElement = findPromptInput();
-      if (inputElement) {
-        inputElement.focus();
-        await delay(300);
-      }
-      try {
-        const enterResult = await chrome.runtime.sendMessage({ type: 'cdp-ctrl-enter' });
-        if (enterResult && enterResult.success) {
-          await delay(1000);
-          buttonFoundAndClicked = true;
-          log('Prompt enviado (Ctrl+Enter)!', 'success');
-        }
-      } catch (e) {
-        log(`Ctrl+Enter falhou: ${e.message}`, 'warning');
-      }
-    }
-
-    // Ultimate Fallback: Native DOM Brute-Force
-    if (!buttonFoundAndClicked) {
-      log('Fallback Extremo: Brute-force DOM click...', 'error');
-      const icons = document.querySelectorAll('.google-symbols, .material-symbols-outlined, i, span');
-      let domBtn = null;
-      for (const icon of icons) {
-        const t = (icon.textContent || '').trim().toLowerCase();
-        if (t === 'arrow_forward' || t === 'send') {
-          domBtn = icon.closest('button, [role="button"]') || icon;
-          break;
-        }
-      }
-      if (domBtn) {
-        domBtn.click();
-        domBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
-        domBtn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
-        log('DOM click forcado executado', 'warning');
-        buttonFoundAndClicked = true;
-        await delay(1000);
-      }
-    }
-
-    if (buttonFoundAndClicked) {
-      log('Processo de submissao concluido', 'success');
-      return true;
-    }
-
-    throw new Error('Nao foi possivel enviar o prompt de nenhuma maneira');
+    // This is now handled by enterAndSubmitPrompt
+    log('submitPrompt chamado (delegando para atomico)...');
+    return true; // No-op, enterAndSubmitPrompt does everything
   }
 
   // Format time remaining
@@ -1596,18 +1435,7 @@
           if (shouldStop) break;
 
           try {
-            await enterPrompt(prompt);
-            await delay(150);
-          } catch (e) {
-            log(`Erro ao inserir prompt: ${e.message}`, 'error');
-            continue;
-          }
-
-          await waitIfPaused();
-          if (shouldStop) break;
-
-          try {
-            await submitPrompt();
+            await enterAndSubmitPrompt(prompt);
           } catch (e) {
             log(`Erro ao enviar prompt: ${e.message}`, 'error');
             continue;
@@ -1616,18 +1444,7 @@
         } else {
           // NO IMAGES: just enter prompt and submit
           try {
-            await enterPrompt(prompt);
-            await delay(150);
-          } catch (e) {
-            log(`Erro ao inserir prompt: ${e.message}`, 'error');
-            continue;
-          }
-
-          await waitIfPaused();
-          if (shouldStop) break;
-
-          try {
-            await submitPrompt();
+            await enterAndSubmitPrompt(prompt);
           } catch (e) {
             log(`Erro ao enviar prompt: ${e.message}`, 'error');
             continue;
@@ -1665,9 +1482,7 @@
             
             // Try submitting the same prompt again
             try {
-              await enterPrompt(prompt);
-              await delay(150);
-              await submitPrompt();
+              await enterAndSubmitPrompt(prompt);
               await delay(2000);
               
               // Check if error persists
