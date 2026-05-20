@@ -8,8 +8,9 @@ Features: SadTalker lip sync (chunked for 30min-1h), Edge-TTS/ElevenLabs,
           plan-based duration limits (30min / 1h).
 """
 import os, sys, json, time, uuid, asyncio, subprocess, re, shutil, hashlib, threading, math, sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import Flask, render_template, request, jsonify, send_from_directory, Response
+import threading
 from threading import Thread
 
 # ── Fix Windows encoding ────────────────────────────────────────────────────
@@ -65,8 +66,37 @@ webhook_registry = {}   # {job_id: [url, ...]}
 global_webhooks  = []   # URLs notified on every completed job
 
 # ── Cloud GPU max workers ─────────────────────────────────────────────────────
-MAX_WORKERS   = 3       # concurrent SadTalker jobs (cloud can handle more)
+def _detect_safe_max_workers() -> int:
+    """
+    Auto-detect safe concurrency based on GPU VRAM.
+    MuseTalk needs ~4-5GB, SadTalker ~3GB, GFPGAN ~2GB per job.
+    Conservative limits prevent OOM deadlocks:
+      <=10GB VRAM  -> 1 worker (RTX 4060/3060, integrated)
+      <=16GB VRAM  -> 2 workers (RTX 4070, A4000)
+      <=24GB VRAM  -> 3 workers (RTX 4080/3090, A5000)
+       >24GB VRAM  -> 4 workers (RTX 4090, A6000, A100)
+    Override via env var AVP_MAX_WORKERS.
+    """
+    env_override = os.environ.get("AVP_MAX_WORKERS", "").strip()
+    if env_override.isdigit() and int(env_override) > 0:
+        return int(env_override)
+    try:
+        import torch as _td
+        if _td.cuda.is_available():
+            total_gb = _td.cuda.get_device_properties(0).total_memory / 1024**3
+            if total_gb <= 10:  return 1
+            if total_gb <= 16:  return 2
+            if total_gb <= 24:  return 3
+            return 4
+    except Exception:
+        pass
+    return 1  # safe default for unknown hardware
+
+MAX_WORKERS = _detect_safe_max_workers()
 active_workers = 0
+# Semaphore enforces real concurrency limit (prevents VRAM/CPU oversubscription
+# when many users submit simultaneously). active_workers stays for UI display.
+_pipeline_semaphore = threading.Semaphore(MAX_WORKERS)
 workers_lock   = threading.Lock()
 
 # ── Simple in-memory rate limiter (no external deps) ─────────────────────────
@@ -100,7 +130,9 @@ DISK_WARN_MB    = 500    # warn when free disk < 500MB
 DISK_BLOCK_MB   = 100    # block new jobs when < 100MB free
 VRAM_MIN_GB     = 1.5    # minimum free VRAM to start MuseTalk
 _temp_prefixes  = ("mst_avp_", "mst_chunk_", "avp_loop_", "avp_hd_", "sway_",
-                   "avp_sad_", "wav2lip_", "fswap_vid_")
+                   "avp_sad_", "wav2lip_", "fswap_vid_",
+                   "echo_avp_", "codeformer_avp_", "gfpgan_avp_",
+                   "gfpgan_chunk_", "w2l_chunks_", "st_chunks_", "chroma_")
 
 def _free_disk_mb() -> float:
     """Return free disk MB on the output drive."""
@@ -249,6 +281,14 @@ def save_settings(s):
 # ============================================================================
 def init_db():
     conn = sqlite3.connect(DB_PATH)
+    # WAL mode for concurrent reader/writer safety (essential for hundreds of users).
+    # Default 'rollback journal' mode blocks readers during writes — would cause stalls.
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")  # safe with WAL, much faster
+        conn.execute("PRAGMA busy_timeout=5000")   # wait 5s before SQLITE_BUSY error
+    except Exception as _pe:
+        print(f"  [SQLite] WAL pragma failed (non-fatal): {_pe}")
     conn.execute("""CREATE TABLE IF NOT EXISTS jobs_db (
         id TEXT PRIMARY KEY,
         status TEXT DEFAULT 'queued',
@@ -4044,9 +4084,27 @@ def ask_groq(prompt: str, max_tokens: int = 2048, model: str = "llama-3.3-70b-ve
 def run_pipeline(job_id: str, config: dict):
     """Run full avatar generation pipeline with plan limits."""
     global active_workers
-    with workers_lock:
-        active_workers += 1
+    # Hard concurrency limit — block here if MAX_WORKERS already busy.
+    # Prevents VRAM/CPU oversubscription when many users submit at once.
+    # Job stays "queued" in DB; user polling sees "queued" status until slot opens.
+    _semaphore_acquired = False
     try:
+        # First, update UI to show "queued" while waiting for slot
+        with jobs_lock:
+            if job_id in jobs and jobs[job_id].get("status") == "queued":
+                jobs[job_id]["message"] = f"Aguardando vaga (max {MAX_WORKERS} jobs simultâneos)..."
+        _pipeline_semaphore.acquire()  # BLOCKS until slot available
+        _semaphore_acquired = True
+
+        # Check if user cancelled while we were waiting
+        with jobs_lock:
+            if job_id in jobs and jobs[job_id].get("_cancel"):
+                jobs[job_id]["status"]  = "cancelled"
+                jobs[job_id]["message"] = "Cancelado pelo usuário antes de iniciar."
+                return  # finally releases semaphore
+
+        with workers_lock:
+            active_workers += 1
         plan = config.get("plan", DEFAULT_PLAN)
 
         # ── Pre-flight: disk space guard ───────────────────────────────────────
@@ -4848,6 +4906,10 @@ def run_pipeline(job_id: str, config: dict):
     finally:
         with workers_lock:
             active_workers = max(0, active_workers - 1)
+        # Release semaphore slot for next queued job
+        if _semaphore_acquired:
+            try: _pipeline_semaphore.release()
+            except Exception: pass
         # Release GPU memory
         release_vram()
         # Clean up tmp files (keep final output only)
@@ -7911,9 +7973,72 @@ def _attach_request_id():
 # + GFPGAN chunked ~30min + HD encode ~20min ≈ 3h total). Tune up for slower hardware.
 _STUCK_JOB_TIMEOUT_MIN = 240
 
+def _auto_cleanup_old_outputs():
+    """
+    Background disk-space guardian. Hundreds of users will fill the disk
+    in days. Auto-prune output files older than configured retention.
+    - Triggers if disk free < 5GB OR every 6h regardless.
+    - Keeps recent jobs (last 7 days by default).
+    - Removes orphan intermediates (avatar/audio/captioned/thumb) older than 24h.
+    """
+    try:
+        free_mb = _free_disk_mb()
+        retention_days  = 7    # final outputs kept this long
+        intermediates_h = 24   # intermediates always pruned after 1 day
+        now = time.time()
+        deleted = 0
+        freed = 0
+        # Patterns by retention class
+        long_patterns  = ("_final.mp4",)
+        short_patterns = ("_avatar.mp4", "_audio.mp3", "_audio.wav",
+                          "_audio_norm.mp3", "_captioned.mp4", "_sync.mp4",
+                          "_sway.mp4", "_gfpgan.mp4", "_musetalk.mp4",
+                          "_fmt.mp4", "_wm.mp4", "_music.mp4", "_fade.mp4",
+                          "_fswap.mp4", "preview_")
+        # Force more aggressive cleanup if disk pressure
+        if free_mb < 5000:
+            retention_days = 2
+            intermediates_h = 6
+            print(f"  [AutoCleanup] DISK PRESSURE ({free_mb:.0f}MB free) — aggressive prune", flush=True)
+        long_cutoff  = now - retention_days * 86400
+        short_cutoff = now - intermediates_h * 3600
+        try:
+            for fname in os.listdir(OUTPUT_DIR):
+                fpath = os.path.join(OUTPUT_DIR, fname)
+                if not os.path.isfile(fpath): continue
+                try:
+                    mtime = os.path.getmtime(fpath)
+                except Exception: continue
+                # Intermediate files
+                if any(p in fname for p in short_patterns):
+                    if mtime < short_cutoff:
+                        try:
+                            sz = os.path.getsize(fpath)
+                            os.remove(fpath)
+                            freed += sz; deleted += 1
+                        except Exception: pass
+                # Final outputs
+                elif any(fname.endswith(p) for p in long_patterns) or fname.endswith("_thumb.jpg") or fname.endswith(".srt"):
+                    if mtime < long_cutoff:
+                        try:
+                            sz = os.path.getsize(fpath)
+                            os.remove(fpath)
+                            freed += sz; deleted += 1
+                        except Exception: pass
+        except Exception as _le:
+            print(f"  [AutoCleanup] OUTPUT_DIR scan failed: {_le}", flush=True)
+        # Also prune temp dirs from crashed jobs
+        _cleanup_orphan_tmps()
+        if deleted > 0:
+            print(f"  [AutoCleanup] Removed {deleted} files, freed {freed/1024/1024:.1f}MB", flush=True)
+    except Exception as _ce:
+        print(f"  [AutoCleanup] failed: {_ce}", flush=True)
+
+
 def _watchdog_loop():
-    """Runs every 60s. Kills jobs stuck in processing for >4h."""
+    """Runs every 60s. Kills jobs stuck in processing for >4h. Auto-cleanup every 6h."""
     import time as _wt
+    _last_cleanup = _wt.time()
     while True:
         try:
             _wt.sleep(60)
@@ -7941,11 +8066,26 @@ def _watchdog_loop():
                         jobs[jid]["progress"] = 0
                         db_save_job(jid, jobs[jid])
                         print(f"  [Watchdog] Job {jid} marcado como error (stuck timeout)", flush=True)
-            # Alert on memory growth
+            # Memory leak detection
             with jobs_lock:
                 n_jobs = len(jobs)
             if n_jobs > 500:
                 print(f"  [Watchdog] ALERTA: {n_jobs} jobs em memória — possível leak", flush=True)
+                # Aggressive prune of done/error jobs from in-memory dict (they stay in SQLite)
+                with jobs_lock:
+                    cutoff_ts = (_now - timedelta(hours=2)).isoformat()
+                    to_remove = [jid for jid, jd in jobs.items()
+                                 if jd.get("status") in ("done", "error", "cancelled")
+                                 and jd.get("created", "") < cutoff_ts]
+                    for jid in to_remove:
+                        del jobs[jid]
+                    if to_remove:
+                        print(f"  [Watchdog] Pruned {len(to_remove)} old jobs from memory", flush=True)
+            # Auto-cleanup of disk every 6h OR when disk pressure
+            free_mb = _free_disk_mb()
+            if _wt.time() - _last_cleanup > 6 * 3600 or free_mb < 5000:
+                _auto_cleanup_old_outputs()
+                _last_cleanup = _wt.time()
         except Exception as _we:
             print(f"  [Watchdog] Erro interno: {_we}", flush=True)
 
