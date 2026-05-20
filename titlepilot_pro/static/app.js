@@ -464,23 +464,31 @@ async function batchAnalyze(){
 
 function escHtml(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')}
 
-// MY CHANNELS
-async function loadChannels(){
-  const r=await fetch('/api/channels');
-  const d=await r.json();
+// =============================================
+// LOCAL STORAGE HELPERS (SaaS Privacy)
+// Each user's data lives ONLY in their browser
+// =============================================
+function getMyChannels(){ try{ return JSON.parse(localStorage.getItem('my_channels')||'[]'); }catch(e){ return []; } }
+function saveMyChannels(arr){ localStorage.setItem('my_channels', JSON.stringify(arr)); }
+function getSavedChannels(){ try{ return JSON.parse(localStorage.getItem('saved_channels')||'[]'); }catch(e){ return []; } }
+function saveSavedChannels(arr){ localStorage.setItem('saved_channels', JSON.stringify(arr)); }
+
+// MY CHANNELS — 100% client-side (no server call)
+function loadChannels(){
+  const channels = getMyChannels();
   const el=document.getElementById('channels-list');
   if(!el)return;
   // Populate metrics dropdown
   const sel=document.getElementById('metric-channel');
   if(sel){
     sel.innerHTML='<option value="">Select channel...</option>';
-    (d.channels||[]).forEach(c=>{
+    channels.forEach(c=>{
       sel.innerHTML+=`<option value="${c.id}">${escHtml(c.name)}</option>`;
     });
   }
-  if(!d.channels||!d.channels.length){el.innerHTML='<p style="color:#666">No channels saved yet.</p>';return}
+  if(!channels.length){el.innerHTML='<p style="color:#666">No channels saved yet. Add one above!</p>';return}
   let html='';
-  d.channels.forEach(c=>{
+  channels.forEach(c=>{
     let kws=(c.keywords||[]).map(k=>`<span class="tag tag-blue">${escHtml(k)}</span>`).join('');
     let subs=(c.subniches||[]).map(s=>`<span class="tag tag-green">${escHtml(s)}</span>`).join('');
     let structs=(c.reference_structures||[]).map(s=>`<span class="tag tag-purple">${escHtml(s)}</span>`).join('');
@@ -492,7 +500,7 @@ async function loadChannels(){
         <h3>${escHtml(c.name)}</h3>
         <div style="display:flex;gap:6px">
           <button class="btn-primary" style="padding:6px 12px;font-size:11px" onclick='analyzeChannel(${cdata})'>🧠 Discover Subniches</button>
-          <button class="btn-secondary" style="padding:6px 12px;font-size:11px" onclick="deleteChannel(${c.id})">❌</button>
+          <button class="btn-secondary" style="padding:6px 12px;font-size:11px" onclick="deleteChannel('${c.id}')">❌</button>
         </div>
       </div>
       <div style="font-size:12px;color:#888;margin:4px 0">${escHtml(c.url||'')}</div>
@@ -661,7 +669,8 @@ async function scanChannel(){
   if(!ch){alert('Enter channel handle');return}
   loading(true,'Scanning channel with YouTube API...');
   try{
-    const r=await fetch('/api/youtube/channel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({channel:ch,max_videos:30})});
+    const payload = {channel:ch, max_videos:30, yt_api_key: localStorage.getItem('yt_api_key')||''};
+    const r=await fetch('/api/youtube/channel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     const d=await r.json();
     if(d.error){document.getElementById('yt-ch-result').innerHTML=`<div class="score-card" style="color:var(--red)">${escHtml(d.error)}</div>`;return}
     
@@ -688,7 +697,8 @@ async function scanNiche(){
   const region=document.getElementById('yt-niche-region').value;
   loading(true,'Deep-diving into niche...');
   try{
-    const r=await fetch('/api/youtube/niche',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:q,region})});
+    const payload = {query:q, region, yt_api_key: localStorage.getItem('yt_api_key')||''};
+    const r=await fetch('/api/youtube/niche',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     const d=await r.json();
     if(d.error){document.getElementById('yt-niche-result').innerHTML=`<div class="score-card" style="color:var(--red)">${escHtml(d.error)}</div>`;return}
     
@@ -724,7 +734,8 @@ async function scanTrending(){
   const cat=document.getElementById('yt-trend-cat').value;
   loading(true,'Scanning trending videos...');
   try{
-    const r=await fetch('/api/youtube/trending',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:q,region,category_id:cat})});
+    const payload = {query:q, region, category_id:cat, yt_api_key: localStorage.getItem('yt_api_key')||''};
+    const r=await fetch('/api/youtube/trending',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     const d=await r.json();
     if(d.error){document.getElementById('yt-trend-result').innerHTML=`<div class="score-card" style="color:var(--red)">${escHtml(d.error)}</div>`;return}
     let html=`<div class="score-card"><h2 style="color:var(--accent)">🔥 ${q?'Search: "'+escHtml(q)+'"':'Trending Now'} (${d.region})</h2></div>`;
@@ -741,7 +752,8 @@ async function compareChannels(){
   const channels=text.split('\n').map(s=>s.trim()).filter(s=>s);
   loading(true,`Comparing ${channels.length} channels...`);
   try{
-    const r=await fetch('/api/youtube/compare',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({channels})});
+    const payload = {channels, yt_api_key: localStorage.getItem('yt_api_key')||''};
+    const r=await fetch('/api/youtube/compare',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     const d=await r.json();
     if(d.error){document.getElementById('yt-compare-result').innerHTML=`<div class="score-card" style="color:var(--red)">${escHtml(d.error)}</div>`;return}
     let html='';
@@ -810,7 +822,8 @@ async function scanNewbornVirals(){
   if(!q){alert('Enter a niche or theme');return}
   loading(true,'Scanning for NEWBORN VIRALS (channels < 40 days or few videos)...');
   try{
-    const r=await fetch('/api/youtube/newborn_virals',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:q})});
+    const payload = {query:q, yt_api_key: localStorage.getItem('yt_api_key')||''};
+    const r=await fetch('/api/youtube/newborn_virals',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     const d=await r.json();
     if(d.error){document.getElementById('yt-newborn-result').innerHTML=`<div class="score-card" style="color:var(--red)">${escHtml(d.error)}</div>`;return}
     
@@ -861,7 +874,8 @@ async function scanNewbornVirals(){
 async function remixStrategyFromViral(title, niche){
   loading(true, 'Extracting DNA & Building Strategy Remix...');
   try{
-    const r=await fetch('/api/strategy_from_viral',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title,niche,language:document.getElementById('sub-lang').value})});
+    const payload = {title, niche, language:document.getElementById('sub-lang').value, ai_api_key: getAIKey()};
+    const r=await fetch('/api/strategy_from_viral',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     const d=await r.json();
     
     // Switch to strategy tab and show result
@@ -937,17 +951,23 @@ async function checkAiStatus(){
 async function loadAiMonitor(){
   try{
     const r=await fetch('/api/ai/status');
+    if(!r.ok) throw new Error(`HTTP ${r.status}`);
     const d=await r.json();
     const avail=(d.providers||[]).filter(p=>p.available).length;
     const total=(d.providers||[]).length;
     const hColors={healthy:'#10b981',degraded:'#f59e0b',down:'#ef4444'};
     
-    document.getElementById('mon-health').textContent=d.health?.toUpperCase()||'UNKNOWN';
-    document.getElementById('mon-health').style.color=hColors[d.health]||'#888';
-    document.getElementById('mon-available').textContent=`${avail}/${total}`;
-    document.getElementById('mon-available').style.color=avail>=3?'#10b981':avail>=1?'#f59e0b':'#ef4444';
-    document.getElementById('mon-calls').textContent=d.stats?.total_calls||0;
-    document.getElementById('mon-cache').textContent=d.stats?.cache_hits||0;
+    const elHealth=document.getElementById('mon-health');
+    const elAvail=document.getElementById('mon-available');
+    const elCalls=document.getElementById('mon-calls');
+    const elCache=document.getElementById('mon-cache');
+    const elProviders=document.getElementById('mon-providers');
+    const elLog=document.getElementById('mon-log');
+    
+    if(elHealth){elHealth.textContent=d.health?.toUpperCase()||'UNKNOWN';elHealth.style.color=hColors[d.health]||'#888';}
+    if(elAvail){elAvail.textContent=`${avail}/${total}`;elAvail.style.color=avail>=3?'#10b981':avail>=1?'#f59e0b':'#ef4444';}
+    if(elCalls) elCalls.textContent=d.stats?.total_calls||0;
+    if(elCache) elCache.textContent=d.stats?.cache_hits||0;
     
     let html='';
     (d.providers||[]).forEach(p=>{
@@ -959,8 +979,8 @@ async function loadAiMonitor(){
       html+=`<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:#0d1117;border-radius:8px;border:1px solid ${online?'#1e3a2f':'#3a1e1e'}">
         <span style="font-size:18px">${icon}</span>
         <div style="flex:1">
-          <div style="font-weight:600;font-size:13px">${p.name}</div>
-          <div style="font-size:11px;color:#666">${p.model} <span style="color:${typeColor};font-weight:600">[${p.type?.toUpperCase()}]</span></div>
+          <div style="font-weight:600;font-size:13px">${p.name||'Unknown'}</div>
+          <div style="font-size:11px;color:#666">${p.model||''} <span style="color:${typeColor};font-weight:600">[${(p.type||'').toUpperCase()}]</span></div>
         </div>
         <div style="text-align:right">
           <div style="font-size:12px;color:${color};font-weight:600">${online?'ONLINE':cd>0?'Cooldown '+cd+'s':'OFFLINE'}</div>
@@ -968,12 +988,13 @@ async function loadAiMonitor(){
         </div>
       </div>`;
     });
-    document.getElementById('mon-providers').innerHTML=html;
+    if(elProviders) elProviders.innerHTML=html;
     
-    let log=`<div style="color:#555">Keys: Gemini=${d.keys?.gemini?'✓':'✗'} Groq=${d.keys?.groq?'✓':'✗'} | Cache: ${d.cache_size} entries | Updated: ${new Date().toLocaleTimeString()}</div>`;
-    document.getElementById('mon-log').innerHTML=log;
+    let log=`<div style="color:#555">Keys: Gemini=${d.keys?.gemini?'✓':'✗'} Groq=${d.keys?.groq?'✓':'✗'} | Cache: ${d.cache_size||0} entries | Updated: ${new Date().toLocaleTimeString()}</div>`;
+    if(elLog) elLog.innerHTML=log;
   }catch(e){
-    document.getElementById('mon-providers').innerHTML=`<div style="color:#ef4444">Error loading AI status: ${e.message}</div>`;
+    const el=document.getElementById('mon-providers');
+    if(el) el.innerHTML=`<div style="color:#ef4444">Error loading AI status: ${e.message}</div>`;
   }
 }
 
