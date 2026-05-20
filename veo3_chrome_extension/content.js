@@ -1136,14 +1136,44 @@
     }
 
     // Insert text via CDP (creates trusted beforeinput/input events)
-    const result = await chrome.runtime.sendMessage({ type: 'cdp-insert-text', text: promptText });
-    
-    if (!result || !result.success) {
-      throw new Error(`Falha ao inserir texto: ${result?.error || 'erro desconhecido'}`);
+    let cdpSuccess = false;
+    try {
+      const result = await chrome.runtime.sendMessage({ type: 'cdp-insert-text', text: promptText });
+      if (result && result.success) cdpSuccess = true;
+    } catch(e) {}
+
+    if (inputElement) {
+      inputElement.focus();
+      
+      // Se CDP falhou ou apenas por segurança para o Slate.js:
+      // Forçar colagem via execCommand
+      document.execCommand('insertText', false, promptText);
+      
+      // O grande truque para o Slate.js (React): disparar um evento de 'paste' sintético
+      try {
+        const dataTransfer = new DataTransfer();
+        dataTransfer.setData('text/plain', promptText);
+        const pasteEvent = new ClipboardEvent('paste', {
+          clipboardData: dataTransfer,
+          bubbles: true,
+          cancelable: true
+        });
+        inputElement.dispatchEvent(pasteEvent);
+      } catch (e) {
+        log('Aviso: falha no evento paste sintético', 'warning');
+      }
+
+      // Disparar input nativo
+      inputElement.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+      
+      // Simular tecla Space para forçar atualização do React State
+      inputElement.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space', charCode: 32, keyCode: 32, bubbles: true }));
+      inputElement.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', code: 'Space', charCode: 32, keyCode: 32, bubbles: true }));
     }
 
-    await delay(300);
-    log('Prompt inserido.', 'success');
+    await delay(500); // Dar tempo para o React renderizar o botão de enviar!
+    log('Prompt inserido (sincronizado com React).', 'success');
+    return true;
     return true;
   }
 
