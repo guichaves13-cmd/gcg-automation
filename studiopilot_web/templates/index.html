@@ -4,8 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>G.C.G VideosMAX - Producao Autonoma</title>
+<link rel="icon" type="image/x-icon" href="/static/favicon.ico">
 <link rel="stylesheet" href="/static/style.css">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 </head>
 <body>
 <nav class="sidebar">
@@ -23,6 +25,7 @@
     <button class="nav-btn" onclick="showPage('pipeline')"><span class="icon">&#x1F916;</span>Pipeline IA<span class="version ver">v9.0</span></button>
     <button class="nav-btn" onclick="showPage('planner')"><span class="icon">&#x1F4CB;</span>Planner<span class="version new">NOVO</span></button>
     <button class="nav-btn" onclick="showPage('research')"><span class="icon">&#x1F50D;</span>Video Research<span class="version ver">v9.0</span></button>
+    <button class="nav-btn" onclick="showPage('scheduler')"><span class="icon">&#x23F0;</span>Agendador<span class="version new">NOVO</span></button>
   </div>
   <div class="sidebar-section">
     <div class="sidebar-section-title">Ferramentas</div>
@@ -32,6 +35,23 @@
     <button class="nav-btn" onclick="showPage('settings')"><span class="icon">&#x2699;</span>Configuracoes</button>
     <button class="nav-btn" onclick="showPage('diagnostic')"><span class="icon">&#x1FA7A;</span>Diagnostico IA</button>
     <button class="nav-btn" onclick="showPage('radar')"><span class="icon">&#x1F4E1;</span>Radar YouTube</button>
+    <button class="nav-btn" onclick="showPage('channels')"><span class="icon">&#x1F4FA;</span>My Channels<span class="version ver">v2</span></button>
+    <button class="nav-btn" onclick="showPage('thumbnail')"><span class="icon">&#x1F5BC;</span>Thumbnail IA<span class="version new">NOVO</span></button>
+    <button class="nav-btn" onclick="showPage('templates')"><span class="icon">&#x1F4E6;</span>Templates<span class="version new">NOVO</span></button>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Novas Features</div>
+    <button class="nav-btn" onclick="showPage('subtitles')"><span class="icon">&#x1F4DD;</span>Subtitle Editor<span class="version new">NOVO</span></button>
+    <button class="nav-btn" onclick="showPage('brand-kit')"><span class="icon">&#x1F3A8;</span>Brand Kit<span class="version new">NOVO</span></button>
+    <button class="nav-btn" onclick="showPage('audio-to-video')"><span class="icon">&#x1F3B5;</span>Audio p/ Video<span class="version new">NOVO</span></button>
+    <button class="nav-btn" onclick="showPage('clipper')"><span class="icon">&#x2702;</span>Clipper IA<span class="version new">NOVO</span></button>
+    <button class="nav-btn" onclick="showPage('image-gen')"><span class="icon">&#x1F5BC;</span>IA Image Gen<span class="version new">NOVO</span></button>
+    <button class="nav-btn" onclick="showPage('translate')"><span class="icon">&#x1F310;</span>Tradutor IA<span class="version new">NOVO</span></button>
+    <button class="nav-btn" onclick="showPage('social')"><span class="icon">&#x1F4E4;</span>Publicar Rede<span class="version new">NOVO</span></button>
+    <button class="nav-btn" onclick="showPage('blog-video')"><span class="icon">&#x1F4F0;</span>Blog p/ Video<span class="version new">NOVO</span></button>
+    <button class="nav-btn" onclick="showPage('yt-upload')"><span class="icon">&#x1F4E4;</span>YouTube Upload<span class="version new">NOVO</span></button>
+    <button class="nav-btn" onclick="showPage('ppt-to-video')"><span class="icon">&#x1F4C4;</span>PPT p/ Video<span class="version new">NOVO</span></button>
+    <button class="nav-btn" onclick="showPage('auto-mode')"><span class="icon">&#x1F916;</span>Modo Auto<span class="version new">NOVO</span></button>
   </div>
   <div class="sidebar-footer"><div class="lang">PT-BR</div></div>
 </nav>
@@ -50,6 +70,23 @@
     <div class="stat-card"><div class="stat-icon purple">&#x1F4CA;</div><div><div class="stat-label">Total</div><div class="stat-value" id="stat-total">0</div><div class="stat-label">videos criados</div></div></div>
     <div class="stat-card"><div class="stat-icon green">&#x1F4CB;</div><div><div class="stat-label">Pipeline</div><div class="stat-value" id="stat-pipeline">0</div><div class="stat-label">itens no planner</div></div></div>
     <div class="stat-card"><div class="stat-icon orange">&#x1F4BE;</div><div><div class="stat-label">Armazenamento</div><div class="stat-value" id="stat-storage">0 B</div><div class="stat-label">espaco usado</div></div></div>
+  </div>
+  <!-- CHARTS ROW -->
+  <div class="content-grid two" style="grid-template-columns:2fr 1fr;gap:18px;margin-bottom:18px">
+    <div class="section-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <h3 style="margin:0">&#x1F4C8; Producoes (7 dias)</h3>
+        <span style="font-size:11px;color:var(--dim)" id="chart-7-label">Carregando...</span>
+      </div>
+      <canvas id="chart-productions" height="200" style="max-height:220px"></canvas>
+    </div>
+    <div class="section-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <h3 style="margin:0">&#x1F4CA; Pipelines</h3>
+        <span style="font-size:11px;color:var(--dim)" id="chart-pipe-count">0</span>
+      </div>
+      <canvas id="chart-pipelines" height="200" style="max-height:220px"></canvas>
+    </div>
   </div>
   <div class="content-grid">
     <div class="section-card">
@@ -119,7 +156,7 @@
   <div id="sync-status" style="display:none;margin-top:16px" class="section-card">
     <h3>&#x1F50D; Monitoramento em Tempo Real</h3>
     <div id="sync-msg" style="margin:12px 0;font-size:13px;color:var(--accent)">Aguardando...</div>
-    <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span id="sync-phase-label" style="font-size:12px;color:var(--dim)">Inicializando</span><span id="sync-pct" style="font-weight:700">0%</span></div>
+    <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span id="sync-phase-label" style="font-size:12px;color:var(--dim)">Inicializando</span><span style="display:flex;align-items:center;gap:8px"><span id="progress-eta"></span><span id="sync-pct" style="font-weight:700">0%</span></span></div>
     <div style="background:var(--card);border-radius:8px;height:8px"><div id="sync-bar" style="background:var(--accent);height:100%;border-radius:8px;width:0;transition:width .4s"></div></div>
 
     <!-- 8-phase AI status list -->
@@ -148,7 +185,25 @@
       <div id="live-log" style="background:#0d0d1a;border:1px solid rgba(6,182,212,.15);border-radius:8px;padding:10px;font-family:monospace;font-size:11px;max-height:140px;overflow-y:auto;line-height:1.6"></div>
     </div>
 
-    <!-- Quality report (shown after Auditor Final) -->
+    <!-- Quality Score Panel (Agent 3 - enhanced) -->
+    <div id="quality-score-panel">
+      <div class="qs-header">
+        <div class="qs-ring-container">
+          <svg width="100" height="100" viewBox="0 0 100 100">
+            <circle class="qs-ring-bg" cx="50" cy="50" r="40"/>
+            <circle class="qs-ring" id="qs-ring" cx="50" cy="50" r="40"/>
+          </svg>
+          <div class="qs-pct" id="qs-pct">0%</div>
+        </div>
+        <div class="qs-info">
+          <div class="qs-label" id="qs-label">Analisando...</div>
+          <div class="qs-desc">Score de qualidade do v&iacute;deo gerado pelo IA Auditor Final</div>
+        </div>
+      </div>
+      <div class="qs-breakdown" id="qs-breakdown"></div>
+    </div>
+
+    <!-- Quality report (legacy fallback) -->
     <div id="quality-report" style="display:none;margin-top:14px;padding:14px;border-radius:10px;border:1px solid rgba(16,185,129,.3);background:rgba(16,185,129,.06)">
       <div style="font-size:12px;font-weight:700;color:var(--green);margin-bottom:6px">&#x2705; Relatorio de Qualidade — IA Auditor Final</div>
       <div id="qr-score" style="font-size:28px;font-weight:800;color:var(--green)">--</div>
@@ -199,6 +254,53 @@
     <div style="margin-top:12px"><label>PROMPTS VEO3 CUSTOMIZADOS (opcional)</label><textarea id="pipe-custom-prompts" class="input" rows="4" placeholder="Cole seus prompts VEO3 aqui (1 por linha)..."></textarea></div>
     <button class="btn btn-primary" style="width:100%;margin-top:16px;padding:14px;font-size:16px" onclick="startPipeline()">&#x1F680; INICIAR PRODUCAO COM 5 IAs</button>
   </div>
+
+  <!-- Seletor de Shot Types -->
+  <div class="section-card" style="margin-top:16px" id="shot-type-card">
+    <h3>&#x1F3AC; Tipos de Cena (Shot Types)</h3>
+    <p style="color:var(--dim);font-size:12px;margin-bottom:8px">Selecione os tipos de enquadramento que o B-roll deve usar:</p>
+    <div class="shot-type-grid" id="shot-type-selector"></div>
+  </div>
+
+  <!-- B-Roll Preview -->
+  <div class="section-card" style="margin-top:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <h3 style="margin:0">&#x1F4F7; Preview de B-roll</h3>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="number" id="broll-preview-count" value="12" min="4" max="50" style="width:60px;padding:6px 8px;font-size:11px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;color:var(--text)">
+        <button class="btn btn-secondary" style="font-size:12px;padding:8px 14px" onclick="previewBroll()">&#x1F50D; Preview B-roll</button>
+      </div>
+    </div>
+    <p style="color:var(--dim);font-size:12px;margin:8px 0">Veja thumbnails ANTES de gerar o video. Use a timeline para organizar.</p>
+    <div id="broll-preview-section">
+      <div class="broll-preview-header">
+        <span id="broll-preview-count-display">0 clips encontrados</span>
+        <div class="toggle-wrap">
+          <label class="toggle">
+            <input type="checkbox" id="toggle-timeline" onchange="document.getElementById('timeline-section').style.display=this.checked?'block':'none'">
+            <span class="toggle-slider"></span>
+          </label>
+          <span class="toggle-label">Timeline</span>
+        </div>
+      </div>
+      <div class="broll-preview-grid" id="broll-preview-grid"></div>
+    </div>
+  </div>
+
+  <!-- Timeline Visual -->
+  <div class="section-card" style="margin-top:16px;display:none" id="timeline-section">
+    <div class="timeline-header">
+      <h3 style="margin:0">&#x1F4CB; Timeline de B-roll <span id="tl-count">0</span></h3>
+      <div class="timeline-tools">
+        <span id="tl-summary" style="font-size:11px;color:var(--dim)"></span>
+        <button class="btn btn-ghost" style="font-size:11px;padding:6px 10px" onclick="saveTimeline()">&#x1F4BE; Salvar</button>
+        <button class="btn btn-ghost" style="font-size:11px;padding:6px 10px;color:var(--red)" onclick="clearTimeline()">&#x1F5D1; Limpar</button>
+      </div>
+    </div>
+    <div class="timeline-track" id="timeline-track"></div>
+    <p style="font-size:10px;color:var(--dim);margin-top:6px">Arraste os clips para reordenar. Use as setas para mover.</p>
+  </div>
+
 </div>
 
 <!-- RADAR YOUTUBE -->
@@ -246,6 +348,29 @@
   <div id="radar-results"></div>
 </div>
 
+<!-- MY CHANNELS -->
+<div id="page-channels" class="page">
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <div>
+      <h2 style="display:flex;align-items:center;gap:12px"><span style="font-size:28px">&#x1F4FA;</span> My Channels — Gerenciamento de Canais YouTube</h2>
+      <p style="color:var(--dim);margin-top:8px">Gerencie seus canais, veja estatisticas e detecte tendencias.</p>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-secondary" onclick="loadChannels()">&#x1F504; Atualizar</button>
+    </div>
+  </div>
+  <div class="section-card" style="margin-top:16px">
+    <div style="display:grid;grid-template-columns:3fr 1fr;gap:16px">
+      <div><label>ADICIONAR CANAL (ID ou URL)</label><input type="text" id="ch-add-input" class="input" placeholder="UCxxxxxx ou https://youtube.com/@canal"></div>
+      <div><label>&nbsp;</label><button class="btn btn-primary" style="width:100%" onclick="addChannel()">&#x2795; Adicionar</button></div>
+    </div>
+    <div style="margin-top:8px;font-size:12px;color:var(--dim)">Canais adicionados aqui serao usados como fonte de B-roll nos videos. Os IDs tambem sao salvos nas configuracoes.</div>
+  </div>
+  <div id="ch-results" style="margin-top:16px">
+    <div style="color:var(--dim);text-align:center;padding:40px">Carregando canais...</div>
+  </div>
+</div>
+
 <!-- VEO3 -->
 <div id="page-veo3" class="page">
   <h2>&#x26A1; Gerador VEO 3 - Prompts em Massa</h2>
@@ -256,34 +381,162 @@
       <span style="color:var(--dim)"><span id="veo3-count">0</span> prompts detectados</span>
       <div style="display:flex;gap:8px">
         <button class="btn btn-ghost" onclick="document.getElementById('veo3-prompts').value='';updateVeo3Count()">&#x1F5D1; Limpar</button>
-        <button class="btn btn-primary" onclick="fetch('/api/veo3/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompts:document.getElementById('veo3-prompts').value})}).then(r=>r.json()).then(d=>toast(d.count+' prompts prontos!'))">&#x1F680; Processar Prompts</button>
+        <button class="btn btn-primary" onclick="processVeo3Prompts()">&#x1F680; Processar Prompts</button>
       </div>
     </div>
   </div>
   <div class="section-card" style="margin-top:12px">
     <h3>&#x1F916; Auto-Gerar Prompts com IA</h3>
-    <p style="color:var(--dim);font-size:13px;margin-bottom:12px">A IA analisa seu video avatar e gera prompts VEO3 cinematicos automaticamente para cada cena.</p>
-    <div style="background:rgba(6,182,212,.05);border:1px solid rgba(6,182,212,.15);border-radius:8px;padding:12px;margin-bottom:12px;font-size:12px;color:var(--dim)">
-      <b style="color:var(--accent)">Como usar:</b> 1. Carregue um avatar no Sincronizador → 2. Volte aqui → 3. Clique em Auto-Gerar
+    <p style="color:var(--dim);font-size:13px;margin-bottom:12px">A IA gera prompts VEO3 cinematicos automaticamente. Pode usar com avatar OU apenas com tema.</p>
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px;margin-bottom:12px">
+      <div>
+        <label style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--dim)">TEMA / ASSUNTO DO VIDEO</label>
+        <input type="text" id="veo3-topic" class="input" placeholder="Ex: deep ocean creatures, ancient civilizations, space exploration..." style="width:100%;margin-top:4px">
+      </div>
+      <div>
+        <label style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--dim)">QTD DE PROMPTS</label>
+        <select id="veo3-qty" class="input" style="width:100%;margin-top:4px">
+          <option value="10">10 prompts</option>
+          <option value="20">20 prompts</option>
+          <option value="30" selected>30 prompts</option>
+          <option value="50">50 prompts</option>
+        </select>
+      </div>
     </div>
-    <button class="btn btn-yellow" style="width:100%;padding:14px;font-size:15px" onclick="autoGenerateVeo3Prompts()">&#x2728; Auto-Gerar Prompts do Avatar (IA Gemini)</button>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-yellow" style="flex:1;padding:14px;font-size:15px" onclick="autoGenerateVeo3Prompts()">&#x2728; Gerar Prompts por Tema (IA)</button>
+      <button class="btn btn-secondary" style="padding:14px;font-size:13px" onclick="autoGenerateFromAvatar()">&#x1F3AC; Gerar do Avatar</button>
+    </div>
   </div>
+
+  <!-- FLOW CONNECTION -->
+  <div class="section-card" style="margin-top:12px">
+    <h3>&#x1F517; Conexao com Google Flow (VEO3)</h3>
+    <p style="color:var(--dim);font-size:13px;margin-bottom:16px">Conecte suas contas do Flow para enviar prompts diretamente sem precisar da aba aberta.</p>
+    
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <!-- CONTA VEO1 -->
+      <div style="background:rgba(6,182,212,.05);border:1px solid rgba(6,182,212,.15);border-radius:12px;padding:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <h4 style="color:var(--accent)">&#x1F4E1; VEO1 — Conta Principal</h4>
+          <span id="veo1-status" style="font-size:11px;padding:4px 10px;border-radius:12px;background:rgba(239,68,68,.1);color:#ef4444;border:1px solid rgba(239,68,68,.2)">&#x1F534; Desconectada</span>
+        </div>
+        <label style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--dim)">COOKIES DO FLOW (JSON)</label>
+        <textarea id="veo1-cookies" class="input" rows="3" placeholder='Cole os cookies do Flow aqui. Use a extensao "EditThisCookie" ou exporte do DevTools (F12 > Application > Cookies)' style="font-size:11px;margin-top:4px"></textarea>
+        <label style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);margin-top:8px;display:block">PROJECT ID (URL do Flow)</label>
+        <input type="text" id="veo1-project" class="input" placeholder="Ex: 17c12ccb-6cc1-45bf-b148-a638af7dfea0" style="width:100%;font-size:12px;margin-top:4px">
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="btn btn-secondary" style="flex:1;font-size:12px" onclick="connectVeoAccount(1)">&#x1F517; Conectar</button>
+          <button class="btn btn-primary" style="flex:1;font-size:12px" onclick="sendPromptsToFlow(1)">&#x1F680; Enviar Prompts</button>
+        </div>
+        <div id="veo1-log" style="margin-top:8px;font-size:11px;color:var(--dim)"></div>
+      </div>
+
+      <!-- CONTA VEO2 -->
+      <div style="background:rgba(168,85,247,.05);border:1px solid rgba(168,85,247,.15);border-radius:12px;padding:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <h4 style="color:#a855f7">&#x1F4E1; VEO2 — Conta Secundaria</h4>
+          <span id="veo2-status" style="font-size:11px;padding:4px 10px;border-radius:12px;background:rgba(239,68,68,.1);color:#ef4444;border:1px solid rgba(239,68,68,.2)">&#x1F534; Desconectada</span>
+        </div>
+        <label style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--dim)">COOKIES DO FLOW (JSON)</label>
+        <textarea id="veo2-cookies" class="input" rows="3" placeholder='Cole os cookies da segunda conta do Flow aqui' style="font-size:11px;margin-top:4px"></textarea>
+        <label style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);margin-top:8px;display:block">PROJECT ID (URL do Flow)</label>
+        <input type="text" id="veo2-project" class="input" placeholder="Ex: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" style="width:100%;font-size:12px;margin-top:4px">
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="btn btn-secondary" style="flex:1;font-size:12px" onclick="connectVeoAccount(2)">&#x1F517; Conectar</button>
+          <button class="btn btn-primary" style="flex:1;font-size:12px" onclick="sendPromptsToFlow(2)">&#x1F680; Enviar Prompts</button>
+        </div>
+        <div id="veo2-log" style="margin-top:8px;font-size:11px;color:var(--dim)"></div>
+      </div>
+    </div>
+
+    <!-- MODEL + MULTIPLIER SELECTOR -->
+    <div style="margin-top:16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <label style="font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);font-weight:700">MODELO:</label>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;padding:8px 14px;border-radius:10px;border:1px solid rgba(6,182,212,.3);background:rgba(6,182,212,.08)">
+        <input type="radio" name="flow-model" value="veo31lite" checked style="accent-color:#06b6d4">
+        <span>&#x1F3AC; Veo 3.1 - Lite</span>
+        <span style="font-size:10px;color:var(--green);font-weight:700">(0 CREDITOS)</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;padding:8px 14px;border-radius:10px;border:1px solid rgba(59,130,246,.3);background:rgba(59,130,246,.08)">
+        <input type="radio" name="flow-model" value="veo31" style="accent-color:#3b82f6">
+        <span>&#x1F3AC; Veo 3.1 (Full)</span>
+        <span style="font-size:10px;color:var(--dim)">(CREDITOS)</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;padding:8px 14px;border-radius:10px;border:1px solid rgba(16,185,129,.3);background:rgba(16,185,129,.08)">
+        <input type="radio" name="flow-model" value="geminiomni" style="accent-color:#10b981">
+        <span>&#x1F3AC; Gemini Omni</span>
+        <span style="font-size:10px;color:var(--dim)">(VIDEO + EDIT)</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;padding:8px 14px;border-radius:10px;border:1px solid rgba(168,85,247,.3);background:rgba(168,85,247,.08)">
+        <input type="radio" name="flow-model" value="nanobanana" style="accent-color:#a855f7">
+        <span>&#x1F5BC; Nano Banana</span>
+        <span style="font-size:10px;color:var(--dim)">(IMAGENS)</span>
+      </label>
+      
+      <div style="margin-left:12px;display:flex;align-items:center;gap:8px">
+        <label style="font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);font-weight:700">POR PROMPT:</label>
+        <select id="flow-multiplier" class="input" style="width:auto;padding:6px 12px;font-size:13px;font-weight:700">
+          <option value="1" selected>x1 (1 video)</option>
+          <option value="2">x2 (2 videos)</option>
+          <option value="3">x3 (3 videos)</option>
+          <option value="4">x4 (4 videos)</option>
+        </select>
+      </div>
+    </div>
+
+    <div style="margin-top:12px;font-size:12px;color:var(--dim);background:rgba(255,215,0,.05);border:1px solid rgba(255,215,0,.15);border-radius:8px;padding:12px">
+      <b style="color:var(--accent)">&#x1F4A1; Como pegar os cookies:</b><br>
+      1. Abra <code style="color:var(--accent)">labs.google.com/fx/pt/tools/flow</code> e faca login<br>
+      2. Pressione <b>F12</b> → aba <b>Application</b> → <b>Cookies</b> → copie todos<br>
+      3. Ou use a extensao <b>"EditThisCookie"</b> e exporte como JSON<br>
+      4. Cole aqui e clique em <b>Conectar</b>
+    </div>
+  </div>
+
+  <!-- MONITORAMENTO TEMPO REAL -->
+  <div id="veo3-monitor" class="section-card" style="margin-top:12px;display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <h3>&#x1F916; Flow Automator — Monitoramento</h3>
+      <button class="btn btn-secondary" style="font-size:11px;padding:6px 12px" onclick="checkAutomationStatus()">&#x1F504; Atualizar</button>
+    </div>
+    <div style="display:flex;gap:20px;margin:16px 0">
+      <div style="text-align:center"><div id="mon-current" style="font-size:32px;font-weight:800;color:var(--accent)">0</div><div style="font-size:10px;color:var(--dim);text-transform:uppercase">ATUAL</div></div>
+      <div style="text-align:center"><div id="mon-total" style="font-size:32px;font-weight:800;color:var(--text)">0</div><div style="font-size:10px;color:var(--dim);text-transform:uppercase">TOTAL</div></div>
+      <div style="text-align:center"><div id="mon-done" style="font-size:32px;font-weight:800;color:var(--green)">0</div><div style="font-size:10px;color:var(--dim);text-transform:uppercase">PRONTOS</div></div>
+      <div style="text-align:center"><div id="mon-fail" style="font-size:32px;font-weight:800;color:var(--red)">0</div><div style="font-size:10px;color:var(--dim);text-transform:uppercase">FALHAS</div></div>
+      <div style="text-align:center"><div id="mon-model" style="font-size:14px;font-weight:700;color:var(--purple);margin-top:8px">—</div><div style="font-size:10px;color:var(--dim);text-transform:uppercase">MODELO</div></div>
+    </div>
+    <div style="background:rgba(255,255,255,.05);border-radius:8px;height:10px;margin-bottom:12px">
+      <div id="mon-bar" style="background:linear-gradient(90deg,var(--accent),var(--green));height:100%;border-radius:8px;width:0;transition:width .5s"></div>
+    </div>
+    <div id="mon-status" style="font-size:13px;color:var(--accent);font-weight:600;margin-bottom:12px">Aguardando...</div>
+    <div id="mon-phase" style="font-size:11px;color:var(--dim);margin-bottom:8px"></div>
+    
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <button class="btn btn-secondary" style="font-size:12px;padding:8px 16px" onclick="flowControl('pause')" id="btn-pause">&#x23F8; Pausar</button>
+      <button class="btn" style="font-size:12px;padding:8px 16px;background:var(--red);color:white;border:none;border-radius:8px;cursor:pointer" onclick="flowControl('cancel')">&#x23F9; Cancelar</button>
+      <button class="btn btn-secondary" style="font-size:12px;padding:8px 16px" onclick="flowControl('resume')" id="btn-resume" disabled>&#x25B6; Retomar</button>
+      <button class="btn btn-secondary" style="font-size:11px;padding:6px 12px;margin-left:auto" onclick="checkAutomationStatus()">&#x1F504; Atualizar</button>
+    </div>
+    
+    <div style="max-height:250px;overflow-y:auto;background:rgba(0,0,0,.3);border-radius:8px;padding:8px;font-family:monospace;font-size:11px" id="mon-log"></div>
+    
+    <div style="margin-top:12px">
+      <div class="section-label section-label-green" style="font-size:11px">DOWNLOADS (EM ORDEM)</div>
+      <div id="mon-downloads" style="max-height:200px;overflow-y:auto"></div>
+    </div>
+  </div>
+
+  <div id="veo3-flow-result" style="margin-top:12px"></div>
 </div>
 
-<!-- MULTICONTA -->
+<!-- MULTICONTA (redirect to VEO3 page) -->
 <div id="page-multiconta" class="page">
   <h2>&#x1F465; Multi-Conta VEO3</h2>
-  <div class="section-card" style="margin-top:16px">
-    <div style="display:flex;gap:8px;margin-bottom:16px">
-      <button class="tab-btn active" onclick="showVeoTab(1)">Conta 1</button>
-      <button class="tab-btn" onclick="showVeoTab(2)">Conta 2</button>
-    </div>
-    <div id="veo-tab-1"><p>Configure a Conta 1 do VEO3 aqui. Cole os prompts e inicie a geracao.</p>
-      <textarea class="input" rows="8" placeholder="Prompts da Conta 1..."></textarea>
-    </div>
-    <div id="veo-tab-2" style="display:none"><p>Configure a Conta 2 do VEO3 aqui.</p>
-      <textarea class="input" rows="8" placeholder="Prompts da Conta 2..."></textarea>
-    </div>
+  <div class="section-card" style="margin-top:16px;text-align:center;padding:40px">
+    <p style="font-size:16px;margin-bottom:16px">A Multi-Conta agora esta integrada diretamente no <b style="color:var(--accent)">Gerador VEO 3</b>.</p>
+    <button class="btn btn-primary" onclick="showPage('veo3')">&#x26A1; Ir para Gerador VEO 3</button>
   </div>
 </div>
 
@@ -333,7 +586,7 @@
         <button class="tab-btn active">&#x1F4DD; Texto Livre</button>
         <button class="tab-btn">&#x1F4CB; SRT em Blocos</button>
         <button class="tab-btn">&#x1F3AC; Gerar Legendas</button>
-        <button class="tab-btn">&#x1F916; IA: Criar Roteiro Humanizado (Gemini 2.5)</button>
+        <button class="tab-btn">&#x1F916; IA: GLM-5.1 Criar Roteiro</button>
       </div>
       <textarea id="narr-output" class="input" rows="16" placeholder="Cole seu roteiro aqui...&#10;&#10;Textos grandes (20k+) sao divididos em blocos automaticamente.&#10;Use 'SRT em Blocos' para narrar cada legenda separadamente."></textarea>
       <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:12px;color:var(--dim)">
@@ -346,7 +599,7 @@
         <div><label>DURACAO</label><select id="narr-dur" class="input"><option>5 min</option><option>10 min</option><option>15 min</option><option>20 min</option></select></div>
         <div><label>TOM</label><select id="narr-tone" class="input"><option>Documentary serious</option><option>Casual friendly</option><option>Dramatic epic</option></select></div>
       </div>
-      <div style="margin-top:8px"><label>ENGINE</label><select id="narr-engine" class="input"><option>gemini-2.0-flash</option><option>gemini-2.5-pro</option></select></div>
+        <div style="margin-top:8px"><label>ENGINE IA</label><select id="narr-engine" class="input"><option value="glm-5.1" selected>GLM-5.1 (NVIDIA) ⚡</option><option>gemini-2.0-flash</option><option>gemini-2.5-pro</option></select></div>
       <button class="btn btn-primary" style="width:100%;margin-top:12px" onclick="generateNarration()">&#x1F916; Gerar Roteiro com IA</button>
     </div>
     <div style="flex:1">
@@ -404,6 +657,7 @@
       <div><label>PEXELS</label><input type="password" id="key-pexels" class="input" placeholder="Cole sua chave aqui" style="width:100%"></div>
       <div><label>PIXABAY</label><input type="password" id="key-pixabay" class="input" placeholder="Cole sua chave aqui" style="width:100%"></div>
       <div><label>UNSPLASH</label><input type="password" id="key-unsplash" class="input" placeholder="Cole sua chave aqui" style="width:100%"></div>
+      <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px"><label>NVIDIA (GLM-5.1 — provider #6)</label><input type="password" id="key-nvidia" class="input" placeholder="nvapi-..." style="width:100%"><small style="color:var(--dim)">Provider de IA via NVIDIA API (OpenAI-compatível). Obtém em <a href="https://build.nvidia.com" target="_blank">build.nvidia.com</a></small></div>
       <div><label>CANAIS YOUTUBE PARA B-ROLL <span style="font-weight:normal;opacity:0.7">(IDs separados por virgula — carregados automaticamente em todo video)</span></label><input type="text" id="key-youtube_channels" class="input" placeholder="Ex: UCxxxxxx,UCyyyyyy,UCzzzzzz" style="width:100%"></div>
     </div>
     <button class="btn btn-primary" style="margin-top:16px" onclick="saveKeys()">&#x1F4BE; Salvar Chaves</button>
@@ -411,23 +665,435 @@
   </div>
 </div>
 
-<!-- DIAGNOSTIC -->
+<!-- DIAGNOSTIC / AUTO-RECOVERY -->
 <div id="page-diagnostic" class="page">
-  <h2>&#x1FA7A; Diagnostico IA</h2>
+  <h2>&#x1FA7A; Diagnostico & Auto-Recuperacao</h2>
+  <p style="color:var(--dim)">Detecta, diagnostica e sugere correcoes para qualquer problema no sistema</p>
+
   <div class="section-card" style="margin-top:16px">
-    <h3>Status do Sistema</h3>
-    <div id="health-status" style="margin-top:12px;font-family:monospace;line-height:1.8">Clique para executar diagnostico...</div>
-    <button class="btn btn-secondary" style="margin-top:12px" onclick="runDiagnostics()">&#x1F504; Executar Diagnostico</button>
+    <h3>&#x1F50D; Status do Sistema</h3>
+    <div id="health-status" style="margin-top:12px;font-family:monospace;line-height:1.8">Clique em Executar Diagnostico...</div>
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+      <button class="btn btn-secondary" onclick="runDiagnostics()">&#x1F504; Executar Diagnostico</button>
+      <button class="btn btn-ghost" onclick="autoFixAll()">&#x1FA79; Auto-Corrigir Tudo</button>
+    </div>
+  </div>
+
+  <div class="section-card" style="margin-top:16px">
+    <h3>&#x1F4CB; Historico de Recuperacao</h3>
+    <div id="recovery-log" style="margin-top:12px;font-family:monospace;font-size:12px;line-height:1.6;max-height:300px;overflow-y:auto">
+      <span style="color:var(--dim)">Nenhum evento de recuperacao registrado.</span>
+    </div>
+    <button class="btn btn-ghost" style="margin-top:8px;font-size:12px" onclick="loadRecoveryLog()">&#x1F504; Atualizar</button>
   </div>
 </div>
 
 </div></div>
+
+<!-- THUMBNAIL IA -->
+<div id="page-thumbnail" class="page">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+    <div>
+      <h2 style="display:flex;align-items:center;gap:10px"><span style="font-size:26px">&#x1F5BC;</span> Thumbnail IA — Gerador de Capas</h2>
+      <p style="color:var(--dim);margin-top:6px">Cria thumbnails automaticamente com IA + FFmpeg</p>
+    </div>
+  </div>
+  <div class="section-card" style="margin-top:12px">
+    <h3>&#x1F3AC; Gerar Thumbnail do Video</h3>
+    <div class="form-row-2" style="margin-bottom:12px">
+      <div><label>CAMINHO DO VIDEO</label><input type="text" id="thumb-video" class="input" placeholder="C:\Users\...\video.mp4"></div>
+      <div><label>TEMA (para texto da thumb)</label><input type="text" id="thumb-topic" class="input" placeholder="Ex: Deep Ocean Secrets"></div>
+    </div>
+    <button class="btn btn-primary" onclick="generateThumbnail()">&#x2728; Gerar Thumbnail com IA</button>
+  </div>
+  <div class="section-card" style="margin-top:12px">
+    <h3>&#x1F4A1; Conceitos de Thumbnail (sem video)</h3>
+    <div class="form-row-2" style="margin-bottom:12px">
+      <div><label>TEMA</label><input type="text" id="thumb-concept-topic" class="input" placeholder="Tema do video"></div>
+      <div><label>QTDE</label><select id="thumb-concept-count" class="input"><option>1</option><option selected>3</option><option>5</option></select></div>
+    </div>
+    <button class="btn btn-purple" onclick="generateThumbnailConcepts()">&#x1F4A1; Gerar Conceitos</button>
+  </div>
+  <div id="thumb-results" style="margin-top:12px"></div>
+</div>
+
+<!-- SCHEDULER -->
+<div id="page-scheduler" class="page">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+    <div>
+      <h2 style="display:flex;align-items:center;gap:10px"><span style="font-size:26px">&#x23F0;</span> Agendador de Produção</h2>
+      <p style="color:var(--dim);margin-top:6px">Automatize a produção de vídeos em horários agendados</p>
+    </div>
+    <button class="btn btn-success" onclick="showAddSchedule()">+ Novo Agendamento</button>
+  </div>
+  <div class="section-card" style="margin-top:12px">
+    <div style="display:flex;gap:16px;align-items:center;margin-bottom:16px">
+      <span id="sched-status" class="tag tag-green">&#x25B6; Ativo</span>
+      <span style="font-size:12px;color:var(--dim)"><span id="sched-count">0</span> agendamentos configurados</span>
+    </div>
+    <div id="sched-list"></div>
+  </div>
+  <div class="section-card" style="margin-top:12px">
+    <h3>&#x1F4DD; Histórico de Execução</h3>
+    <div id="sched-logs" style="font-size:12px;max-height:300px;overflow-y:auto"></div>
+  </div>
+</div>
+
+<!-- TEMPLATES -->
+<div id="page-templates" class="page">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+    <div>
+      <h2 style="display:flex;align-items:center;gap:10px"><span style="font-size:26px">&#x1F4E6;</span> Templates de Produção</h2>
+      <p style="color:var(--dim);margin-top:6px">Salve configurações de pipeline como templates reutilizáveis</p>
+    </div>
+    <button class="btn btn-success" onclick="showAddTemplate()">+ Novo Template</button>
+  </div>
+  <div id="template-categories" style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+    <button class="tab-btn active" onclick="filterTemplates('',this)">Todos</button>
+  </div>
+  <div id="template-list"></div>
+</div>
+
+<!-- AUDIO TO VIDEO -->
+<div id="page-audio-to-video" class="page">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+    <div><h2>&#x1F3B5; Audio para Video</h2><p style="color:var(--dim);margin-top:6px">Converta MP3/WAV em video com waveform animado</p></div>
+  </div>
+  <div class="card">
+    <label>Caminho do audio:</label>
+    <input type="text" id="atv-audio-path" class="input" placeholder="C:\caminho\audio.mp3">
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn" onclick="document.getElementById('atv-file-input').click()">Selecionar Arquivo</button>
+      <input type="file" id="atv-file-input" accept=".mp3,.wav,.m4a,.ogg" style="display:none" onchange="document.getElementById('atv-audio-path').value=event.target.files[0].name">
+    </div>
+    <label style="margin-top:12px">Titulo:</label>
+    <input type="text" id="atv-title" class="input" placeholder="Nome do video">
+    <label style="margin-top:8px">Cor das barras:</label>
+    <input type="color" id="atv-color" value="#1a73e8">
+    <button class="btn btn-primary" style="margin-top:16px" onclick="renderAudioVideo()">&#x25B6; Gerar Video</button>
+    <div id="atv-result" style="margin-top:12px"></div>
+  </div>
+</div>
+
+<!-- CLIPPER -->
+<div id="page-clipper" class="page">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+    <div><h2>&#x2702; Clipper IA</h2><p style="color:var(--dim);margin-top:6px">Extraia clipes virais de videos longos automaticamente</p></div>
+  </div>
+  <div class="card">
+    <label>Video de origem:</label>
+    <input type="text" id="clip-video-path" class="input" placeholder="C:\caminho\video.mp4">
+    <div style="display:flex;gap:16px;margin-top:12px;flex-wrap:wrap">
+      <label>Max clipes: <input type="number" id="clip-max" value="5" min="1" max="20" style="width:60px"></label>
+      <label>Duracao min: <input type="number" id="clip-min-dur" value="15" min="5" max="120" style="width:60px"></label>
+      <label>Formato: <select id="clip-format"><option value="vertical">Vertical (9:16)</option><option value="landscape">Paisagem (16:9)</option></select></label>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn btn-primary" onclick="detectClips()">&#x1F50D; Detectar Clipes</button>
+      <button class="btn btn-success" onclick="extractAllClips()">&#x2B06; Extrair Todos</button>
+    </div>
+    <div id="clip-results" style="margin-top:12px"></div>
+  </div>
+</div>
+
+<!-- AI IMAGE GEN -->
+<div id="page-image-gen" class="page">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+    <div><h2>&#x1F5BC; IA Image Generator</h2><p style="color:var(--dim);margin-top:6px">Gere imagens com IA para scenes e thumbnails</p></div>
+  </div>
+  <div class="card">
+    <label>Prompt:</label>
+    <textarea id="img-prompt" class="input" rows="3" placeholder="Descreva a imagem que deseja gerar..."></textarea>
+    <div style="display:flex;gap:16px;margin-top:8px;flex-wrap:wrap">
+      <label>Largura: <input type="number" id="img-width" value="1024" style="width:70px"></label>
+      <label>Altura: <input type="number" id="img-height" value="1024" style="width:70px"></label>
+      <label>Engine: <select id="img-api"><option value="pollinations">Pollinations (gratis)</option><option value="gemini">Gemini AI</option></select></label>
+    </div>
+    <button class="btn btn-primary" style="margin-top:12px" onclick="generateImage()">&#x2728; Gerar Imagem</button>
+    <div id="img-result" style="margin-top:12px;display:flex;flex-wrap:wrap;gap:12px"></div>
+  </div>
+  <div class="card" style="margin-top:12px">
+    <h3>&#x1F5BC; Gerar Thumbnail</h3>
+    <label>Topico do video:</label>
+    <input type="text" id="image-thumb-topic" class="input" placeholder="Ex: 10 curiosidades sobre o espaco">
+    <button class="btn btn-primary" style="margin-top:8px" onclick="generateThumbnailAI()">&#x2728; Gerar Thumbnail</button>
+    <div id="thumb-result" style="margin-top:12px"></div>
+  </div>
+</div>
+
+<!-- TRANSLATE -->
+<div id="page-translate" class="page">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+    <div><h2>&#x1F310; Tradutor IA & Dublagem</h2><p style="color:var(--dim);margin-top:6px">Traduza scripts e duble videos em varios idiomas</p></div>
+  </div>
+  <div class="card">
+    <label>Texto para traduzir:</label>
+    <textarea id="tr-text" class="input" rows="4" placeholder="Cole o texto ou script aqui..."></textarea>
+    <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap">
+      <label>Idioma alvo:
+        <select id="tr-lang">
+          <option value="english">Ingles</option>
+          <option value="portuguese" selected>Portugues</option>
+          <option value="spanish">Espanhol</option>
+          <option value="french">Frances</option>
+          <option value="german">Alemao</option>
+          <option value="italian">Italiano</option>
+          <option value="japanese">Japones</option>
+        </select>
+      </label>
+    </div>
+    <button class="btn btn-primary" style="margin-top:12px" onclick="translateText()">&#x1F504; Traduzir</button>
+    <div id="tr-result" style="margin-top:12px"></div>
+  </div>
+  <div class="card" style="margin-top:12px">
+    <h3>&#x1F3A7; Dublar Video</h3>
+    <label>Caminho do video:</label>
+    <input type="text" id="dub-video-path" class="input" placeholder="C:\caminho\video.mp4">
+    <label style="margin-top:8px">Idioma alvo: <select id="dub-lang"><option value="english">Ingles</option><option value="spanish">Espanhol</option><option value="french">Frances</option></select></label>
+    <button class="btn btn-success" style="margin-top:12px" onclick="dubVideo()">&#x1F3A7; Dublar</button>
+    <div id="dub-result" style="margin-top:12px"></div>
+  </div>
+</div>
+
+<!-- SOCIAL PUBLISHER -->
+<div id="page-social" class="page">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+    <div><h2>&#x1F4E4; Publicar em Redes</h2><p style="color:var(--dim);margin-top:6px">Publique videos direto no YouTube, TikTok, Instagram e Facebook</p></div>
+  </div>
+  <div class="card" id="social-connections">
+    <h3>Conexões</h3>
+    <div id="social-status">Carregando...</div>
+  </div>
+  <div class="card" style="margin-top:12px">
+    <h3>Publicar Video</h3>
+    <label>Video: <select id="pub-video" class="input"></select></label>
+    <label style="margin-top:8px">Titulo: <input type="text" id="pub-title" class="input"></label>
+    <label style="margin-top:8px">Descricao: <textarea id="pub-desc" class="input" rows="3"></textarea></label>
+    <div style="display:flex;gap:12px;margin-top:12px;flex-wrap:wrap">
+      <label><input type="checkbox" id="pub-yt" checked> YouTube</label>
+      <label><input type="checkbox" id="pub-fb"> Facebook</label>
+    </div>
+    <button class="btn btn-primary" style="margin-top:12px" onclick="publishVideo()">&#x1F4E4; Publicar</button>
+    <div id="pub-result" style="margin-top:12px"></div>
+  </div>
+</div>
+
+<!-- PPT TO VIDEO -->
+<div id="page-ppt-to-video" class="page">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+    <div><h2>&#x1F4C4; PowerPoint para Video</h2><p style="color:var(--dim);margin-top:6px">Converta apresentacoes PPTX em videos com narracao IA</p></div>
+  </div>
+  <div class="card">
+    <label>Arquivo PPTX:</label>
+    <input type="file" id="pptx-file" accept=".pptx" style="margin:8px 0">
+    <label>Idioma da narracao:
+      <select id="pptx-lang"><option value="portuguese" selected>Portugues</option><option value="english">Ingles</option></select>
+    </label>
+    <button class="btn btn-primary" style="margin-top:12px" onclick="convertPptToVideo()">&#x25B6; Converter</button>
+    <div id="pptx-result" style="margin-top:12px"></div>
+  </div>
+</div>
+
+<!-- AUTO MODE -->
+<div id="page-auto-mode" class="page">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+    <div><h2>&#x1F916; Modo Autonomo</h2><p style="color:var(--dim);margin-top:6px">Producao automatica diaria - defina um topico e deixe o sistema criar videos</p></div>
+  </div>
+  <div class="card">
+    <div id="auto-status-bar" style="padding:12px;border-radius:8px;margin-bottom:12px">Status: <span id="auto-status">Parado</span></div>
+    <label>Topico para producao continua:</label>
+    <textarea id="auto-topic" class="input" rows="3" placeholder="Ex: curiosidades sobre tecnologia"></textarea>
+    <label style="margin-top:8px">Intervalo: <select id="auto-interval"><option value="24">A cada 24h</option><option value="12">A cada 12h</option><option value="6">A cada 6h</option></select></label>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn btn-success" onclick="startAutoMode()">&#x25B6; Iniciar</button>
+      <button class="btn btn-danger" onclick="stopAutoMode()">&#x25A0; Parar</button>
+    </div>
+    <div id="auto-result" style="margin-top:12px"></div>
+  </div>
+</div>
+
+<!-- SUBTITLE EDITOR -->
+<div id="page-subtitles" class="page">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+    <div>
+      <h2 style="display:flex;align-items:center;gap:10px"><span style="font-size:26px">&#x1F4DD;</span> Subtitle Editor — Edicao Visual de Legendas</h2>
+      <p style="color:var(--dim);margin-top:6px">Edite, crie e estilize legendas SRT/ASS diretamente no app</p>
+    </div>
+  </div>
+  <div class="section-card" style="margin-top:12px">
+    <h3>&#x1F4C2; Carregar Legendas</h3>
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px;margin-top:12px">
+      <div><label>ARQUIVO SRT/ASS (opcional)</label><input type="text" id="sub-file" class="input" placeholder="C:\caminho\legendas.srt"></div>
+      <div><label>OU GERAR DO VIDEO</label><input type="text" id="sub-video" class="input" placeholder="C:\caminho\video.mp4"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn btn-secondary" onclick="loadSubtitles()">&#x1F4C2; Carregar SRT</button>
+      <button class="btn btn-primary" onclick="generateSubtitlesFromVideo()">&#x1F916; Gerar Legendas (Whisper)</button>
+    </div>
+  </div>
+  <div class="section-card" style="margin-top:12px">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <h3>&#x270F; Editor de Legendas</h3>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost" style="font-size:11px" onclick="addSubtitleLine()">+ Adicionar Linha</button>
+        <button class="btn btn-ghost" style="font-size:11px" onclick="downloadSubtitles()">&#x1F4BE; Exportar SRT</button>
+      </div>
+    </div>
+    <div id="sub-editor" style="margin-top:12px;max-height:400px;overflow-y:auto;font-family:monospace;font-size:12px">
+      <div style="color:var(--dim);padding:20px;text-align:center">Carregue um arquivo SRT ou gere legendas de um video</div>
+    </div>
+  </div>
+  <div class="section-card" style="margin-top:12px">
+    <h3>&#x1F3A8; Estilo das Legendas</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-top:12px">
+      <div><label>FONTE</label><select id="sub-font" class="input"><option>Arial</option><option>Impact</option><option>Montserrat</option><option>Roboto</option></select></div>
+      <div><label>TAMANHO</label><input type="number" id="sub-size" class="input" value="48" min="16" max="120"></div>
+      <div><label>COR</label><input type="color" id="sub-color" value="#FFFFFF" style="width:100%;height:38px;border:none;cursor:pointer"></div>
+      <div><label>CONTORNO</label><input type="color" id="sub-outline" value="#000000" style="width:100%;height:38px;border:none;cursor:pointer"></div>
+    </div>
+    <div style="display:flex;gap:16px;margin-top:12px">
+      <label><input type="checkbox" id="sub-bold" checked> Negrito</label>
+      <label><input type="checkbox" id="sub-shadow"> Sombra</label>
+      <label>Posicao: <select id="sub-pos" class="input" style="width:auto"><option value="bottom">Embaixo</option><option value="top">Em cima</option><option value="center">Centro</option></select></label>
+    </div>
+    <button class="btn btn-primary" style="width:100%;margin-top:16px" onclick="burnSubtitles()">&#x1F525; Queimar Legendas no Video</button>
+    <div id="sub-result" style="margin-top:12px"></div>
+  </div>
+</div>
+
+<!-- BRAND KIT -->
+<div id="page-brand-kit" class="page">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+    <div>
+      <h2 style="display:flex;align-items:center;gap:10px"><span style="font-size:26px">&#x1F3A8;</span> Brand Kit — Identidade Visual</h2>
+      <p style="color:var(--dim);margin-top:6px">Configure logo, marca dagua e cores padrao para todos os videos</p>
+    </div>
+    <button class="btn btn-secondary" onclick="loadBrandKit()">&#x1F504; Atualizar</button>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+    <div class="section-card">
+      <h3>&#x1F5BC; Logo</h3>
+      <div style="border:2px dashed var(--border);border-radius:12px;padding:30px;text-align:center;margin-top:12px;cursor:pointer" onclick="document.getElementById('brand-logo-input').click()">
+        <div id="brand-logo-preview" style="margin-bottom:12px"><span style="font-size:48px;opacity:.3">&#x1F5BC;</span></div>
+        <div style="font-size:13px;color:var(--dim)">Clique para fazer upload do logo (PNG/SVG)</div>
+      </div>
+      <input type="file" id="brand-logo-input" accept="image/*" style="display:none" onchange="uploadBrandAsset('logo', this)">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px">
+        <div><label>POSICAO</label><select id="brand-logo-pos" class="input"><option value="top-right">Canto Superior Direito</option><option value="top-left">Canto Superior Esquerdo</option><option value="bottom-right">Canto Inferior Direito</option><option value="bottom-left">Canto Inferior Esquerdo</option></select></div>
+        <div><label>OPACIDADE</label><input type="range" id="brand-logo-opacity" min="10" max="100" value="80" style="width:100%"><span id="brand-logo-opacity-val">80%</span></div>
+      </div>
+    </div>
+    <div class="section-card">
+      <h3>&#x1F4A7; Marca D'Agua</h3>
+      <div style="border:2px dashed var(--border);border-radius:12px;padding:30px;text-align:center;margin-top:12px;cursor:pointer" onclick="document.getElementById('brand-wm-input').click()">
+        <div id="brand-wm-preview" style="margin-bottom:12px"><span style="font-size:48px;opacity:.3">&#x1F4A7;</span></div>
+        <div style="font-size:13px;color:var(--dim)">Clique para fazer upload da marca d'agua (PNG)</div>
+      </div>
+      <input type="file" id="brand-wm-input" accept="image/*" style="display:none" onchange="uploadBrandAsset('watermark', this)">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px">
+        <div><label>POSICAO</label><select id="brand-wm-pos" class="input"><option value="bottom-right">Canto Inferior Direito</option><option value="bottom-left">Canto Inferior Esquerdo</option><option value="center">Centro</option></select></div>
+        <div><label>OPACIDADE</label><input type="range" id="brand-wm-opacity" min="5" max="50" value="20" style="width:100%"><span id="brand-wm-opacity-val">20%</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="section-card" style="margin-top:16px">
+    <h3>&#x1F3A8; Cores da Marca</h3>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:12px">
+      <div><label>COR PRIMARIA</label><input type="color" id="brand-color-primary" value="#06b6d4" style="width:100%;height:45px;border:none;cursor:pointer;border-radius:8px"></div>
+      <div><label>COR SECUNDARIA</label><input type="color" id="brand-color-secondary" value="#a855f7" style="width:100%;height:45px;border:none;cursor:pointer;border-radius:8px"></div>
+      <div><label>COR DO TEXTO</label><input type="color" id="brand-color-text" value="#ffffff" style="width:100%;height:45px;border:none;cursor:pointer;border-radius:8px"></div>
+      <div><label>COR DE FUNDO</label><input type="color" id="brand-color-bg" value="#0a0a1a" style="width:100%;height:45px;border:none;cursor:pointer;border-radius:8px"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn btn-primary" style="flex:1" onclick="saveBrandKit()">&#x1F4BE; Salvar Brand Kit</button>
+      <button class="btn btn-ghost" onclick="resetBrandKit()">&#x1F5D1; Resetar</button>
+    </div>
+    <div id="brand-status" style="margin-top:8px;font-size:12px"></div>
+  </div>
+  <div class="section-card" style="margin-top:16px">
+    <h3>&#x1F4C1; Assets Salvos</h3>
+    <div id="brand-assets-list" style="margin-top:12px"><span style="color:var(--dim)">Carregando...</span></div>
+  </div>
+</div>
+
+<!-- BLOG TO VIDEO -->
+<div id="page-blog-video" class="page">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+    <div>
+      <h2 style="display:flex;align-items:center;gap:10px"><span style="font-size:26px">&#x1F4F0;</span> Blog para Video — Conversor IA</h2>
+      <p style="color:var(--dim);margin-top:6px">Transforme qualquer artigo/blog em video automaticamente com IA</p>
+    </div>
+  </div>
+  <div class="section-card" style="margin-top:12px">
+    <h3>&#x1F517; URL do Artigo</h3>
+    <div style="display:grid;grid-template-columns:3fr 1fr;gap:12px;margin-top:12px">
+      <input type="text" id="blog-url" class="input" placeholder="https://exemplo.com/artigo-interessante">
+      <button class="btn btn-secondary" onclick="validateBlogUrl()">&#x2705; Validar URL</button>
+    </div>
+    <div id="blog-validation" style="margin-top:8px;font-size:12px"></div>
+  </div>
+  <div class="section-card" style="margin-top:12px">
+    <h3>&#x1F4CB; Conteudo Extraido</h3>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <button class="btn btn-primary" onclick="extractBlogContent()">&#x1F4E5; Extrair Conteudo</button>
+      <button class="btn btn-secondary" onclick="summarizeBlogContent()">&#x1F916; Resumir com IA</button>
+    </div>
+    <textarea id="blog-content" class="input" rows="8" placeholder="O conteudo extraido aparecera aqui..."></textarea>
+  </div>
+  <div class="section-card" style="margin-top:12px">
+    <h3>&#x1F3AC; Gerar Video</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:12px">
+      <div><label>DURACAO</label><select id="blog-duration" class="input"><option>5 min</option><option>10 min</option><option>15 min</option></select></div>
+      <div><label>TOM</label><select id="blog-tone" class="input"><option>Documentary serious</option><option>Casual friendly</option><option>Dramatic epic</option></select></div>
+      <div><label>IDIOMA</label><select id="blog-lang" class="input"><option>Portuguese</option><option>English</option><option>Spanish</option></select></div>
+    </div>
+    <button class="btn btn-primary" style="width:100%;margin-top:16px;padding:14px;font-size:16px" onclick="blogToVideo()">&#x1F680; Converter Blog em Video</button>
+    <div id="blog-result" style="margin-top:12px"></div>
+  </div>
+</div>
+
+<!-- YOUTUBE UPLOAD -->
+<div id="page-yt-upload" class="page">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+    <div>
+      <h2 style="display:flex;align-items:center;gap:10px"><span style="font-size:26px">&#x1F4E4;</span> YouTube Upload — Publicacao Direta</h2>
+      <p style="color:var(--dim);margin-top:6px">Envie videos direto para o YouTube com titulo, descricao e tags</p>
+    </div>
+    <button class="btn btn-secondary" onclick="checkYtUploadStatus()">&#x1F504; Status</button>
+  </div>
+  <div class="section-card" style="margin-top:12px">
+    <h3>&#x1F511; Autenticacao OAuth</h3>
+    <div id="yt-auth-status" style="margin-top:12px;padding:16px;border-radius:10px;border:1px solid var(--border);background:rgba(255,255,255,.02)">
+      <span style="color:var(--dim)">Verificando status...</span>
+    </div>
+    <div style="margin-top:12px">
+      <label>CLIENT SECRET (JSON do Google Cloud Console)</label>
+      <input type="file" id="yt-client-secret" accept=".json" style="margin-top:4px" onchange="saveYtClientSecret(this)">
+      <p style="font-size:11px;color:var(--dim);margin-top:4px">Baixe em console.cloud.google.com > Credenciais > OAuth 2.0 > Baixar JSON</p>
+    </div>
+  </div>
+  <div class="section-card" style="margin-top:12px">
+    <h3>&#x1F3AC; Upload de Video</h3>
+    <div style="display:grid;gap:12px;margin-top:12px">
+      <div><label>VIDEO PARA UPLOAD</label><select id="yt-video-select" class="input"><option>Carregando videos...</option></select></div>
+      <div><label>TITULO</label><input type="text" id="yt-title" class="input" placeholder="Titulo do video no YouTube" maxlength="100"></div>
+      <div><label>DESCRICAO</label><textarea id="yt-desc" class="input" rows="4" placeholder="Descricao do video..."></textarea></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div><label>TAGS (separadas por virgula)</label><input type="text" id="yt-tags" class="input" placeholder="tag1, tag2, tag3"></div>
+        <div><label>PRIVACIDADE</label><select id="yt-privacy" class="input"><option value="public">Publico</option><option value="unlisted">Nao Listado</option><option value="private" selected>Privado</option></select></div>
+      </div>
+    </div>
+    <button class="btn btn-primary" style="width:100%;margin-top:16px;padding:14px;font-size:16px" onclick="uploadToYouTube()">&#x1F4E4; Enviar para YouTube</button>
+    <div id="yt-upload-result" style="margin-top:12px"></div>
+  </div>
+</div>
 
 <!-- TOAST -->
 <div id="toast" class="toast"></div>
 <!-- LOADING -->
 <div id="loading" class="loading-overlay"><div class="loading-content"><div class="spinner"></div><div id="loading-text">Processando...</div></div></div>
 
+<script src="/static/timeline.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>
