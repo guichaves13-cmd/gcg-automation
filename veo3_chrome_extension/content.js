@@ -1156,14 +1156,12 @@
   async function submitPrompt() {
     log('Enviando prompt...');
 
-    // JavaScript code that background.js will run via Runtime.evaluate
-    // AFTER the debugger is attached (so coordinates account for the infobar shift)
     const findButtonScript = `
       (function() {
         var best = null;
         var bestRect = null;
+        var isDisabled = false;
         
-        // 1. Look for the arrow_forward or send icon exactly
         var icons = document.querySelectorAll('.google-symbols, .material-symbols-outlined, i, span');
         for (var i = 0; i < icons.length; i++) {
           var t = (icons[i].textContent || '').trim().toLowerCase();
@@ -1172,12 +1170,16 @@
             if (r.top > window.innerHeight * 0.5 && r.width > 0) {
               best = icons[i];
               bestRect = r;
+              // Check if parent button is disabled
+              var parentBtn = best.closest('button, [role="button"]');
+              if (parentBtn && (parentBtn.disabled || parentBtn.hasAttribute('disabled'))) {
+                isDisabled = true;
+              }
               break;
             }
           }
         }
         
-        // 2. If no icon found, find the absolute rightmost clickable element near the textbox
         if (!best) {
           var textbox = document.querySelector('[role="textbox"]') || document.querySelector('[contenteditable="true"]');
           if (textbox) {
@@ -1208,6 +1210,7 @@
         if (!best || !bestRect) return JSON.stringify({ found: false });
         return JSON.stringify({
           found: true,
+          disabled: isDisabled,
           x: Math.round(bestRect.left + bestRect.width / 2),
           y: Math.round(bestRect.top + bestRect.height / 2),
           text: (best.textContent || '').trim().substring(0, 30)
@@ -1215,19 +1218,18 @@
       })()
     `;
 
-    // Send to background.js which will attach debugger, find button, and click
+    let buttonFoundAndClicked = false;
     log('Tentando encontrar e clicar no botao de enviar...', 'info');
     try {
-      const clickResult = await chrome.runtime.sendMessage({ 
-        type: 'cdp-find-and-click', 
-        findScript: findButtonScript 
-      });
+      const clickResult = await chrome.runtime.sendMessage({ type: 'cdp-find-and-click', findScript: findButtonScript });
       
       if (clickResult && clickResult.success) {
-        log(`Botao clicado em (${clickResult.x}, ${clickResult.y}) — "${clickResult.text || ''}"`, 'info');
-        await delay(2000);
-        log('Prompt enviado!', 'success');
-        return true;
+        if (clickResult.disabled) {
+          log('ALERTA: O botao de enviar foi encontrado mas parece estar DESABILITADO pelo Google Flow!', 'error');
+        }
+        log(`Botao clicado em (${clickResult.x}, ${clickResult.y})`, 'info');
+        buttonFoundAndClicked = true;
+        await delay(1000); // Wait briefly before considering it fully successful
       } else {
         log(`CDP find-and-click falhou: ${clickResult?.error || 'unknown'}`, 'warning');
       }
@@ -1235,26 +1237,53 @@
       log(`CDP find-and-click erro: ${e.message}`, 'warning');
     }
 
-    // Fallback 1: Try Ctrl+Enter (Native Flow Shortcut)
-    log('Fallback: Tentando enviar via Ctrl+Enter...', 'warning');
-    const inputElement = findPromptInput();
-    if (inputElement) {
-      inputElement.focus();
-      await delay(300);
-    }
-    
-    try {
-      const enterResult = await chrome.runtime.sendMessage({ type: 'cdp-ctrl-enter' });
-      if (enterResult && enterResult.success) {
-        await delay(2000);
-        log('Prompt enviado (Ctrl+Enter)!', 'success');
-        return true;
+    if (!buttonFoundAndClicked) {
+      log('Fallback: Tentando enviar via Ctrl+Enter...', 'warning');
+      const inputElement = findPromptInput();
+      if (inputElement) {
+        inputElement.focus();
+        await delay(300);
       }
-    } catch (e) {
-      log(`Ctrl+Enter falhou: ${e.message}`, 'warning');
+      try {
+        const enterResult = await chrome.runtime.sendMessage({ type: 'cdp-ctrl-enter' });
+        if (enterResult && enterResult.success) {
+          await delay(1000);
+          buttonFoundAndClicked = true;
+          log('Prompt enviado (Ctrl+Enter)!', 'success');
+        }
+      } catch (e) {
+        log(`Ctrl+Enter falhou: ${e.message}`, 'warning');
+      }
     }
 
-    throw new Error('Nao foi possivel enviar o prompt');
+    // Ultimate Fallback: Native DOM Brute-Force
+    if (!buttonFoundAndClicked) {
+      log('Fallback Extremo: Brute-force DOM click...', 'error');
+      const icons = document.querySelectorAll('.google-symbols, .material-symbols-outlined, i, span');
+      let domBtn = null;
+      for (const icon of icons) {
+        const t = (icon.textContent || '').trim().toLowerCase();
+        if (t === 'arrow_forward' || t === 'send') {
+          domBtn = icon.closest('button, [role="button"]') || icon;
+          break;
+        }
+      }
+      if (domBtn) {
+        domBtn.click();
+        domBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+        domBtn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+        log('DOM click forcado executado', 'warning');
+        buttonFoundAndClicked = true;
+        await delay(1000);
+      }
+    }
+
+    if (buttonFoundAndClicked) {
+      log('Processo de submissao concluido', 'success');
+      return true;
+    }
+
+    throw new Error('Nao foi possivel enviar o prompt de nenhuma maneira');
   }
 
   // Format time remaining
