@@ -5312,29 +5312,39 @@ def _build_long_gesture_sequence(audio_dur: float, templates: list,
 
         if job_id and job_id in jobs:
             jobs[job_id]["message"] = f"Gesture Pack: montando sequência ({len(sequence)} templates)..."
-        print(f"  [GesturePack] Sequence: {len(sequence)} templates totaling {accumulated:.0f}s")
+        print(f"  [GesturePack] Sequence: {len(sequence)} templates totaling {accumulated:.0f}s", flush=True)
 
-        # Concat using crossfade between segments for smooth transitions.
-        # First standardize all clips to same resolution/fps (already done in download_gesture_pack
-        # but defensive re-encode in case user mixes uploaded videos).
-        # Simple concat (cuts) is faster — use crossfade only between templates.
+        # ffmpeg concat demuxer on Windows can't read paths with non-ASCII chars (ç, ã, etc).
+        # Workaround: copy each template to ASCII-only tmp dir, build concat list with those paths.
+        ascii_tpl_dir = os.path.join(tmp, "tpl")
+        os.makedirs(ascii_tpl_dir, exist_ok=True)
+        ascii_paths = []
+        for i, (tpl, _) in enumerate(sequence):
+            ascii_path = os.path.join(ascii_tpl_dir, f"t{i:03d}.mp4")
+            shutil.copy2(tpl, ascii_path)
+            ascii_paths.append(ascii_path)
+
         concat_txt = os.path.join(tmp, "concat.txt")
         with open(concat_txt, "w") as f:
-            for tpl, _ in sequence:
-                # ffmpeg concat demuxer needs forward-slash paths
-                tpl_safe = tpl.replace("\\", "/").replace("'", "")
-                f.write(f"file '{tpl_safe}'\n")
+            for p in ascii_paths:
+                # forward-slash to be safe across ffmpeg builds
+                p_safe = p.replace("\\", "/").replace("'", "")
+                f.write(f"file '{p_safe}'\n")
 
-        # Concat (re-encode required because templates may differ in fps/codec params)
+        # Concat (re-encode required because templates may differ in fps/codec params).
+        # Output also goes to ASCII tmp first, then copied to final out_path.
+        ascii_out = os.path.join(tmp, "out.mp4")
         cmd = [ff, "-y", "-f", "concat", "-safe", "0", "-i", concat_txt,
                "-t", str(round(audio_dur + 0.5, 3)),
                "-c:v", "libx264", "-preset", "fast", "-crf", "20",
-               "-pix_fmt", "yuv420p", "-an", out_path]
+               "-pix_fmt", "yuv420p", "-an", ascii_out]
         r = subprocess.run(cmd, capture_output=True,
                            timeout=max(600, int(audio_dur * 2)))
-        if r.returncode != 0 or not os.path.exists(out_path):
+        if r.returncode != 0 or not os.path.exists(ascii_out):
             err = (r.stderr or b"").decode("utf-8", errors="replace")[-300:]
             raise Exception(f"Gesture sequence concat falhou: {err}")
+        # Copy from ASCII tmp to final path (which may have non-ASCII chars)
+        shutil.copy2(ascii_out, out_path)
         return out_path
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
