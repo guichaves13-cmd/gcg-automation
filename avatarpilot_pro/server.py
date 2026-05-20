@@ -748,6 +748,106 @@ def _ffprobe_path():
         return probe
     return shutil.which("ffprobe") or "ffprobe"
 
+# Real-ESRGAN cached upsampler (lazy loaded — shared across HD encode and other features)
+_realesrgan_cache = {"x2": None, "x4": None}
+
+def _get_realesrgan(scale: int = 2):
+    """Lazy-load Real-ESRGAN upsampler. Returns None on failure."""
+    key = f"x{scale}"
+    if _realesrgan_cache[key] is not None:
+        return _realesrgan_cache[key]
+    try:
+        import torch as _t
+        from basicsr.archs.rrdbnet_arch import RRDBNet
+        from realesrgan import RealESRGANer
+        if scale == 4:
+            model_name = "RealESRGAN_x4plus.pth"
+            model = RRDBNet(num_in_ch=3, num_out_ch=3, num_feat=64,
+                            num_block=23, num_grow_ch=32, scale=4)
+        else:
+            model_name = "RealESRGAN_x2plus.pth"
+            model = RRDBNet(num_in_ch=3, num_out_ch=3, num_feat=64,
+                            num_block=23, num_grow_ch=32, scale=2)
+        candidates = [
+            os.path.join(MODELS_DIR, model_name),
+            os.path.join(BASE_DIR, "venv311", "Lib", "site-packages", "gfpgan", "weights", model_name),
+        ]
+        path = next((p for p in candidates if os.path.exists(p)), None)
+        if not path:
+            print(f"  [Real-ESRGAN] {model_name} not found locally")
+            return None
+        upsampler = RealESRGANer(
+            scale=scale, model_path=path, model=model,
+            tile=512, tile_pad=10, pre_pad=0,
+            half=_t.cuda.is_available()  # half precision on GPU
+        )
+        _realesrgan_cache[key] = upsampler
+        print(f"  [Real-ESRGAN] Loaded x{scale} model from {path}")
+        return upsampler
+    except Exception as e:
+        print(f"  [Real-ESRGAN] init failed: {e}")
+        return None
+
+
+def realesrgan_upscale_video(input_path: str, output_path: str,
+                              scale: int = 2, job_id: str = None) -> bool:
+    """
+    AI-upscale a video using Real-ESRGAN x2 or x4.
+    Returns True on success (output written). False = fallback needed.
+    NOTE: Slow! ~0.5-1s per frame on RTX 4060. Use only for HD final pass.
+    """
+    upsampler = _get_realesrgan(scale)
+    if upsampler is None:
+        return False
+    try:
+        import tempfile as _tre
+        import cv2 as _cvr
+        import numpy as _npr
+        ff  = _ffmpeg_path()
+        ffp = _ffprobe_path()
+        _tmp = _tre.mkdtemp(prefix="realesrgan_")
+        try:
+            cap = _cvr.VideoCapture(input_path)
+            fps = cap.get(_cvr.CAP_PROP_FPS) or 25
+            total = int(cap.get(_cvr.CAP_PROP_FRAME_COUNT))
+            print(f"  [Real-ESRGAN] Upscaling x{scale}: {total} frames @ {fps:.0f}fps")
+            frames_dir = os.path.join(_tmp, "frames")
+            os.makedirs(frames_dir, exist_ok=True)
+            idx = 0
+            while True:
+                ok, frame = cap.read()
+                if not ok: break
+                try:
+                    output_img, _ = upsampler.enhance(frame, outscale=scale)
+                except Exception as _fe:
+                    print(f"  [Real-ESRGAN] frame {idx} failed ({_fe}) — using bicubic")
+                    h, w = frame.shape[:2]
+                    output_img = _cvr.resize(frame, (w*scale, h*scale),
+                                             interpolation=_cvr.INTER_LANCZOS4)
+                _cvr.imwrite(os.path.join(frames_dir, f"f_{idx:06d}.png"), output_img)
+                idx += 1
+                if job_id and idx % 10 == 0 and job_id in jobs:
+                    pct = int(idx * 100 / max(total, 1))
+                    jobs[job_id]["message"] = f"Real-ESRGAN x{scale}: {pct}% ({idx}/{total})"
+            cap.release()
+            # Reassemble video preserving original audio
+            _v_only = os.path.join(_tmp, "v.mp4")
+            subprocess.run([ff, "-y", "-framerate", str(int(fps)),
+                            "-i", os.path.join(frames_dir, "f_%06d.png"),
+                            "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+                            "-pix_fmt", "yuv420p", _v_only],
+                           capture_output=True, timeout=max(600, total))
+            subprocess.run([ff, "-y", "-i", _v_only, "-i", input_path,
+                            "-map", "0:v", "-map", "1:a?", "-c:v", "copy", "-c:a", "copy",
+                            output_path], capture_output=True, timeout=300)
+            return os.path.exists(output_path) and os.path.getsize(output_path) > 10000
+        finally:
+            shutil.rmtree(_tmp, ignore_errors=True)
+    except Exception as e:
+        print(f"  [Real-ESRGAN] upscale failed: {e}")
+        return False
+
+
 def _ensure_max_dim(image_path: str, max_dim: int = 720, prefix: str = "rsz") -> str:
     """
     If image is larger than max_dim on either side, downscale to fit max_dim while preserving aspect.
@@ -1548,9 +1648,10 @@ def run_musetalk(image_path: str, audio_path: str, output_path: str,
             jobs[job_id]["message"] = "MuseTalk: sincronizando lábios (difusão latente)..."
 
         print(f"  [MuseTalk] Starting inference on {os.path.basename(image_path)}")
-        # MuseTalk on RTX 4060: ~4x audio for static image, can hit 5-6x on cold cache or warm GPU.
-        # Generous timeout prevents cascade failures (MuseTalk timeout -> Wav2Lip fallback -> slow GFPGAN).
-        timeout = max(1800, int(_get_duration_safe(audio_path) * 6) + 300)
+        # MuseTalk on RTX 4060: ~4x audio for static image, can be 8-10x on video face (long videos).
+        # Be VERY generous — fallback to Wav2Lip produces visibly worse quality (240p look)
+        # so it's better to wait for MuseTalk to finish than to time out and fallback.
+        timeout = max(2400, int(_get_duration_safe(audio_path) * 10) + 600)
         env = os.environ.copy()
         env["PYTHONPATH"] = MUSETALK_DIR + os.pathsep + env.get("PYTHONPATH", "")
         env["PYTHONIOENCODING"] = "utf-8"
@@ -4473,25 +4574,46 @@ def run_pipeline(job_id: str, config: dict):
                             "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", _base_audio
                         ], capture_output=True, timeout=60)
 
+                        # SadTalker 512 → 4x more detail than 256, no perceptible quality loss
+                        # The looped base becomes the source video for Wav2Lip/MuseTalk lip sync.
+                        # Higher source = better final output (avoids "240p look" from stretching).
                         _st_base_settings = {
                             "preprocess": "full", "still": False,
-                            "expression_scale": 1.4, "enhancer": "none", "size": 256,
+                            "expression_scale": 1.0, "enhancer": "none", "size": 512,
                         }
                         run_sadtalker(config["image_path"], _base_audio, _base_out, _st_base_settings)
 
                         if os.path.exists(_base_out) and os.path.getsize(_base_out) > 10000:
-                            # Step 2: Loop the base animation to full audio duration
+                            # Step 2: Loop with REVERSE on alternate cycles for natural variety.
+                            # Plain loop = visible repetition every 60s. Bounce (forward+reverse)
+                            # doubles the perceived motion variety to 120s before repeating.
                             jobs[job_id]["message"] = f"Loop: expandindo animação para {dur:.0f}s..."
                             _looped = os.path.join(_loop_dir, "looped.mp4")
+                            _reverse = os.path.join(_loop_dir, "reverse.mp4")
+                            _bounce  = os.path.join(_loop_dir, "bounce.mp4")
+                            # Build reversed clip
+                            subprocess.run([
+                                _ffmpeg_bin, "-y", "-i", _base_out,
+                                "-vf", "reverse", "-an", _reverse
+                            ], capture_output=True, timeout=180)
+                            # Concat forward + reverse to make bounce loop (no abrupt cut)
+                            _concat_txt = os.path.join(_loop_dir, "bc.txt")
+                            with open(_concat_txt, "w") as _bf:
+                                _bf.write(f"file '{_base_out}'\nfile '{_reverse}'\n")
+                            subprocess.run([
+                                _ffmpeg_bin, "-y", "-f", "concat", "-safe", "0",
+                                "-i", _concat_txt, "-c", "copy", _bounce
+                            ], capture_output=True, timeout=120)
+                            _bounce_src = _bounce if os.path.exists(_bounce) and os.path.getsize(_bounce) > 10000 else _base_out
                             _loop_r = subprocess.run([
                                 _ffmpeg_bin, "-y",
-                                "-stream_loop", "-1", "-i", _base_out,
+                                "-stream_loop", "-1", "-i", _bounce_src,
                                 "-t", str(round(dur + 1.0, 3)),
                                 "-c:v", "copy", "-an", _looped
                             ], capture_output=True, timeout=120)
                             if _loop_r.returncode == 0 and os.path.exists(_looped):
                                 _base_video = _looped
-                                print(f"  [Pipeline] Base animation looped: {_base_dur:.0f}s × loop → {dur:.0f}s")
+                                print(f"  [Pipeline] Base animation bounced+looped: {_base_dur:.0f}s × loop → {dur:.0f}s")
                     except Exception as _base_err:
                         print(f"  [Pipeline] SadTalker base falhou ({_base_err}) — usando imagem estática")
                         _base_video = ""
@@ -4785,6 +4907,34 @@ def run_pipeline(job_id: str, config: dict):
                 _tw, _th, _vbr, _vmin, _vmax, _vbuf = 1280, 720, "2500k", "2000k", "4000k", "5000k"
             else:
                 _tw, _th, _vbr, _vmin, _vmax, _vbuf = 1920, 1080, "5000k", "4000k", "8000k", "10000k"
+
+            # AI UPSCALE: if source is small (<720p), use Real-ESRGAN x2 to *generate detail*
+            # instead of just stretching (which causes the "240p look" complaint).
+            # Disabled by default for clips >5min (too slow ~0.5s/frame). User opt-in via config.
+            _use_ai_upscale = config.get("ai_upscale", "auto")
+            if _use_ai_upscale == "auto":
+                # Auto-enable for short clips with small source
+                _use_ai_upscale = (dur <= 120 and max(_cur_w, _cur_h) < 800)
+            if _use_ai_upscale:
+                jobs[job_id]["message"] = "AI Upscale (Real-ESRGAN x2): aumentando detalhe..."
+                _ai_out = os.path.join(_hd_tmp, "ai_upscaled.mp4")
+                _ai_ok = realesrgan_upscale_video(_safe_in, _ai_out, scale=2, job_id=job_id)
+                if _ai_ok and os.path.getsize(_ai_out) > 10000:
+                    _safe_in = _ai_out  # downstream HD encode uses upscaled source
+                    # Re-probe new dimensions
+                    _probe2 = subprocess.run(
+                        [_ffprobe, "-v","error","-select_streams","v:0",
+                         "-show_entries","stream=width,height","-of","csv=p=0", _safe_in],
+                        capture_output=True, timeout=15
+                    )
+                    _parts2 = _probe2.stdout.decode("utf-8", errors="replace").strip().split(",")
+                    if len(_parts2) >= 2:
+                        _cur_w = int(_parts2[0]) if _parts2[0].isdigit() else _cur_w
+                        _cur_h = int(_parts2[1]) if _parts2[1].isdigit() else _cur_h
+                    print(f"  [AI Upscale] OK: source now {_cur_w}x{_cur_h}")
+                else:
+                    print(f"  [AI Upscale] Skipped (model unavailable or failed) — falling back to lanczos stretch")
+
             _needs_hd = True
             if _needs_hd:
                 jobs[job_id]["message"] = f"HD final: {_cur_w}×{_cur_h}→{_tw}×{_th} @ {_vbr}..."
