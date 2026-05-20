@@ -69,9 +69,19 @@ document.addEventListener('DOMContentLoaded', () => {
   let savedPrompts = [];
   let categories = ['Geral'];
 
+  // Owner email — always valid, no remote check needed
+  const OWNER_EMAILS = ['guilhermegmvv@gmail.com'];
+
   // Check if user has a saved license key and if it's still valid
   chrome.storage.local.get(['licenseKey', 'lastValidation'], async (result) => {
     if (result.licenseKey) {
+      // Owner bypass — always valid
+      if (OWNER_EMAILS.includes(result.licenseKey.toLowerCase().trim())) {
+        chrome.storage.local.set({ lastValidation: Date.now() });
+        showMainContent();
+        return;
+      }
+      
       // Check if validation is still within 24 hours
       const now = Date.now();
       const lastValidation = result.lastValidation || 0;
@@ -455,15 +465,19 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    // Check if validation is still within 24 hours
-    const now = Date.now();
-    const hoursElapsed = (now - (lastValidation || 0)) / (1000 * 60 * 60);
+    // Owner bypass — skip validation entirely
+    const isOwner = OWNER_EMAILS.includes(licenseKey.toLowerCase().trim());
     
-    if (hoursElapsed >= 24) {
-      // Need to re-validate - don't show buy links since user already has license
-      showValidationScreen(licenseKey);
-      showLicenseError('Validacao expirada - clique em Validar para continuar', false);
-      return;
+    if (!isOwner) {
+      // Check if validation is still within 24 hours
+      const now = Date.now();
+      const hoursElapsed = (now - (lastValidation || 0)) / (1000 * 60 * 60);
+      
+      if (hoursElapsed >= 24) {
+        showValidationScreen(licenseKey);
+        showLicenseError('Validacao expirada - clique em Validar para continuar', false);
+        return;
+      }
     }
 
     const settings = {
