@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Veo 3 Automation</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <div class="logo">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <h1>Veo 3 Automation</h1>
+    </header>
+
+    <!-- Session Status Panel -->
+    <div class="session-panel" id="sessionPanel">
+      <div class="session-status" id="sessionStatus">
+        <span class="session-dot" id="sessionDot"></span>
+        <span class="session-text" id="sessionText">Verificando sessao...</span>
+      </div>
+      <div class="session-actions">
+        <label class="btn-cookie-import" id="importCookieLabel" title="Importar cookies JSON">
+          <input type="file" id="cookieFileInput" accept=".json" style="display:none;">
+          🍪 Importar
+        </label>
+        <button class="btn-cookie-refresh" id="refreshSessionBtn" title="Verificar sessao">🔄</button>
+      </div>
+    </div>
+
+    <div id="licenseScreen" class="license-screen">
+      <div class="license-container">
+        <div class="license-notice">
+          <p>Esta extensao requer uma licenca ativa para funcionar.</p>
+          <a href="https://veoautomatorflow.shop/" target="_blank" class="btn btn-buy">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="9" cy="21" r="1" stroke="currentColor" stroke-width="2"/>
+              <circle cx="20" cy="21" r="1" stroke="currentColor" stroke-width="2"/>
+              <path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Adquirir Licenca
+          </a>
+        </div>
+        
+        <div class="license-divider">
+          <span>Ja possui licenca?</span>
+        </div>
+        
+        <div class="license-icon">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" stroke="currentColor" stroke-width="2"/>
+            <path d="M7 11V7a5 5 0 0110 0v4" stroke="currentColor" stroke-width="2"/>
+          </svg>
+        </div>
+        <h2>Ativar Licenca</h2>
+        <p class="license-description">Digite seu email de compra para ativar a extensao</p>
+        <div class="license-input-group">
+          <input type="email" id="licenseKeyInput" placeholder="seu@email.com" autocomplete="email">
+          <button class="btn btn-primary" id="activateLicenseBtn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <polyline points="20 6 9 17 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Ativar
+          </button>
+        </div>
+        <p class="license-error" id="licenseError" style="display: none;">Licenca Invalida</p>
+        
+        <div class="invalid-license-info" id="invalidLicenseInfo" style="display: none;">
+          <p class="invalid-license-text">Nao possui licenca? Adquira agora!</p>
+          <a href="https://veoautomatorflow.shop/" target="_blank" class="btn btn-site">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Acessar Site
+          </a>
+          <p class="support-text">Problema com sua licenca? Fale com o suporte:</p>
+          <a href="https://wa.me/555581310272" target="_blank" class="btn btn-whatsapp">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+            </svg>
+            WhatsApp Suporte
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <div class="content" id="mainContent" style="display: none;">
+      <!-- Tab Navigation -->
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="automation">Automacao</button>
+        <button class="tab-btn" data-tab="generator">Gerador IA</button>
+        <button class="tab-btn" data-tab="library">Biblioteca</button>
+      </div>
+
+      <!-- Automation Tab -->
+      <div class="tab-content active" id="automationTab">
+        <div class="input-group">
+          <div class="prompt-header">
+            <label for="prompts">Prompts (separados por 1 linha em branco)</label>
+            <button class="btn-icon" id="insertFromLibraryBtn" title="Inserir da biblioteca">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
+          <textarea 
+            id="prompts" 
+            placeholder="Prompt 1
+
+Prompt 2
+
+Prompt 3"
+            rows="10"
+          ></textarea>
+          <span class="prompt-count" id="promptCount">0 prompts detectados</span>
+        </div>
+
+        <div class="settings">
+          <div class="setting-row">
+            <label for="batchSize">Prompts por lote</label>
+            <input type="number" id="batchSize" value="5" min="1" max="20">
+          </div>
+          <div class="setting-row">
+            <label for="waitTime">Tempo de espera (segundos)</label>
+            <input type="number" id="waitTime" value="60" min="10" max="300">
+          </div>
+          <div class="setting-row checkbox-row">
+            <input type="checkbox" id="includeImages" checked>
+            <label for="includeImages">Incluir imagens no comando</label>
+          </div>
+          <div class="setting-row" id="imageCountRow">
+            <label for="imageCount">Quantidade de imagens</label>
+            <input type="number" id="imageCount" value="1" min="1" max="3">
+          </div>
+        </div>
+
+        <div class="status-container" id="statusContainer" style="display: none;">
+          <div class="status-header">
+            <span class="status-icon" id="statusIcon">
+              <svg class="spinner" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-dasharray="60" stroke-dashoffset="20"/>
+              </svg>
+            </span>
+            <span id="statusText">Processando...</span>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill" id="progressFill"></div>
+          </div>
+          <div class="progress-info">
+            <span id="progressText">0 / 0</span>
+            <span id="timeRemaining"></span>
+          </div>
+          <div class="log-container" id="logContainer"></div>
+        </div>
+
+        <div class="actions">
+          <button class="btn btn-primary" id="startBtn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <polygon points="5 3 19 12 5 21 5 3" fill="currentColor"/>
+            </svg>
+            Iniciar Automacao
+          </button>
+          <button class="btn btn-warning" id="pauseBtn" style="display: none;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="6" y="4" width="4" height="16" fill="currentColor"/>
+              <rect x="14" y="4" width="4" height="16" fill="currentColor"/>
+            </svg>
+            Pausar
+          </button>
+          <button class="btn btn-primary" id="resumeBtn" style="display: none;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <polygon points="5 3 19 12 5 21 5 3" fill="currentColor"/>
+            </svg>
+            Retomar
+          </button>
+          <button class="btn btn-secondary" id="stopBtn" style="display: none;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="6" y="6" width="12" height="12" fill="currentColor"/>
+            </svg>
+            Parar
+          </button>
+        </div>
+
+        <div class="download-section">
+          <div class="download-tabs">
+            <button class="download-tab-btn active" data-download-tab="videos">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <polygon points="5 3 19 12 5 21 5 3" fill="currentColor"/>
+              </svg>
+              Videos
+            </button>
+            <button class="download-tab-btn" data-download-tab="images">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/>
+                <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor"/>
+                <path d="M21 15l-5-5L5 21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              Imagens
+            </button>
+          </div>
+
+          <div class="download-tab-content active" id="videoDownloadTab">
+            <p class="download-info" id="downloadInfo">0 videos detectados</p>
+            <div class="scan-actions">
+              <button class="btn btn-scan" id="startScanBtn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/>
+                  <path d="M21 21l-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                Detectar Videos
+              </button>
+            </div>
+            <div class="order-controls" id="orderControls" style="display: none;">
+              <span class="order-info" id="orderInfo">0 videos detectados</span>
+              <button class="btn btn-reverse" id="reverseOrderBtn" title="Inverter a ordem dos videos (001 vira ultimo, ultimo vira 001)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M7 16V4M7 4L3 8M7 4L11 8M17 8V20M17 20L21 16M17 20L13 16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                Inverter Ordem
+              </button>
+            </div>
+            <div class="folder-input-group">
+              <label for="folderName">Nome da pasta:</label>
+              <input type="text" id="folderName" placeholder="meus_videos" value="veo3_videos">
+            </div>
+            <button class="btn btn-download" id="downloadAllBtn">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M21 15V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline points="7 10 12 15 17 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              Baixar Todos os Videos
+            </button>
+          </div>
+
+          <div class="download-tab-content" id="imageDownloadTab">
+            <p class="download-info" id="imageDownloadInfo">0 imagens detectadas</p>
+            <div class="scan-actions">
+              <button class="btn btn-scan" id="startImageScanBtn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/>
+                  <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor"/>
+                  <path d="M21 15l-5-5L5 21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                Detectar Imagens
+              </button>
+            </div>
+            <div class="folder-input-group">
+              <label for="imageFolderName">Nome da pasta:</label>
+              <input type="text" id="imageFolderName" placeholder="minhas_imagens" value="veo3_imagens">
+            </div>
+            <button class="btn btn-download" id="downloadAllImagesBtn" disabled>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M21 15V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline points="7 10 12 15 17 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              Baixar Todas as Imagens
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Generator IA Tab -->
+      <div class="tab-content" id="generatorTab">
+        <div class="generator-section">
+          <div class="generator-header">
+            <h3>Gerador de Prompts com IA</h3>
+            <p class="generator-desc">Envie um audio + imagens de referencia e a IA transcreve e gera automaticamente os prompts de cena para o Veo 3 (1 cena a cada 8 segundos).</p>
+          </div>
+
+          <div class="generator-api-section">
+            <label for="geminiApiKey">Sua API Key do Gemini:</label>
+            <div class="api-key-input-group">
+              <input type="password" id="geminiApiKey" placeholder="Cole sua API key aqui" value="">
+              <button class="btn-icon btn-toggle-key" id="toggleApiKeyBtn" title="Mostrar/ocultar">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="2"/>
+                  <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
+                </svg>
+              </button>
+            </div>
+            <span class="api-hint">Crie gratis em <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a> (1500 req/dia)</span>
+          </div>
+
+          <div class="audio-upload-section">
+            <label>Audio (narracao/roteiro):</label>
+            <div class="upload-area" id="uploadArea">
+              <input type="file" id="audioFileInput" accept="audio/*" style="display: none;">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M19 10v2a7 7 0 01-14 0v-2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <line x1="12" y1="19" x2="12" y2="23" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                <line x1="8" y1="23" x2="16" y2="23" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+              <span class="upload-text">Clique para selecionar um audio</span>
+              <span class="upload-hint">MP3, WAV, OGG, M4A (max 50MB)</span>
+            </div>
+            <div class="selected-file" id="selectedFile" style="display: none;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M9 18V5l12-2v13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <circle cx="6" cy="18" r="3" stroke="currentColor" stroke-width="2"/>
+                <circle cx="18" cy="16" r="3" stroke="currentColor" stroke-width="2"/>
+              </svg>
+              <span id="selectedFileName">arquivo.mp3</span>
+              <span class="audio-duration-badge" id="audioDurationBadge" style="display: none;"></span>
+              <button class="btn-remove-file" id="removeFileBtn" title="Remover">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                  <line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+              </button>
+            </div>
+            <div class="scene-calc" id="sceneCalc" style="display: none;">
+              <span id="sceneCalcText"></span>
+            </div>
+          </div>
+
+          <div class="images-upload-section">
+            <label>Imagens de referencia (opcional):</label>
+            <div class="upload-area upload-area-small" id="imageUploadArea">
+              <input type="file" id="refImagesInput" accept="image/*" multiple style="display: none;">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/>
+                <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor"/>
+                <path d="M21 15l-5-5L5 21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <span class="upload-text">Clique para adicionar imagens</span>
+              <span class="upload-hint">PNG, JPG, WEBP (max 10 imagens)</span>
+            </div>
+            <div class="ref-images-list" id="refImagesList"></div>
+          </div>
+
+          <button class="btn btn-primary btn-generate" id="generatePromptsBtn" disabled>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Gerar Prompts com IA
+          </button>
+
+          <div class="generation-status" id="generationStatus" style="display: none;">
+            <div class="generation-spinner">
+              <svg class="spinner" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-dasharray="60" stroke-dashoffset="20"/>
+              </svg>
+              <span id="generationStatusText">Processando audio com IA...</span>
+            </div>
+          </div>
+
+          <div class="generated-prompts-section" id="generatedPromptsSection" style="display: none;">
+            <div class="generated-header">
+              <label>Prompts gerados:</label>
+              <button class="btn-copy" id="copyGeneratedBtn" title="Copiar todos">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="2"/>
+                  <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" stroke-width="2"/>
+                </svg>
+                Copiar
+              </button>
+            </div>
+            <textarea id="generatedPromptsText" rows="10" readonly></textarea>
+            <div class="generated-actions">
+              <span class="generated-count" id="generatedCount">0 prompts</span>
+              <button class="btn btn-primary" id="sendGeneratedToAutomationBtn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M22 2L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                Enviar para Automacao
+              </button>
+            </div>
+          </div>
+
+          <div class="manual-paste-divider">
+            <span>ou cole manualmente</span>
+          </div>
+
+          <div class="generator-paste-section">
+            <label for="generatorPaste">Cole aqui prompts gerados externamente:</label>
+            <textarea id="generatorPaste" placeholder="Cole prompts do ChatGPT, Gemini, etc...
+
+Cada prompt separado por uma linha em branco." rows="6"></textarea>
+            <button class="btn btn-primary" id="sendToAutomationBtn">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M22 2L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              Enviar para Automacao
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Library Tab -->
+      <div class="tab-content" id="libraryTab">
+        <div class="library-header">
+          <h3>Meus Prompts Salvos</h3>
+          <div class="library-actions">
+            <button class="btn-icon" id="exportPromptsBtn" title="Exportar">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            <button class="btn-icon" id="importPromptsBtn" title="Importar">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            <input type="file" id="importFileInput" accept=".json" style="display: none;">
+          </div>
+        </div>
+
+        <!-- Category Filter -->
+        <div class="category-filter">
+          <select id="categoryFilter">
+            <option value="all">Todas as categorias</option>
+          </select>
+          <button class="btn-small" id="addCategoryBtn">+ Categoria</button>
+        </div>
+
+        <!-- Saved Prompts List -->
+        <div class="prompts-list" id="promptsList">
+          <p class="empty-library">Nenhum prompt salvo. Adicione seu primeiro!</p>
+        </div>
+
+        <!-- Add New Prompt Form -->
+        <div class="add-prompt-form">
+          <h4>Adicionar Novo Prompt</h4>
+          <input type="text" id="newPromptTitle" placeholder="Titulo do prompt">
+          <textarea id="newPromptText" placeholder="Texto do prompt..." rows="4"></textarea>
+          <div class="form-row">
+            <select id="newPromptCategory">
+              <option value="geral">Geral</option>
+            </select>
+            <button class="btn btn-primary btn-small" id="savePromptBtn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline points="17 21 17 13 7 13 7 21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <polyline points="7 3 7 8 15 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              Salvar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer class="footer">
+      <p>Dica: Navegue ate a pagina do Veo 3 antes de iniciar</p>
+      <button class="btn-logout" id="logoutBtn" style="display: none;">Sair da conta</button>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
