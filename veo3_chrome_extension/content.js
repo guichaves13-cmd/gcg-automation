@@ -1307,6 +1307,56 @@
     });
   }
 
+  // Detect Error 253 (quota limit) on the page
+  // Google Flow shows error messages when rate limited
+  function detectQuotaError() {
+    const errorKeywords = [
+      'error code 253',
+      'quota limit',
+      'exceeds the quota',
+      'rate limit',
+      'too many requests',
+      'limite de cota',
+      'muitas solicitações',
+      'tente novamente mais tarde',
+      'try again later',
+      'number of requests sent exceeds'
+    ];
+    
+    // Scan visible text on the page for error messages
+    const allText = document.body.innerText.toLowerCase();
+    for (const keyword of errorKeywords) {
+      if (allText.includes(keyword)) {
+        return keyword;
+      }
+    }
+    
+    // Also check for error dialog/toast/snackbar elements
+    const errorSelectors = [
+      '[role="alert"]',
+      '[role="alertdialog"]',
+      '.error-message',
+      '.snackbar',
+      '[class*="error"]',
+      '[class*="toast"]',
+      '[class*="snack"]'
+    ];
+    
+    for (const selector of errorSelectors) {
+      const elements = document.querySelectorAll(selector);
+      for (const el of elements) {
+        const text = (el.textContent || '').toLowerCase();
+        for (const keyword of errorKeywords) {
+          if (text.includes(keyword)) {
+            return keyword;
+          }
+        }
+      }
+    }
+    
+    return null;
+  }
+
   // Click "Reutilizar comando" (Reuse command) on the most recent video
   // The button is a small circular arrow icon on the video card
   // Clicking it reloads the prompt area with the same images attached
@@ -1487,6 +1537,60 @@
         await waitIfPaused();
         if (shouldStop) break;
 
+        // Check for Error 253 (quota limit) after submission
+        await delay(2000); // Wait for error to appear
+        const quotaError = detectQuotaError();
+        if (quotaError) {
+          log('⚠️ ERRO 253 DETECTADO: Limite de cota excedido!', 'error');
+          log('Entrando em modo cooldown automatico (5 minutos)...', 'warning');
+          
+          // Retry logic with cooldown
+          let retrySuccess = false;
+          for (let retry = 0; retry < 3; retry++) {
+            if (shouldStop) break;
+            
+            log(`Cooldown: tentativa ${retry + 1}/3 em 5 minutos...`, 'warning');
+            await waitWithCountdown(300, `Cooldown Error 253 (tentativa ${retry + 1}/3)`);
+            
+            if (shouldStop) break;
+            
+            // Reload the page to clear error state
+            log('Recarregando pagina...', 'info');
+            window.location.reload();
+            await delay(5000); // Wait for page to reload
+            
+            // Re-initialize
+            initializeKnownVideos();
+            
+            // Try submitting the same prompt again
+            try {
+              await enterPrompt(prompt);
+              await delay(150);
+              await submitPrompt();
+              await delay(2000);
+              
+              // Check if error persists
+              if (!detectQuotaError()) {
+                log(`Cooldown concluido! Prompt ${i + 1} reenviado com sucesso.`, 'success');
+                retrySuccess = true;
+                break;
+              }
+            } catch (retryErr) {
+              log(`Erro no retry: ${retryErr.message}`, 'error');
+            }
+          }
+          
+          if (!retrySuccess && !shouldStop) {
+            log('Limite de cota persistente. Pausando automacao.', 'error');
+            log('Aguarde 1-2 horas e tente novamente.', 'warning');
+            isPaused = true;
+            saveAutomationState();
+            broadcastState();
+            await waitIfPaused();
+            if (shouldStop) break;
+          }
+        }
+
         // Track newly generated video after a short delay
         await delay(300);
         const newVideo = detectNewVideo();
@@ -1520,6 +1624,12 @@
 
     } catch (error) {
       log(`Erro na automação: ${error.message}`, 'error');
+      
+      // Check if error is quota related
+      if (error.message.includes('253') || error.message.includes('quota') || error.message.includes('limit')) {
+        log('⚠️ Erro de cota detectado. Aguarde 1-2 horas.', 'error');
+      }
+      
       chrome.runtime.sendMessage({ type: 'error', text: error.message });
     } finally {
       isRunning = false;
