@@ -237,13 +237,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const tabId = sender.tab.id;
     const text = message.text;
     
-    chrome.debugger.attach({ tabId }, '1.3', () => {
-      if (chrome.runtime.lastError) {
-        console.log('[Veo3] Debugger attach error:', chrome.runtime.lastError.message);
-        sendResponse({ success: false, error: chrome.runtime.lastError.message });
-        return;
-      }
-      
+    const doInsert = () => {
       chrome.debugger.sendCommand({ tabId }, 'Input.insertText', { text }, () => {
         if (chrome.runtime.lastError) {
           console.log('[Veo3] InsertText error:', chrome.runtime.lastError.message);
@@ -251,11 +245,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           sendResponse({ success: false, error: chrome.runtime.lastError.message });
           return;
         }
-        
         chrome.debugger.detach({ tabId }, () => {
           sendResponse({ success: true });
         });
       });
+    };
+    
+    chrome.debugger.attach({ tabId }, '1.3', () => {
+      if (chrome.runtime.lastError) {
+        const errMsg = chrome.runtime.lastError.message || '';
+        if (errMsg.includes('Already attached') || errMsg.includes('already being inspected')) {
+          doInsert();
+        } else {
+          console.log('[Veo3] Debugger attach error:', errMsg);
+          sendResponse({ success: false, error: errMsg });
+        }
+        return;
+      }
+      doInsert();
     });
     return true;
   }
@@ -264,12 +271,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'cdp-clear-field') {
     const tabId = sender.tab.id;
     
-    chrome.debugger.attach({ tabId }, '1.3', () => {
-      if (chrome.runtime.lastError) {
-        sendResponse({ success: false, error: chrome.runtime.lastError.message });
-        return;
-      }
-      
+    const doClear = () => {
       // Select all with Ctrl+A then delete
       chrome.debugger.sendCommand({ tabId }, 'Input.dispatchKeyEvent', {
         type: 'keyDown', modifiers: 2, windowsVirtualKeyCode: 65, key: 'a', code: 'KeyA'
@@ -290,32 +292,70 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           });
         });
       });
+    };
+    
+    chrome.debugger.attach({ tabId }, '1.3', () => {
+      if (chrome.runtime.lastError) {
+        const errMsg = chrome.runtime.lastError.message || '';
+        if (errMsg.includes('Already attached') || errMsg.includes('already being inspected')) {
+          doClear();
+        } else {
+          sendResponse({ success: false, error: errMsg });
+        }
+        return;
+      }
+      doClear();
     });
     return true;
   }
 
   // Click at coordinates using CDP (trusted click)
+  // CRITICAL: Must send mouseMoved BEFORE mousePressed for Chrome to register the click target
   if (message.type === 'cdp-click') {
     const tabId = sender.tab.id;
     const { x, y } = message;
     
+    const doClick = () => {
+      // Step 1: Move mouse to target (required for Chrome to know WHERE to click)
+      chrome.debugger.sendCommand({ tabId }, 'Input.dispatchMouseEvent', {
+        type: 'mouseMoved', x, y, button: 'none'
+      }, () => {
+        // Step 2: Small delay for move to register
+        setTimeout(() => {
+          // Step 3: mousePressed
+          chrome.debugger.sendCommand({ tabId }, 'Input.dispatchMouseEvent', {
+            type: 'mousePressed', x, y, button: 'left', clickCount: 1, buttons: 1, pointerType: 'mouse'
+          }, () => {
+            // Step 4: Small delay between press and release (natural click behavior)
+            setTimeout(() => {
+              // Step 5: mouseReleased
+              chrome.debugger.sendCommand({ tabId }, 'Input.dispatchMouseEvent', {
+                type: 'mouseReleased', x, y, button: 'left', clickCount: 1, buttons: 0, pointerType: 'mouse'
+              }, () => {
+                chrome.debugger.detach({ tabId }, () => {
+                  sendResponse({ success: true });
+                });
+              });
+            }, 50);
+          });
+        }, 30);
+      });
+    };
+    
     chrome.debugger.attach({ tabId }, '1.3', () => {
       if (chrome.runtime.lastError) {
-        sendResponse({ success: false, error: chrome.runtime.lastError.message });
+        // Debugger may already be attached — try detach first then re-attach
+        const errMsg = chrome.runtime.lastError.message || '';
+        if (errMsg.includes('Already attached') || errMsg.includes('already being inspected')) {
+          // Already attached, just proceed with click
+          doClick();
+        } else {
+          console.log('[Veo3] CDP attach error:', errMsg);
+          sendResponse({ success: false, error: errMsg });
+        }
         return;
       }
-      
-      chrome.debugger.sendCommand({ tabId }, 'Input.dispatchMouseEvent', {
-        type: 'mousePressed', x, y, button: 'left', clickCount: 1
-      }, () => {
-        chrome.debugger.sendCommand({ tabId }, 'Input.dispatchMouseEvent', {
-          type: 'mouseReleased', x, y, button: 'left', clickCount: 1
-        }, () => {
-          chrome.debugger.detach({ tabId }, () => {
-            sendResponse({ success: true });
-          });
-        });
-      });
+      doClick();
     });
     return true;
   }
@@ -324,12 +364,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'cdp-press-enter') {
     const tabId = sender.tab.id;
     
-    chrome.debugger.attach({ tabId }, '1.3', () => {
-      if (chrome.runtime.lastError) {
-        sendResponse({ success: false, error: chrome.runtime.lastError.message });
-        return;
-      }
-      
+    const doEnter = () => {
       chrome.debugger.sendCommand({ tabId }, 'Input.dispatchKeyEvent', {
         type: 'keyDown', windowsVirtualKeyCode: 13, key: 'Enter', code: 'Enter'
       }, () => {
@@ -341,6 +376,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           });
         });
       });
+    };
+    
+    chrome.debugger.attach({ tabId }, '1.3', () => {
+      if (chrome.runtime.lastError) {
+        const errMsg = chrome.runtime.lastError.message || '';
+        if (errMsg.includes('Already attached') || errMsg.includes('already being inspected')) {
+          doEnter();
+        } else {
+          sendResponse({ success: false, error: errMsg });
+        }
+        return;
+      }
+      doEnter();
     });
     return true;
   }
