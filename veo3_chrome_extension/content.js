@@ -1122,58 +1122,45 @@
       throw new Error('Não foi possível encontrar o campo de texto para o prompt');
     }
 
-    // Focus the input element
-    inputElement.focus();
-    inputElement.click();
-    await delay(300);
+    // Passo 1: Focar a caixa de texto usando CDP nativo (Click físico)
+    // Isso é vital para o Slate.js inicializar o cursor/seleção internamente.
+    const focusScript = `
+      (function() {
+        var tb = document.querySelector('[role="textbox"]') || document.querySelector('[contenteditable="true"]');
+        if (!tb) return JSON.stringify({found: false});
+        var r = tb.getBoundingClientRect();
+        return JSON.stringify({
+          found: true,
+          x: Math.round(r.left + 20),
+          y: Math.round(r.top + 10),
+          text: 'textbox'
+        });
+      })()
+    `;
+    
+    try {
+      await chrome.runtime.sendMessage({ type: 'cdp-find-and-click', findScript: focusScript });
+      await delay(300);
+    } catch (e) {
+      log('Aviso: falha no clique CDP da textbox', 'warning');
+    }
 
-    // Clear existing content via CDP (Ctrl+A then Backspace)
+    // Passo 2: Limpar via CDP
     try {
       await chrome.runtime.sendMessage({ type: 'cdp-clear-field' });
       await delay(200);
-    } catch (e) {
-      log(`Aviso ao limpar campo: ${e.message}`, 'info');
+    } catch (e) {}
+
+    // Passo 3: Digitação letra por letra via CDP (Única forma aceita pelo React/Slate)
+    const result = await chrome.runtime.sendMessage({ type: 'cdp-insert-text', text: promptText });
+    
+    if (!result || !result.success) {
+      // Se CDP falhou, lançar erro para parar a automação (evita o texto fantasma)
+      throw new Error(`Falha ao inserir texto via CDP: ${result?.error || 'erro desconhecido'}`);
     }
 
-    // Insert text via CDP (creates trusted beforeinput/input events)
-    let cdpSuccess = false;
-    try {
-      const result = await chrome.runtime.sendMessage({ type: 'cdp-insert-text', text: promptText });
-      if (result && result.success) cdpSuccess = true;
-    } catch(e) {}
-
-    if (inputElement) {
-      inputElement.focus();
-      
-      // Se CDP falhou ou apenas por segurança para o Slate.js:
-      // Forçar colagem via execCommand
-      document.execCommand('insertText', false, promptText);
-      
-      // O grande truque para o Slate.js (React): disparar um evento de 'paste' sintético
-      try {
-        const dataTransfer = new DataTransfer();
-        dataTransfer.setData('text/plain', promptText);
-        const pasteEvent = new ClipboardEvent('paste', {
-          clipboardData: dataTransfer,
-          bubbles: true,
-          cancelable: true
-        });
-        inputElement.dispatchEvent(pasteEvent);
-      } catch (e) {
-        log('Aviso: falha no evento paste sintético', 'warning');
-      }
-
-      // Disparar input nativo
-      inputElement.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
-      
-      // Simular tecla Space para forçar atualização do React State
-      inputElement.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', code: 'Space', charCode: 32, keyCode: 32, bubbles: true }));
-      inputElement.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', code: 'Space', charCode: 32, keyCode: 32, bubbles: true }));
-    }
-
-    await delay(500); // Dar tempo para o React renderizar o botão de enviar!
-    log('Prompt inserido (sincronizado com React).', 'success');
-    return true;
+    await delay(300);
+    log('Prompt inserido perfeitamente no Slate.js.', 'success');
     return true;
   }
 
