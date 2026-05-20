@@ -237,27 +237,45 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const tabId = sender.tab.id;
     const text = message.text;
     
-    const doInsert = () => {
-      chrome.debugger.sendCommand({ tabId }, 'Input.insertText', { text }, () => {
-        if (chrome.runtime.lastError) {
-          console.log('[Veo3] InsertText error:', chrome.runtime.lastError.message);
-          chrome.debugger.detach({ tabId });
-          sendResponse({ success: false, error: chrome.runtime.lastError.message });
-          return;
-        }
-        // Force React to register the input by simulating a real Space keypress
-        chrome.debugger.sendCommand({ tabId }, 'Input.dispatchKeyEvent', {
-          type: 'keyDown', text: ' ', unmodifiedText: ' ', windowsVirtualKeyCode: 32, key: ' ', code: 'Space'
-        }, () => {
-          chrome.debugger.sendCommand({ tabId }, 'Input.dispatchKeyEvent', {
-            type: 'keyUp', windowsVirtualKeyCode: 32, key: ' ', code: 'Space'
-          }, () => {
-            chrome.debugger.detach({ tabId }, () => {
-              sendResponse({ success: true });
+    const doInsert = async () => {
+      try {
+        for (let i = 0; i < text.length; i++) {
+          const char = text[i];
+          
+          await new Promise((resolve, reject) => {
+            chrome.debugger.sendCommand({ tabId }, 'Input.dispatchKeyEvent', {
+              type: 'keyDown', text: char, unmodifiedText: char, key: char
+            }, () => {
+              if (chrome.runtime.lastError) return reject(chrome.runtime.lastError);
+              
+              chrome.debugger.sendCommand({ tabId }, 'Input.dispatchKeyEvent', {
+                type: 'char', text: char, unmodifiedText: char, key: char
+              }, () => {
+                if (chrome.runtime.lastError) return reject(chrome.runtime.lastError);
+                
+                chrome.debugger.sendCommand({ tabId }, 'Input.dispatchKeyEvent', {
+                  type: 'keyUp', key: char
+                }, () => {
+                  if (chrome.runtime.lastError) return reject(chrome.runtime.lastError);
+                  resolve();
+                });
+              });
             });
           });
+          
+          // Small delay between characters for React to catch up
+          await new Promise(r => setTimeout(r, 2));
+        }
+        
+        chrome.debugger.detach({ tabId }, () => {
+          sendResponse({ success: true });
         });
-      });
+      } catch (err) {
+        console.log('[Veo3] Typing error:', err.message);
+        chrome.debugger.detach({ tabId }, () => {
+          sendResponse({ success: false, error: err.message });
+        });
+      }
     };
     
     chrome.debugger.attach({ tabId }, '1.3', () => {
@@ -446,13 +464,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     
     const doEnter = () => {
       chrome.debugger.sendCommand({ tabId }, 'Input.dispatchKeyEvent', {
-        type: 'keyDown', windowsVirtualKeyCode: 13, key: 'Enter', code: 'Enter'
+        type: 'rawKeyDown', windowsVirtualKeyCode: 13, key: 'Enter', code: 'Enter'
       }, () => {
         chrome.debugger.sendCommand({ tabId }, 'Input.dispatchKeyEvent', {
-          type: 'keyUp', windowsVirtualKeyCode: 13, key: 'Enter', code: 'Enter'
+          type: 'char', text: '\r', unmodifiedText: '\r', windowsVirtualKeyCode: 13, key: 'Enter', code: 'Enter'
         }, () => {
-          chrome.debugger.detach({ tabId }, () => {
-            sendResponse({ success: true });
+          chrome.debugger.sendCommand({ tabId }, 'Input.dispatchKeyEvent', {
+            type: 'keyUp', windowsVirtualKeyCode: 13, key: 'Enter', code: 'Enter'
+          }, () => {
+            chrome.debugger.detach({ tabId }, () => {
+              sendResponse({ success: true });
+            });
           });
         });
       });
