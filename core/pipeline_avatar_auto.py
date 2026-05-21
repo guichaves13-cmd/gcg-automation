@@ -69,22 +69,39 @@ def _trim_avatar(input_path, start, duration, output_path, width, height, fps):
 def _make_broll_with_pip(broll_path, avatar_path, start, duration,
                           output_path, width, height, fps,
                           is_image=False, kb_dir=None,
-                          pip_position="bottom_right", pip_percent=22):
-    """Create B-roll fullscreen + avatar PIP overlay + avatar audio."""
+                          pip_position="bottom_right", pip_percent=22,
+                          fade_in=0.3, fade_out=0.3):
+    """Create B-roll fullscreen + avatar PIP overlay + avatar audio.
+
+    PHASE 5: also applies subtle fade-in and fade-out to the B-roll background
+    so the avatar↔B-roll cuts read as a soft dissolve rather than a hard cut.
+    fade durations are in seconds. Set to 0 to disable.
+    """
     ffmpeg = _find_ffmpeg()
+
+    # Build fade filter chain (applied to the b-roll layer, not the PIP).
+    # Fade-out starts (duration - fade_out) seconds in.
+    fade_parts = []
+    if fade_in > 0:
+        fade_parts.append(f"fade=t=in:st=0:d={fade_in:.2f}")
+    if fade_out > 0 and duration > fade_out + 0.2:
+        fade_parts.append(f"fade=t=out:st={(duration - fade_out):.2f}:d={fade_out:.2f}")
+    fade_chain = ("," + ",".join(fade_parts)) if fade_parts else ""
 
     # Step 1: Create B-roll video (no audio)
     broll_vid = output_path + ".broll.mp4"
     if is_image:
         kb_filter = get_zoompan_filter(kb_dir or "zoom_in_center", duration, fps, width, height)
-        create_video_from_image(broll_path, duration, width, height, fps, kb_filter, broll_vid)
+        # For images, apply Ken Burns AND fade in/out for cinematic feel
+        create_video_from_image(broll_path, duration, width, height, fps,
+                                kb_filter + fade_chain, broll_vid)
     else:
         clip_dur = get_duration(broll_path)
         use_dur = min(duration, clip_dur)
         cmd = [
             ffmpeg, "-y", "-i", broll_path, "-t", str(round(use_dur, 3)),
             "-vf", f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
-                   f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black,fps={fps}",
+                   f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black,fps={fps}" + fade_chain,
             "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
             "-an", "-pix_fmt", "yuv420p", broll_vid,
         ]
@@ -217,15 +234,22 @@ def run_auto(config: dict, on_progress=None):
         # Use shot list from intelligence engine
         # Pass the intel validator + theme so each download can be content-validated
         # (rejects B-rolls that don't visually match the search term)
+        # PHASE 6: when youtube_api_key is configured we auto-enable youtube_priority.
+        # YouTube has real contextual footage that often beats stock libraries for
+        # topical content (history, news, science explainer). User can override
+        # explicitly with youtube_priority=False.
+        _yt_key = config.get("youtube_api_key", "")
+        _yt_priority = config.get("youtube_priority", bool(_yt_key))
+
         mapped_clips = _download_from_shot_list(
             analysis["shot_list"],
             stock_folder,
             pexels_key, pixabay_key, unsplash_key,
             max_clips=broll_count,
             on_progress=on_progress,
-            youtube_api_key=config.get("youtube_api_key", ""),
+            youtube_api_key=_yt_key,
             youtube_channel_ids=config.get("youtube_channel_ids", ""),
-            youtube_priority=config.get("youtube_priority", False),
+            youtube_priority=_yt_priority,
             # PHASE 2: pass validator + theme for post-download Gemini Vision check
             validator=intel,
             video_theme=analysis.get("theme", "general"),
@@ -362,6 +386,44 @@ def run_auto(config: dict, on_progress=None):
 
         current = concat_out
 
+        # PHASE 5: Add subtle whoosh SFX on every avatar<->broll transition.
+        # Cut points are computed from segments_plan (cumulative duration).
+        # We skip cuts that are too close together (<1.5s) to avoid SFX overlap.
+        if config.get("transition_sfx_enabled", True) and segments_plan:
+            try:
+                from core.sound_effects import add_transition_sfx
+                cut_times = []
+                t_accum = 0.0
+                last_type = None
+                for s in segments_plan:
+                    t_accum += float(s.get("duration", 0))
+                    # Only mark cuts where the segment TYPE changes (avatar<->broll)
+                    cur_type = s.get("type")
+                    if last_type is not None and cur_type != last_type:
+                        cut_times.append(t_accum - float(s.get("duration", 0)))
+                    last_type = cur_type
+                # Dedupe close cuts (within 1.5s of each other)
+                cleaned = []
+                for t in cut_times:
+                    if not cleaned or (t - cleaned[-1]) >= 1.5:
+                        cleaned.append(t)
+                if cleaned:
+                    sfx_out = os.path.join(temp_dir, "concat_sfx.mp4")
+                    console.print(f"  [yellow]Phase 5+: Adding {len(cleaned)} transition whooshes...[/yellow]")
+                    ok = add_transition_sfx(
+                        current, cleaned, sfx_out, temp_dir,
+                        sfx_volume=float(config.get("transition_sfx_volume", 0.18)),
+                    )
+                    if ok and _has_video(sfx_out) and os.path.getsize(sfx_out) > os.path.getsize(current) * 0.3:
+                        current = sfx_out
+                        console.print(f"  [green]Transitions: {len(cleaned)} whooshes added[/green]")
+                    else:
+                        console.print("  [dim]Transition SFX skipped (output invalid)[/dim]")
+                else:
+                    console.print("  [dim]No type-change transitions to enhance[/dim]")
+            except Exception as sfx_e:
+                console.print(f"  [dim]Transition SFX skipped: {sfx_e}[/dim]")
+
         # =============================================
         # STEP 6: FRESH SUBTITLES (from THIS video only!)
         # =============================================
@@ -462,6 +524,7 @@ def run_auto(config: dict, on_progress=None):
             shutil.copy2(analysis["subtitle_srt"], output_path.replace(".mp4", ".srt"))
 
         # PHASE 3: Beat timeline JSON next to output (full traceability)
+        timeline = None
         try:
             from core.beat_timeline import build_beat_timeline, summarize_beat_timeline
             timeline_path = output_path.replace(".mp4", "_beat_timeline.json")
@@ -476,6 +539,16 @@ def run_auto(config: dict, on_progress=None):
             console.print(f"\n[cyan]{summarize_beat_timeline(timeline)}[/cyan]")
         except Exception as bt_e:
             console.print(f"  [dim]Beat timeline export skipped: {bt_e}[/dim]")
+
+        # PHASE 4: B-Roll picker HTML for manual review (opt-out via config)
+        if timeline and config.get("generate_picker", True):
+            try:
+                from core.broll_picker import generate_picker
+                picker_path = output_path.replace(".mp4", "_picker.html")
+                generate_picker(timeline, picker_path)
+                console.print(f"  [cyan]Picker HTML:[/cyan] {picker_path}")
+            except Exception as pk_e:
+                console.print(f"  [dim]Picker generation skipped: {pk_e}[/dim]")
 
         # =============================================
         # IA AUDITOR FINAL — quality check

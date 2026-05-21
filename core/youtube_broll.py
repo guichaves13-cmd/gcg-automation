@@ -61,40 +61,101 @@ def search_and_download(keyword: str, output_path: str,
     2. YouTube Data API com filtro Creative Commons (seguro para monetizacao)
     3. yt-dlp search com channel_names como boost nas queries
     4. yt-dlp search generico
+    5. Multi-query fallback (simplifica keyword, adiciona 'footage'/'b-roll')
 
     Todas as tentativas usam retry com exponential backoff (3x).
     """
     if not _ensure_ytdlp():
-        print("  [YouTube] yt-dlp indisponivel -- pulando fonte YouTube")
+        print(f"    [YouTube] FAIL '{keyword}': yt-dlp unavailable")
         return False
+
+    attempted = []  # Track each attempt for clear failure reporting
 
     # 1. Canais especificos via API
     if youtube_api_key and channel_ids:
         for ch_id in (channel_ids or []):
+            attempted.append(f"channel:{ch_id[:12]}")
             videos = _search_api(keyword, youtube_api_key, channel_id=ch_id, cc_only=False)
             if videos:
                 ok = _download_segment_with_retry(videos[0]["url"], output_path)
                 if ok:
                     print(f"    [YouTube-Canal] OK '{keyword}' -> {videos[0]['title'][:50]}")
                     return True
+                else:
+                    print(f"    [YouTube-Canal] FAIL '{keyword}' on {ch_id[:12]}: download failed")
 
     # 2. API geral com CC
     if youtube_api_key:
+        attempted.append("api+CC")
         videos = _search_api(keyword, youtube_api_key, cc_only=True)
         if videos:
             ok = _download_segment_with_retry(videos[0]["url"], output_path)
             if ok:
                 print(f"    [YouTube-CC] OK '{keyword}' -> {videos[0]['title'][:50]}")
                 return True
+            else:
+                print(f"    [YouTube-CC] FAIL '{keyword}': download failed after retries")
+        else:
+            print(f"    [YouTube-CC] no CC results for '{keyword}'")
+
+        # API w/o CC filter as a softer fallback (still real videos from YT)
+        attempted.append("api")
+        videos = _search_api(keyword, youtube_api_key, cc_only=False)
+        if videos:
+            ok = _download_segment_with_retry(videos[0]["url"], output_path)
+            if ok:
+                print(f"    [YouTube-API] OK '{keyword}' -> {videos[0]['title'][:50]}")
+                return True
+            else:
+                print(f"    [YouTube-API] FAIL '{keyword}': download failed")
 
     # 3. yt-dlp com channel_names como boost (sem API key)
     if channel_names:
-        ok = _ytdlp_search(keyword, output_path, channel_name_hints=channel_names)
-        if ok:
+        attempted.append("ytdlp+channels")
+        if _ytdlp_search(keyword, output_path, channel_name_hints=channel_names):
             return True
 
     # 4. yt-dlp search generico
-    return _ytdlp_search(keyword, output_path)
+    attempted.append("ytdlp")
+    if _ytdlp_search(keyword, output_path):
+        return True
+
+    # 5. Multi-query fallback — try variations
+    fallback_queries = _generate_fallback_queries(keyword)
+    for fq in fallback_queries:
+        attempted.append(f"fallback:{fq[:30]}")
+        print(f"    [YouTube] Fallback query: '{fq}'")
+        if _ytdlp_search(fq, output_path):
+            return True
+
+    # All sources exhausted — log clearly so this doesn't fail silently
+    print(f"    [YouTube] EXHAUSTED '{keyword}' — tried: {', '.join(attempted)}")
+    return False
+
+
+def _generate_fallback_queries(keyword: str) -> list:
+    """Generate simplified fallback search queries from original keyword."""
+    queries = []
+    words = keyword.strip().split()
+    
+    # Add 'footage' suffix
+    queries.append(f"{keyword} footage")
+    
+    # Add 'b-roll' suffix  
+    queries.append(f"{keyword} b-roll")
+    
+    # Simplify to 2 words if longer
+    if len(words) > 2:
+        queries.append(" ".join(words[:2]))
+        queries.append(" ".join(words[-2:]))
+    
+    # Single most important word (skip common adjectives)
+    skip = {"the", "a", "an", "of", "in", "on", "for", "with", "close", "up", "wide", "shot"}
+    important = [w for w in words if w.lower() not in skip and len(w) > 3]
+    if important:
+        queries.append(f"{important[0]} video")
+    
+    return queries[:4]  # Max 4 fallback attempts
 
 
 def download_from_url(url: str, output_path: str) -> bool:
@@ -213,13 +274,23 @@ def _download_segment(url: str, output_path: str) -> bool:
         "postprocessors": [],
     }
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=True)
-        total_dur = info.get("duration", 0) if info else 0
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            total_dur = info.get("duration", 0) if info else 0
+    except yt_dlp.utils.DownloadError as dle:
+        msg = str(dle)[:200]
+        print(f"    [YouTube] yt-dlp DownloadError: {msg}")
+        raise Exception(f"yt-dlp download error: {msg}")
+    except yt_dlp.utils.ExtractorError as exe:
+        msg = str(exe)[:200]
+        print(f"    [YouTube] yt-dlp ExtractorError: {msg}")
+        raise Exception(f"yt-dlp extractor error: {msg}")
 
     # Resolve o arquivo baixado (pode ter extensao diferente)
     raw_file = _resolve_file(tmp_raw)
     if not raw_file:
+        print(f"    [YouTube] No file found after download (tmp_raw={tmp_raw})")
         return False
 
     try:
@@ -255,7 +326,15 @@ def _download_segment(url: str, output_path: str) -> bool:
             output_path,
         ]
 
-        result = subprocess.run(cmd, capture_output=True, timeout=FFMPEG_TIMEOUT)
+        try:
+            result = subprocess.run(cmd, capture_output=True, timeout=FFMPEG_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            print(f"    [YouTube] ffmpeg extract TIMED OUT after {FFMPEG_TIMEOUT}s")
+            return False
+
+        if result.returncode != 0:
+            err = (result.stderr or b"").decode("utf-8", errors="replace")[-300:]
+            print(f"    [YouTube] ffmpeg extract rc={result.returncode}: {err}")
 
         ok = (
             result.returncode == 0
@@ -357,16 +436,24 @@ def _resolve_file(base_path: str) -> str:
 
 
 def _probe_duration(path: str, ffmpeg: str) -> float:
-    """Usa ffprobe para obter duração do arquivo."""
+    """Usa ffprobe para obter duração do arquivo. Replaces only the basename
+    so paths containing 'ffmpeg' in directory (e.g. .../ffmpeg/ffmpeg.exe)
+    don't get corrupted."""
     try:
-        ffprobe = ffmpeg.replace("ffmpeg", "ffprobe")
+        ff_dir = os.path.dirname(ffmpeg)
+        ff_base = os.path.basename(ffmpeg)
+        probe_base = ff_base.replace("ffmpeg", "ffprobe")
+        ffprobe = os.path.join(ff_dir, probe_base) if ff_dir else "ffprobe"
+        if not os.path.isfile(ffprobe):
+            ffprobe = shutil.which("ffprobe") or "ffprobe"
         r = subprocess.run(
             [ffprobe, "-v", "error", "-show_entries", "format=duration",
              "-of", "default=noprint_wrappers=1:nokey=1", path],
             capture_output=True, text=True, timeout=10
         )
         return float(r.stdout.strip())
-    except Exception:
+    except Exception as e:
+        print(f"    [YouTube] _probe_duration error: {e}")
         return 30.0
 
 
