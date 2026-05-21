@@ -749,12 +749,21 @@ Return ONLY terms, 2 per segment, in order. No explanation, no numbers."""
         all_target = kw_words | theme_words
         if not all_target or not meta_words:
             return -1.0
-        overlap = len(meta_words & all_target)
+
+        # Substring/prefix matching: 'iran' matches 'iranian', 'health' matches 'healthcare'
+        def _match_count(targets, candidates):
+            hits = 0
+            for t in targets:
+                for c in candidates:
+                    if t == c or (len(t) >= 4 and (t in c or c in t)):
+                        hits += 1
+                        break
+            return hits
+
         # Direct keyword match weighted 2x, theme 1x
-        kw_hits = len(meta_words & kw_words)
-        theme_hits = len(meta_words & theme_words)
+        kw_hits = _match_count(kw_words, meta_words)
+        theme_hits = _match_count(theme_words, meta_words)
         score = (kw_hits * 2 + theme_hits) / max(1, len(kw_words) * 2 + len(theme_words))
-        # Clamp 0..1
         return max(0.0, min(1.0, score))
 
     def validate_clip(self, clip_path: str, expected_keywords: list, theme: str,

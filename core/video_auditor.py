@@ -86,22 +86,39 @@ class VideoAuditor:
         except Exception:
             return False
 
-    def _gemini_with_retry(self, contents, max_retries: int = 3) -> str:
-        """Gemini call with 429 retry using API-provided wait time."""
+    def _gemini_with_retry(self, contents, max_retries: int = 2, max_total_wait: int = 30) -> str:
+        """Gemini call with 429 retry. Caps total wait so a single stuck frame
+        doesn't add minutes of dead time to the pipeline."""
         import re as _re
+        total_waited = 0
         for attempt in range(max_retries):
             try:
                 resp = self.client.models.generate_content(
-                    model="gemini-2.5-flash", contents=contents,
+                    model="gemini-2.0-flash-lite",  # higher RPM than 2.5-flash
+                    contents=contents,
                 )
                 return (resp.text or "").strip()
             except Exception as e:
                 err = str(e)
                 if "429" in err or "RESOURCE_EXHAUSTED" in err:
                     m = _re.search(r"retry in (\d+(?:\.\d+)?)s", err)
-                    wait = float(m.group(1)) + 3 if m else 65
+                    suggested = float(m.group(1)) + 3 if m else 15
+                    # Cap wait so we don't blow past max_total_wait
+                    wait = min(suggested, max(0, max_total_wait - total_waited))
+                    if wait <= 0:
+                        print(f"    [Auditor] Rate limit — wait budget exhausted, skipping frame")
+                        return ""
                     print(f"    [Auditor] Rate limit — aguardando {wait:.0f}s (tentativa {attempt+1}/{max_retries})...")
                     time.sleep(wait)
+                    total_waited += wait
+                elif "503" in err or "UNAVAILABLE" in err:
+                    # transient server error — short retry
+                    wait = min(5, max(0, max_total_wait - total_waited))
+                    if wait <= 0:
+                        return ""
+                    print(f"    [Auditor] 503 server busy — aguardando {wait:.0f}s...")
+                    time.sleep(wait)
+                    total_waited += wait
                 else:
                     print(f"    [Auditor] Erro: {e}")
                     return ""
