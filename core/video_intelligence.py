@@ -615,34 +615,82 @@ Return ONLY terms, 2 per segment, in order. No explanation, no numbers."""
         return shot_list
     
     def _extract_visual_keywords_from_text(self, text: str, theme: str) -> list:
-        """Extract meaningful visual keywords from transcript text when Gemini fails."""
-        stop = {"the", "a", "an", "is", "are", "was", "were", "be", "to", "of", "in",
-                "for", "on", "with", "at", "by", "from", "and", "but", "or", "not", "this",
-                "that", "it", "you", "he", "she", "we", "they", "i", "my", "your", "his",
-                "her", "its", "our", "their", "has", "have", "had", "do", "does", "did",
-                "will", "would", "could", "should", "can", "may", "might", "shall",
-                "about", "just", "also", "very", "really", "more", "most", "much",
-                "many", "some", "any", "all", "no", "every", "each", "one", "two",
-                "like", "know", "think", "going", "want", "need", "look", "make",
-                "thing", "things", "because", "when", "what", "how", "which", "where",
-                "people", "something", "actually", "right", "even", "still", "well"}
-        
-        words = [w.strip(".,!?;:\"'()-[]").lower() for w in text.split()]
-        meaningful = [w for w in words if len(w) > 3 and w not in stop]
-        
-        # Count frequency
+        """Extract visual keywords when Gemini fails. ALWAYS anchors to theme so
+        searches don't hit unrelated content (e.g., 'personalizar' alone matches
+        Minecraft videos; 'personalizar' + theme 'social media' narrows to
+        relevant stock).
+
+        Strategy:
+          1. Strip stopwords (EN + PT + ES).
+          2. Keep concrete nouns (>3 chars, not in generic-fluff list).
+          3. Pair top-2 frequency words WITH theme as anchor.
+        """
+        stop = {
+            # EN
+            "the","a","an","is","are","was","were","be","to","of","in","for","on",
+            "with","at","by","from","and","but","or","not","this","that","it","you",
+            "he","she","we","they","my","your","his","her","its","our","their","has",
+            "have","had","do","does","did","will","would","could","should","can","may",
+            "might","shall","about","just","also","very","really","more","most","much",
+            "many","some","any","all","every","each","one","two","like","know","think",
+            "going","want","need","look","make","thing","things","because","when","what",
+            "how","which","where","people","something","actually","right","even","still",
+            "well","because","there","here","then","than","into","over","under","such",
+            # PT
+            "pode","podem","posso","podemos","quer","queremos","precisa","precisam",
+            "deve","devem","temos","temos","tinha","tinham","sera","serao","foi","foram",
+            "vai","vao","vou","vamos","faz","fazem","feito","feita","ficar","ficam",
+            "usar","usam","usado","tenta","tentam","tentar","tentando","conseguir",
+            "que","com","para","por","como","mas","sem","sobre","entre","muito","mais",
+            "menos","esse","essa","isso","aquele","aquela","aquilo","ser","estar","ter",
+            "haver","fazer","ir","vir","ver","dar","dizer","saber","poder","querer","nao",
+            "sim","tambem","apenas","cada","todo","toda","todos","todas","seu","sua","seus",
+            "suas","meu","minha","meus","minhas","nosso","nossa","nossos","nossas",
+            "voce","voces","ele","ela","eles","elas","quando","onde","quem","qual","porque",
+            "porem","contudo","entao","assim","ainda","sera","sao","foi","foram","esta",
+            "estao","sido","gente","coisa","coisas","muita","muitas","muito","muitos",
+            "deve","podem","sendo","tendo","mesmo","mesma","mesmos","mesmas",
+            # ES (common cognates)
+            "esto","esta","estos","estas","ese","esa","esos","esas","muy","con","sin",
+            "por","para","sobre","entre","como","pero","tambien","todos","todas","cada",
+        }
+        # Generic fluff that creates filler footage
+        fluff = {"tecnologia","sistema","plataforma","forma","jeito","modo","tipo",
+                 "parte","lado","caso","exemplo","problema","solucao","situacao",
+                 "momento","tempo","tudo","nada","algo","alguem","alguma","algum"}
+
+        words = [w.strip(".,!?;:\"'()-[]/").lower() for w in text.split()]
+        meaningful = [w for w in words if len(w) > 3 and w not in stop and w not in fluff]
+
         freq = {}
         for w in meaningful:
             freq[w] = freq.get(w, 0) + 1
-        
         top = sorted(freq, key=freq.get, reverse=True)[:4]
-        
-        if len(top) >= 2:
-            return [f"{top[0]} {top[1]}", f"{top[2]} {top[3] if len(top) > 3 else top[0]}"]
-        elif top:
-            return [f"{top[0]} {theme.split()[0] if theme else 'footage'}"]
-        else:
-            return [f"{theme} documentary"]
+
+        # Always anchor to theme — this is the key fix vs raw narration words
+        theme_anchor = (theme or "documentary").strip()
+        # Take only first word of theme to keep query short
+        theme_word = theme_anchor.split()[0] if theme_anchor else "documentary"
+
+        # Dedupe and avoid 'X X' patterns
+        result = []
+        seen = set()
+        for w in top:
+            if w == theme_word or w in theme_anchor.lower():
+                continue
+            q = f"{w} {theme_word}"
+            if q.lower() in seen:
+                continue
+            seen.add(q.lower())
+            result.append(q)
+            if len(result) >= 2:
+                break
+
+        if len(result) >= 2:
+            return result
+        if result:
+            return result + [f"{theme_anchor} footage"]
+        return [f"{theme_anchor} footage", f"{theme_anchor} documentary"]
     
     def _fallback_shot_list(self, transcription: list, analysis: dict) -> list:
         """Create shot list without AI using smart keyword extraction."""
