@@ -8,8 +8,11 @@ build/
 *.egg
 .env
 venv/
+venv311/
+*/venv/
+*/venv311/
 
-# Models (muito pesado)
+# Models (muito pesado — totaliza ~15GB)
 */models/
 */checkpoints/
 *.pth
@@ -19,12 +22,23 @@ venv/
 *.bin
 *.h5
 *.onnx
+models/
 
 # Uploads & Outputs (dados do usuario)
 */uploads/
 */outputs/
 */temp/
 */tmp/
+*/data/
+*/output/
+output/
+uploads/
+
+# Gesture pack (139MB, re-baixavel via Pexels API)
+*/static/gesture_videos/*.mp4
+*/static/gesture_videos/*.jpg
+*/static/music/*.mp3
+*/static/stock_avatars/*.jpg
 
 # IDE
 .vscode/
@@ -37,13 +51,62 @@ Thumbs.db
 .DS_Store
 desktop.ini
 
-# API Keys (NUNCA subir)
+# API Keys (NUNCA subir!)
+.api_keys.json
+*/.api_keys.json
+api_keys.json
+*/api_keys.json
 */settings.json
 */api_keys.py
 */.env
+*/.admin_token
+.admin_token
 
-# Logs
+# Logs & temp
 *.log
+*log.txt
+*err.txt
+server_*.txt
+*server_log*
+*_stderr.txt
+*_stdout.txt
+flow_*.png
+flow_*.txt
+flow_*.json
+debug_*.png
+*.pid
+server_pid.txt
 
-# Node (se usar)
+# FFmpeg binaries (pesado, baixavel)
+ffmpeg/
+
+# Cloudflare tunnel (binary)
+cloudflared.exe
+
+# Test artifacts
+test_*.py
+debug_*.py
+diagnose.py
+
+# Node
 node_modules/
+
+# Claude worktrees (local)
+.claude/
+
+# Brain/scheduling state
+brain/
+schedule.json
+schedule_log.json
+stats.json
+analytics_data.json
+templates.json
+caption_styles.json
+brand_kit.json
+config.yaml
+
+# Playwright profile
+*/playwright_profile/
+
+# VEO accounts (secret!)
+*/veo_accounts.json
