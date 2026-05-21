@@ -115,8 +115,18 @@ def build_beat_timeline(
     avatar_count = 0
 
     for i, seg in enumerate(segments_plan):
-        start = float(seg.get("start", 0))
-        duration = float(seg.get("duration", 0))
+        if not isinstance(seg, dict):
+            # Skip None / lists / strings — defensive against malformed inputs
+            continue
+        try:
+            start = float(seg.get("start", 0) or 0)
+            duration = float(seg.get("duration", 0) or 0)
+        except (TypeError, ValueError):
+            continue
+        # Reject pathological values (inf / nan / negative duration)
+        import math
+        if not (math.isfinite(start) and math.isfinite(duration)):
+            continue
         end = start + duration
 
         narration = _narration_at(start, end)
