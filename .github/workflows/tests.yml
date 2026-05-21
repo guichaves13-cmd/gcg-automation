@@ -1,0 +1,84 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install ffmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
+
+      - name: Install minimal Python deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install \
+            requests \
+            flask \
+            rich \
+            pillow \
+            "google-genai" \
+            "openai-whisper" \
+            yt-dlp \
+            psutil \
+            coverage \
+            pyflakes
+
+      - name: Static checks (pyflakes — real bugs only)
+        run: |
+          # Ignore cosmetic warnings (unused imports, f-string placeholders, unused locals)
+          python -m pyflakes core/*.py 2>&1 | \
+            grep -v "imported but unused" | \
+            grep -v "f-string is missing placeholders" | \
+            grep -v "local variable .* is assigned to but never used" | \
+            grep -v "redefinition of unused" | \
+            grep -v "global .* is unused" | \
+            tee /tmp/pyflakes.out
+          # Fail only if real issues remain
+          test ! -s /tmp/pyflakes.out
+
+      - name: Stress regression (35 tests, ~10s)
+        run: python stress_regression.py
+
+      - name: Enterprise regression (30 tests, ~3min)
+        run: python enterprise_regression.py
+
+      - name: Chaos/soak/perf regression (16 tests, ~3s)
+        run: python chaos_regression.py
+
+      - name: Hermetic E2E (6 tests, ~60s)
+        run: python e2e_offline.py
+
+      - name: Coverage report
+        run: |
+          coverage run --source=core stress_regression.py
+          coverage run -a --source=core enterprise_regression.py
+          coverage run -a --source=core chaos_regression.py
+          coverage run -a --source=core e2e_offline.py
+          coverage report --skip-empty --sort=Cover | tail -55
+          coverage html -d coverage_html
+
+      - name: Upload coverage HTML artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-html
+          path: coverage_html/
+          retention-days: 14
