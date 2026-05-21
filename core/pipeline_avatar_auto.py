@@ -1,6 +1,6 @@
 """
 Pipeline Avatar AUTO — v9 (PRODUCTION)
-Fully automatic: AI Analysis -> Keywords -> Downloads -> PIP overlay -> Fresh Subtitles.
+Fully automatic: AI Analysis → Keywords → Downloads → PIP overlay → Fresh Subtitles.
 
 v9 MAJOR FIXES:
 - EVERY video is treated as UNIQUE (no cache reuse!)
@@ -57,82 +57,19 @@ def _trim_avatar(input_path, start, duration, output_path, width, height, fps):
         "-vf", f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
                f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black,fps={fps}",
         "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
-        "-map", "0:v:0", "-map", "0:a:0?",
         "-c:a", "aac", "-b:a", "192k",
         "-pix_fmt", "yuv420p",
         output_path,
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
-    if result.returncode != 0 or not os.path.exists(output_path) or os.path.getsize(output_path) < 1000:
-        # Retry without audio mapping (silent video fallback)
-        cmd_silent = [
-            ffmpeg, "-y",
-            "-ss", str(round(start, 3)),
-            "-i", input_path,
-            "-t", str(round(duration, 3)),
-            "-vf", f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
-                   f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black,fps={fps}",
-            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
-            "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
-            "-map", "0:v:0", "-map", "1:a:0",
-            "-c:a", "aac", "-b:a", "128k",
-            "-shortest", "-pix_fmt", "yuv420p", output_path,
-        ]
-        subprocess.run(cmd_silent, capture_output=True, text=True, timeout=1800, check=True)
-    if not os.path.exists(output_path) or os.path.getsize(output_path) < 1000:
+    subprocess.run(cmd, capture_output=True, text=True, timeout=300, check=True)
+    if os.path.getsize(output_path) < 1000:
         raise RuntimeError("trim produced empty output")
-
-
-def _make_narr_segment(broll_path, avatar_path, start, duration,
-                        output_path, width, height, fps,
-                        is_image=False, kb_dir=None, speed_factor=1.0):
-    """
-    narr_veo mode: VEO3 clip fullscreen + ONLY avatar narration audio (no PIP video).
-    """
-    ffmpeg = _find_ffmpeg()
-    broll_vid = output_path + ".broll.mp4"
-
-    if is_image:
-        kb_filter = get_zoompan_filter(kb_dir or "zoom_in_center", duration, fps, width, height)
-        create_video_from_image(broll_path, duration, width, height, fps, kb_filter, broll_vid)
-    else:
-        vf_speed = f"setpts={1.0/speed_factor:.4f}*PTS," if speed_factor != 1.0 else ""
-        clip_dur = get_duration(broll_path) / speed_factor
-        use_dur = min(duration, clip_dur)
-        cmd = [
-            ffmpeg, "-y", "-i", broll_path, "-t", str(round(use_dur, 3)),
-            "-vf", f"{vf_speed}scale={width}:{height}:force_original_aspect_ratio=decrease,"
-                   f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black,fps={fps}",
-            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
-            "-an", "-pix_fmt", "yuv420p", broll_vid,
-        ]
-        subprocess.run(cmd, capture_output=True, text=True, timeout=1800, check=True)
-
-    # Mux broll video + avatar audio (no PIP overlay)
-    cmd_mux = [
-        ffmpeg, "-y",
-        "-i", broll_vid,
-        "-ss", str(round(start, 3)), "-i", avatar_path,
-        "-t", str(round(duration, 3)),
-        "-map", "0:v:0", "-map", "1:a:0",
-        "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
-        "-shortest", output_path,
-    ]
-    r = subprocess.run(cmd_mux, capture_output=True, text=True, timeout=300)
-    if r.returncode != 0:
-        # Fallback: just trim avatar
-        _trim_avatar(avatar_path, start, duration, output_path, width, height, fps)
-
-    try:
-        os.remove(broll_vid)
-    except Exception:
-        pass
 
 
 def _make_broll_with_pip(broll_path, avatar_path, start, duration,
                           output_path, width, height, fps,
                           is_image=False, kb_dir=None,
-                          pip_position="bottom_right", pip_percent=15, speed_factor=1.0):
+                          pip_position="bottom_right", pip_percent=22):
     """Create B-roll fullscreen + avatar PIP overlay + avatar audio."""
     ffmpeg = _find_ffmpeg()
 
@@ -142,18 +79,16 @@ def _make_broll_with_pip(broll_path, avatar_path, start, duration,
         kb_filter = get_zoompan_filter(kb_dir or "zoom_in_center", duration, fps, width, height)
         create_video_from_image(broll_path, duration, width, height, fps, kb_filter, broll_vid)
     else:
-        # Apply speed factor to video
-        vf_speed = f"setpts={1.0/speed_factor}*PTS," if speed_factor != 1.0 else ""
-        clip_dur = get_duration(broll_path) / speed_factor
+        clip_dur = get_duration(broll_path)
         use_dur = min(duration, clip_dur)
         cmd = [
             ffmpeg, "-y", "-i", broll_path, "-t", str(round(use_dur, 3)),
-            "-vf", f"{vf_speed}scale={width}:{height}:force_original_aspect_ratio=decrease,"
+            "-vf", f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
                    f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black,fps={fps}",
             "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
             "-an", "-pix_fmt", "yuv420p", broll_vid,
         ]
-        subprocess.run(cmd, capture_output=True, text=True, timeout=1800, check=True)
+        subprocess.run(cmd, capture_output=True, text=True, timeout=300, check=True)
 
     # Step 2: Trim avatar segment for PIP (no audio, just video)
     pip_vid = output_path + ".pip.mp4"
@@ -171,7 +106,7 @@ def _make_broll_with_pip(broll_path, avatar_path, start, duration,
         "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
         "-an", "-pix_fmt", "yuv420p", pip_vid,
     ]
-    subprocess.run(cmd_pip, capture_output=True, text=True, timeout=1800, check=True)
+    subprocess.run(cmd_pip, capture_output=True, text=True, timeout=300, check=True)
 
     # Step 3: Overlay PIP on B-roll + add avatar audio
     padding = 20
@@ -199,7 +134,7 @@ def _make_broll_with_pip(broll_path, avatar_path, start, duration,
         "-pix_fmt", "yuv420p", "-shortest",
         output_path,
     ]
-    r = subprocess.run(cmd_overlay, capture_output=True, text=True, timeout=1800)
+    r = subprocess.run(cmd_overlay, capture_output=True, text=True, timeout=300)
     if r.returncode != 0:
         cmd_mux = [
             ffmpeg, "-y",
@@ -210,7 +145,7 @@ def _make_broll_with_pip(broll_path, avatar_path, start, duration,
             "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
             "-shortest", output_path,
         ]
-        subprocess.run(cmd_mux, capture_output=True, text=True, timeout=600, check=True)
+        subprocess.run(cmd_mux, capture_output=True, text=True, timeout=120, check=True)
 
     for f in [broll_vid, pip_vid]:
         try: os.remove(f)
@@ -235,31 +170,16 @@ def run_auto(config: dict, on_progress=None):
     # =============================================
     # CLEAN ALL PREVIOUS TEMP DATA
     # =============================================
-    import time
-    import uuid
-    unique_id = f"studiopilot_auto_{int(time.time())}_{uuid.uuid4().hex[:6]}"
-    temp_dir = os.path.join(tempfile.gettempdir(), unique_id)
+    temp_dir = os.path.join(tempfile.gettempdir(), "studiopilot_auto")
+    if os.path.exists(temp_dir):
+        console.print("[dim]Cleaning previous session data...[/dim]")
+        shutil.rmtree(temp_dir, ignore_errors=True)
     os.makedirs(temp_dir, exist_ok=True)
 
-    # Clean old studiopilot temp dirs safely (NEVER delete the current one)
-    tmp_root = tempfile.gettempdir()
-    try:
-        for d in os.listdir(tmp_root):
-            if d.startswith("studiopilot_auto") and d != unique_id:
-                try:
-                    shutil.rmtree(os.path.join(tmp_root, d), ignore_errors=True)
-                except:
-                    pass
-    except:
-        pass
-
-    # Also clean whisper cache
-    try:
-        whisper_cache = os.path.join(tmp_root, "whisper_cache")
-        if os.path.exists(whisper_cache):
-            shutil.rmtree(whisper_cache, ignore_errors=True)
-    except:
-        pass
+    # Also clean any whisper cache
+    whisper_cache = os.path.join(tempfile.gettempdir(), "whisper_cache")
+    if os.path.exists(whisper_cache):
+        shutil.rmtree(whisper_cache, ignore_errors=True)
 
     avatar_path = os.path.join(temp_dir, "avatar_input.mp4")
     console.print("  Copying avatar to safe path...")
@@ -275,17 +195,12 @@ def run_auto(config: dict, on_progress=None):
         console.print("\n[yellow]Step 1/6: Video Intelligence — Deep Analysis...[/yellow]")
 
         from core.video_intelligence import VideoIntelligence
-        from core.video_auditor import VideoAuditor
-
-        youtube_api_key_cfg = config.get("youtube_api_key", "")
-        intel = VideoIntelligence(google_api_key=google_key, youtube_api_key=youtube_api_key_cfg)
-        auditor = VideoAuditor(google_api_key=google_key)
-
+        intel = VideoIntelligence(google_api_key=google_key)
+        
         stock_folder = os.path.join(temp_dir, "stock")
         os.makedirs(stock_folder, exist_ok=True)
-
-        analysis = intel.analyze_video(avatar_path, stock_folder, broll_count=broll_count,
-                                       on_progress=on_progress)
+        
+        analysis = intel.analyze_video(avatar_path, stock_folder)
         avatar_duration = analysis["duration"]
 
         console.print(f"  [bold green]Theme: {analysis['theme']}[/bold green]")
@@ -293,124 +208,38 @@ def run_auto(config: dict, on_progress=None):
         console.print(f"  [bold green]Shots planned: {len(analysis['shot_list'])}[/bold green]")
 
         # =============================================
-        # STEP 2: GET B-ROLL (LOCAL VEO3 OR STOCK)
+        # STEP 2: DOWNLOAD STOCK FOOTAGE (FRESH!)
         # =============================================
         if on_progress:
-            on_progress(20, 100, f"Phase 2: Locating B-roll clips...")
-        console.print(f"\n[yellow]Step 2/6: Acquiring B-roll...[/yellow]")
+            on_progress(20, 100, f"Phase 2: Downloading {broll_count} B-roll clips...")
+        console.print(f"\n[yellow]Step 2/6: Downloading B-roll (target: {broll_count} clips)...[/yellow]")
 
-        mapped_clips = []
-        pipeline_mode = config.get("pipeline", "avatar_auto")
-        
-        # Parse local VEO3 files from text area (e.g. [VÍDEO CARREGADO] filename.mp4)
-        prompts_text = config.get("prompts", "")
-        import re
-        veo3_filenames = re.findall(r"\[VÍDEO CARREGADO\]\s+(.*?\.mp4)", prompts_text, re.IGNORECASE)
-        
-        local_veo3_clips = []
-        if veo3_filenames and ("veo" in pipeline_mode):
-            console.print(f"  [cyan]Locating {len(veo3_filenames)} local VEO3 files in Downloads...[/cyan]")
-            downloads_dir = os.path.join(os.path.expanduser("~"), "Downloads")
-            # Build a quick index of mp4s in Downloads to find them even if nested
-            found_paths = {}
-            for root, _, files in os.walk(downloads_dir):
-                for f in files:
-                    if f.lower().endswith(".mp4"):
-                        found_paths[f] = os.path.join(root, f)
-            
-            for fname in veo3_filenames:
-                fname = fname.strip()
-                if fname in found_paths:
-                    local_veo3_clips.append(found_paths[fname])
-                else:
-                    # check if exact path works
-                    if os.path.exists(fname): local_veo3_clips.append(fname)
-            console.print(f"  [green]Found {len(local_veo3_clips)} local VEO3 videos![/green]")
+        # Use shot list from intelligence engine
+        # Pass the intel validator + theme so each download can be content-validated
+        # (rejects B-rolls that don't visually match the search term)
+        mapped_clips = _download_from_shot_list(
+            analysis["shot_list"],
+            stock_folder,
+            pexels_key, pixabay_key, unsplash_key,
+            max_clips=broll_count,
+            on_progress=on_progress,
+            youtube_api_key=config.get("youtube_api_key", ""),
+            youtube_channel_ids=config.get("youtube_channel_ids", ""),
+            youtube_priority=config.get("youtube_priority", False),
+            # PHASE 2: pass validator + theme for post-download Gemini Vision check
+            validator=intel,
+            video_theme=analysis.get("theme", "general"),
+            min_validation_score=config.get("broll_min_score", 0.4),
+        )
 
-        # If mode is FULL VEO, skip stock downloading entirely
-        if pipeline_mode in ("avatar_full_veo", "narr_veo") and local_veo3_clips:
-            console.print("  [cyan]Mode is FULL VEO3. Bypassing stock downloads.[/cyan]")
-            # We must map the local clips to cover the avatar duration
-            total_veo_dur = sum(get_duration(c) for c in local_veo3_clips)
-            
-            # Speed adjustment factor to perfectly match avatar duration
-            speed_factor = total_veo_dur / max(avatar_duration, 1.0)
-            console.print(f"  [magenta]Perfect Sync: Adjusting VEO3 speed by factor of {speed_factor:.2f}x to match Avatar[/magenta]")
-            
-            current_t = 0.0
-            for c in local_veo3_clips:
-                orig_dur = get_duration(c)
-                new_dur = orig_dur / speed_factor
-                mapped_clips.append({
-                    "timeline_start": current_t,
-                    "timeline_end": current_t + new_dur,
-                    "file": c,
-                    "keyword": "VEO3_LOCAL",
-                    "source": "local",
-                    "speed_factor": speed_factor
-                })
-                current_t += new_dur
-        else:
-            # We need to mix stock footage (avatar_veo_real) or fallback to stock
-            youtube_key = config.get("youtube_api_key", "")
-            # Canais manuais (configurados pelo usuário)
-            youtube_channels = config.get("youtube_channel_ids", [])
-            if isinstance(youtube_channels, str):
-                youtube_channels = [c.strip() for c in youtube_channels.split(",") if c.strip()]
-            # Canais auto-descobertos pela IA (sem duplicar manuais)
-            auto_channels = analysis.get("youtube_channels_auto", [])
-            for ch in auto_channels:
-                if ch not in youtube_channels:
-                    youtube_channels.append(ch)
-            # Nomes de canais descobertos pelo Gemini (sem YouTube API key → usados como query boost)
-            yt_channel_names = getattr(intel, "_yt_channel_names", [])
-            if youtube_channels:
-                console.print(f"  [bold cyan]YouTube canais IDs ({len(youtube_channels)}):[/bold cyan] {youtube_channels[:4]}")
-            if yt_channel_names:
-                console.print(f"  [bold cyan]YouTube canais por nome ({len(yt_channel_names)}):[/bold cyan] {yt_channel_names[:4]}")
-            mapped_clips = _download_from_shot_list(
-                analysis["shot_list"],
-                stock_folder,
-                pexels_key, pixabay_key, unsplash_key,
-                max_clips=broll_count,
-                on_progress=on_progress,
-                youtube_api_key=youtube_key,
-                youtube_channel_ids=youtube_channels,
-                youtube_channel_names=yt_channel_names,
-                intel=intel,  # IA Validadora: rejeita clips com score < 0.55
-            )
+        console.print(f"  Downloaded [bold green]{len(mapped_clips)}[/bold green] content-matched clips")
+        for clip in mapped_clips[:5]:
+            console.print(f"    [{clip.get('source','?')}] '{clip['keyword']}' @ {clip['timeline_start']:.0f}s")
+        if len(mapped_clips) > 5:
+            console.print(f"    ... and {len(mapped_clips) - 5} more")
 
-            # IA Gerente Geral: auditoria pós-download + re-download de reprovados
-            if google_key and mapped_clips:
-                if on_progress:
-                    on_progress(53, 100, "IA Gerente Geral: Auditando correspondência B-roll...")
-                console.print("\n[bold yellow]IA Gerente Geral: Auditando B-roll...[/bold yellow]")
-                bad_indices = intel.gerente_geral_audit(mapped_clips, analysis["shot_list"])
-                if bad_indices:
-                    console.print(f"  [bold red]Re-baixando {len(bad_indices)} clips reprovados...[/bold red]")
-                    if on_progress:
-                        on_progress(54, 100, f"Re-baixando {len(bad_indices)} clips reprovados...")
-                    mapped_clips = _redownload_bad_clips(
-                        bad_indices, mapped_clips, analysis["shot_list"],
-                        stock_folder, pexels_key, pixabay_key, unsplash_key,
-                    )
-
-            # Modo avatar_veo_real: mistura VEO3 local com stock
-            if pipeline_mode == "avatar_veo_real" and local_veo3_clips:
-                console.print(f"  [cyan]Mixing {len(local_veo3_clips)} VEO3 clips with real stock footage...[/cyan]")
-                import random
-                for veo_path in local_veo3_clips:
-                    if mapped_clips:
-                        replace_idx = random.randint(0, len(mapped_clips)-1)
-                        mapped_clips[replace_idx]["file"] = veo_path
-                        mapped_clips[replace_idx]["keyword"] = "VEO3_MIX"
-                        mapped_clips[replace_idx]["source"] = "local"
-
-        console.print(f"  B-roll pool final: [bold green]{len(mapped_clips)}[/bold green] clips")
         if not mapped_clips:
-            console.print("[red]  Nenhum clip disponível![/red]")
-        if on_progress:
-            on_progress(54, 100, f"clips_downloaded={len(mapped_clips)} clips_validated={len(mapped_clips)} Theme:{analysis.get('theme','')} Language:{analysis.get('language','')}")
+            console.print("[red]  No clips downloaded! Check API keys.[/red]")
 
         # =============================================
         # STEP 3: BUILD TIMELINE
@@ -424,9 +253,8 @@ def run_auto(config: dict, on_progress=None):
 
         segments_plan = _build_smart_timeline(
             avatar_duration, mapped_clips, rng,
-            min_broll_dur=config.get("avatar", {}).get("min_broll_duration", 5),
-            max_broll_dur=config.get("avatar", {}).get("max_broll_duration", 8),
-            full_broll_mode=pipeline_mode in ("avatar_full_veo", "narr_veo")
+            min_broll_dur=config.get("avatar", {}).get("min_broll_duration", 4),
+            max_broll_dur=config.get("avatar", {}).get("max_broll_duration", 6),
         )
 
         avatar_segs = sum(1 for s in segments_plan if s["type"] == "avatar")
@@ -450,66 +278,64 @@ def run_auto(config: dict, on_progress=None):
             for i, seg in enumerate(segments_plan):
                 seg_final = os.path.join(temp_dir, f"seg_{i:04d}.mp4")
 
+                seg_ok = False
                 try:
                     if seg["type"] == "avatar":
                         _trim_avatar(avatar_path, seg["start"], seg["duration"],
                                     seg_final, width, height, fps)
+                        seg_ok = os.path.exists(seg_final) and os.path.getsize(seg_final) > 1000
                     else:
-                        # Anti-repetição: quando reuse_count > 0, usa direção Ken Burns diferente
-                        reuse = seg.get("reuse_count", 0)
-                        kb_choices = ["zoom_in_center", "zoom_out_center",
-                                      "pan_left", "pan_right", "pan_up", "pan_down",
-                                      "zoom_in_topleft", "zoom_in_bottomright",
-                                      "zoom_out_topleft", "zoom_out_bottomright",
-                                      "pan_diagonal_tl", "pan_diagonal_br"]
-                        # Rotaciona a lista pelo reuse_count para garantir direção diferente
-                        kb_offset = (reuse * 3) % len(kb_choices)
-                        kb_pool = kb_choices[kb_offset:] + kb_choices[:kb_offset]
-                        kb = rng.choice(kb_pool[:6])
-
-                        if pipeline_mode == "narr_veo":
-                            _make_narr_segment(
-                                seg["file"], avatar_path,
-                                seg["start"], seg["duration"],
-                                seg_final, width, height, fps,
-                                is_image=seg.get("is_image", False),
-                                kb_dir=kb,
-                                speed_factor=seg.get("speed_factor", 1.0),
-                            )
-                        else:
-                            pip_pos = rng.choice(pip_positions)
-                            _make_broll_with_pip(
-                                seg["file"], avatar_path,
-                                seg["start"], seg["duration"],
-                                seg_final, width, height, fps,
-                                is_image=seg.get("is_image", False),
-                                kb_dir=kb,
-                                pip_position=pip_pos,
-                                pip_percent=rng.choice([13, 15, 17]),
-                                speed_factor=seg.get("speed_factor", 1.0),
-                            )
-
-                        # Filtro de cor único por segmento
-                        # Seed diferente para reutilizações: clip reutilizado terá visual diferente
-                        try:
-                            from core.video_filters import apply_random_effects
-                            filtered = os.path.join(temp_dir, f"seg_{i:04d}_fx.mp4")
-                            fx_seed = i + reuse * 997  # seed muda a cada reutilização
-                            apply_random_effects(seg_final, filtered, seed=fx_seed)
-                            if os.path.exists(filtered) and os.path.getsize(filtered) > 1000:
-                                os.replace(filtered, seg_final)
-                        except Exception:
-                            pass
-
+                        pip_pos = rng.choice(pip_positions)
+                        _make_broll_with_pip(
+                            seg["file"], avatar_path,
+                            seg["start"], seg["duration"],
+                            seg_final, width, height, fps,
+                            is_image=seg.get("is_image", False),
+                            kb_dir=rng.choice(["zoom_in_center", "zoom_out_center",
+                                              "pan_left", "pan_right"]),
+                            pip_position=pip_pos,
+                            pip_percent=22,
+                        )
+                        seg_ok = os.path.exists(seg_final) and os.path.getsize(seg_final) > 1000
+                        if seg_ok:
+                            try:
+                                from core.video_filters import apply_random_effects
+                                filtered = os.path.join(temp_dir, f"seg_{i:04d}_fx.mp4")
+                                seg_mood = seg.get("mood", None)
+                                seg_shot_type = seg.get("shot_type", None)
+                                apply_random_effects(seg_final, filtered, seed=i,
+                                                    mood=seg_mood, shot_type=seg_shot_type)
+                                if os.path.exists(filtered) and os.path.getsize(filtered) > 1000:
+                                    os.replace(filtered, seg_final)
+                            except Exception as fx_e:
+                                console.print(f"  [cyan]Auto-Fix:[/cyan] Filtro no seg {i} ignorado ({fx_e})")
                 except Exception as e:
-                    console.print(f"\n  [red]Auto-Fix:[/red] Segment {i} failed ({e}), using avatar fallback.")
-                    _trim_avatar(avatar_path, seg["start"], seg["duration"],
-                                seg_final, width, height, fps)
+                    console.print(f"  [red]Auto-Fix:[/red] Seg {i} falhou ({e}). Tentando fallback...")
+                    seg_ok = False
 
-                if not _has_video(seg_final):
-                    console.print(f"\n  [red]🤖 AI Auto-Fix:[/red] Segmento {i} corrompido! Reconstruindo com Câmera Principal...")
-                    _trim_avatar(avatar_path, seg["start"], seg["duration"],
-                                seg_final, width, height, fps)
+                if not seg_ok:
+                    console.print(f"  [red]Auto-Fix:[/red] Seg {i} — reconstruindo com camera principal...")
+                    try:
+                        _trim_avatar(avatar_path, seg["start"], seg["duration"],
+                                    seg_final, width, height, fps)
+                        seg_ok = os.path.exists(seg_final) and os.path.getsize(seg_final) > 1000
+                    except Exception as e2:
+                        console.print(f"  [red]Auto-Fix:[/red] Fallback camera falhou ({e2})")
+
+                if not seg_ok:
+                    console.print(f"  [red]Auto-Fix:[/red] Seg {i} — gerando frame preto de emergencia...")
+                    try:
+                        ffmpeg = _find_ffmpeg()
+                        dur = seg.get("duration", 4.0)
+                        cmd = [ffmpeg, "-y", "-f", "lavfi", "-i",
+                               f"color=c=black:s={width}x{height}:d={dur}:r={fps}",
+                               "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono",
+                               "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28",
+                               "-c:a", "aac", "-shortest", seg_final]
+                        subprocess.run(cmd, capture_output=True, timeout=60, check=True)
+                        seg_ok = os.path.exists(seg_final) and os.path.getsize(seg_final) > 1000
+                    except Exception as e3:
+                        console.print(f"  [red]CRITICO:[/red] Geracao de frame preto falhou ({e3})")
 
                 segment_files.append(seg_final)
                 progress.update(task, advance=1)
@@ -519,37 +345,12 @@ def run_auto(config: dict, on_progress=None):
                     on_progress(pct, 100, f"Segment {i+1}/{len(segments_plan)}")
 
         # =============================================
-        # IA CORRETOR — verificação pré-concatenação
-        # =============================================
-        if google_key and config.get("corretor_enabled", True) and segment_files:
-            if on_progress:
-                on_progress(83, 100, "IA Corretor: inspecionando segmentos de B-roll...")
-            console.print("\n[bold yellow]=== IA Corretor: Inspecionando segmentos ===[/bold yellow]")
-            transcription_data = analysis.get("transcription", [])
-            bad_segs = auditor.audit_segments(
-                segment_files, segments_plan, transcription_data, temp_dir,
-                on_progress=None,
-            )
-            if bad_segs:
-                console.print(f"  [red]{len(bad_segs)} segmentos reprovados — corrigindo...[/red]")
-                if on_progress:
-                    on_progress(84, 100, f"IA Corretor: {len(bad_segs)} segmentos reprovados — corrigindo...")
-                segment_files = auditor.fix_bad_segments(
-                    bad_segs, segment_files, segments_plan,
-                    mapped_clips, analysis["shot_list"],
-                    avatar_path, temp_dir, width, height, fps,
-                )
-            else:
-                console.print("  [green]Todos os segmentos aprovados pela IA Corretor![/green]")
-            if on_progress:
-                on_progress(84, 100, f"IA Corretor: clips_fixed={len(bad_segs) if bad_segs else 0}")
-
-        # =============================================
         # STEP 5: CONCATENATE
         # =============================================
         if on_progress:
             on_progress(85, 100, "Phase 5: Concatenating segments...")
-        console.print(f"\n[yellow]Step 5/6: Concatenating {len(segment_files)} segments...[/yellow]")
+        valid_count = sum(1 for f in segment_files if os.path.exists(f) and os.path.getsize(f) > 500)
+        console.print(f"\n[yellow]Step 5/6: Concatenating {valid_count}/{len(segment_files)} valid segments...[/yellow]")
         concat_out = os.path.join(temp_dir, "concat.mp4")
         concat_segments_with_audio(segment_files, concat_out)
         concat_size = os.path.getsize(concat_out) / 1024 / 1024
@@ -566,72 +367,22 @@ def run_auto(config: dict, on_progress=None):
         # =============================================
         final_in_temp = os.path.join(temp_dir, "final_output.mp4")
 
+        # v9: ALWAYS generate fresh subtitles from the concatenated video's audio
         subs_enabled = config.get("subtitles_enabled", True)
         force_new = config.get("force_new_subtitles", False)
-
+        
         if subs_enabled or force_new:
-            console.print("\n[yellow]Step 6/6: Generating FRESH subtitles...[/yellow]")
+            console.print("\n[yellow]Step 6/6: Generating FRESH subtitles from THIS video...[/yellow]")
             if on_progress:
                 on_progress(90, 100, "Phase 6: Fresh subtitles...")
-
-            import tempfile as _tf
-            import random as _rng
-            ffmpeg = _find_ffmpeg()
-            srt_safe = os.path.join(_tf.gettempdir(), "studiopilot_subs.srt")
-
-            # ── Find or generate SRT ──────────────────────────────
+            
+            # Use the SRT already generated by Video Intelligence
             srt_path = analysis.get("subtitle_srt", "")
-            srt_ready = srt_path and os.path.exists(srt_path) and os.path.getsize(srt_path) > 10
-
-            if srt_ready:
-                console.print("  [dim]SRT from Video Intelligence: OK[/dim]")
-                shutil.copy2(srt_path, srt_safe)
-            else:
-                # Step 1 transcription failed or produced no SRT → transcribe NOW
-                console.print("  [yellow]SRT ausente — transcrevendo o vídeo final com Whisper...[/yellow]")
-                try:
-                    import whisper as _whisper
-                    _wav = os.path.join(temp_dir, "subs_audio.wav")
-                    _r = subprocess.run(
-                        [ffmpeg, "-y", "-i", current,
-                         "-vn", "-acodec", "pcm_s16le", "-ar", "16000", "-ac", "1", _wav],
-                        capture_output=True, text=True, timeout=300,
-                    )
-                    if _r.returncode != 0 or not os.path.exists(_wav) or os.path.getsize(_wav) < 1000:
-                        console.print(f"  [yellow]Extração de áudio falhou (rc={_r.returncode})[/yellow]")
-                        console.print(f"  [dim]{_r.stderr[-200:]}[/dim]")
-                        raise RuntimeError("audio extraction failed")
-
-                    console.print("  [dim]Áudio extraído — carregando Whisper base...[/dim]")
-                    _model = _whisper.load_model("base")
-                    _res = _model.transcribe(_wav, task="transcribe", verbose=False)
-                    _segs = _res.get("segments", [])
-                    console.print(f"  [dim]Whisper: {len(_segs)} segmentos detectados[/dim]")
-
-                    if _segs:
-                        with open(srt_safe, "w", encoding="utf-8") as _sf:
-                            for _i, _s in enumerate(_segs, 1):
-                                def _fmt(sec):
-                                    h, r = divmod(int(sec), 3600)
-                                    m, s = divmod(r, 60)
-                                    ms = int((sec % 1) * 1000)
-                                    return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
-                                _sf.write(f"{_i}\n{_fmt(_s['start'])} --> {_fmt(_s['end'])}\n{_s['text'].strip()}\n\n")
-                        srt_ready = True
-                        console.print(f"  [green]SRT gerado: {len(_segs)} legendas[/green]")
-                    else:
-                        console.print("  [yellow]Whisper não detectou fala — vídeo sem legendas[/yellow]")
-                    try:
-                        os.remove(_wav)
-                    except Exception:
-                        pass
-                except ImportError:
-                    console.print("  [yellow]Whisper não instalado — sem legendas[/yellow]")
-                except Exception as _e:
-                    console.print(f"  [yellow]Transcrição falhou: {_e}[/yellow]")
-
-            # ── Burn SRT into video ───────────────────────────────
-            if srt_ready and os.path.exists(srt_safe) and os.path.getsize(srt_safe) > 10:
+            
+            if srt_path and os.path.exists(srt_path):
+                console.print(f"  Using fresh SRT from Video Intelligence")
+                
+                import random as _rng
                 sub_colors = [
                     ("&H00FFFFFF", "White"),
                     ("&H0000FFFF", "Yellow"),
@@ -639,190 +390,136 @@ def run_auto(config: dict, on_progress=None):
                     ("&H004ECCA3", "Teal"),
                 ]
                 color_hex, color_name = _rng.choice(sub_colors)
-                console.print(f"  Cor das legendas: {color_name}")
+                console.print(f"  Subtitle color: {color_name}")
 
-                srt_ffmpeg = srt_safe.replace("\\", "/")
-                if len(srt_ffmpeg) > 2 and srt_ffmpeg[1] == ":":
-                    srt_ffmpeg = srt_ffmpeg[0] + "\\:" + srt_ffmpeg[2:]
-                srt_ffmpeg = srt_ffmpeg.replace(" ", "\\\\ ").replace("'", "\\'")
-
+                ffmpeg = _find_ffmpeg()
+                srt_escaped = srt_path.replace("\\", "/").replace(":", "\\:")
+                enc = _get_encoder()
                 cmd_sub = [
-                    ffmpeg, "-y", "-i", current,
-                    "-vf", (f"subtitles='{srt_ffmpeg}':force_style='FontName=Arial,FontSize=22,"
-                            f"PrimaryColour={color_hex},OutlineColour=&H00000000,"
-                            f"Outline=2,Shadow=1,MarginV=30'"),
-                    "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
-                    "-c:a", "aac", "-b:a", "192k", "-pix_fmt", "yuv420p", final_in_temp,
-                ]
-                res_sub = subprocess.run(cmd_sub, capture_output=True, text=True, timeout=3600)
+                    ffmpeg, "-y",
+                    "-hwaccel", "auto",
+                    "-i", current,
+                    "-vf", f"subtitles='{srt_escaped}':force_style='FontName=Arial,FontSize=22,"
+                           f"PrimaryColour={color_hex},OutlineColour=&H00000000,Outline=2,Shadow=1,MarginV=30'",
+                ] + enc + ["-c:a", "copy", "-pix_fmt", "yuv420p", final_in_temp]
+                try:
+                    result = subprocess.run(cmd_sub, capture_output=True, text=True, timeout=900)
+                except subprocess.TimeoutExpired:
+                    console.print("  [yellow]Subtitle burn timed out, retrying without hwaccel...[/yellow]")
+                    try:
+                        cmd_sub_no_hw = [ffmpeg, "-y", "-i", current] + cmd_sub[6:]
+                        result = subprocess.run(cmd_sub_no_hw, capture_output=True, text=True, timeout=900)
+                    except subprocess.TimeoutExpired:
+                        result = None
 
-                if res_sub.returncode == 0 and _has_video(final_in_temp):
-                    console.print("  [green]Legendas aplicadas![/green]")
+                if result is None or result.returncode != 0 or not _has_video(final_in_temp):
+                    console.print("  [dim]Subtitle burn failed, copying without subs[/dim]")
+                    shutil.copy2(current, final_in_temp)
                 else:
-                    console.print(f"  [yellow]Burn SRT falhou (rc={res_sub.returncode}) — tentando ASS...[/yellow]")
-                    if res_sub.stderr:
-                        console.print(f"  [dim]{res_sub.stderr[-300:]}[/dim]")
-                    # Fallback: convert SRT → ASS and retry
-                    ass_path = os.path.join(_tf.gettempdir(), "studiopilot_subs.ass")
-                    _conv = subprocess.run(
-                        [ffmpeg, "-y", "-i", srt_safe, ass_path],
-                        capture_output=True, text=True, timeout=30,
-                    )
-                    if _conv.returncode == 0 and os.path.exists(ass_path):
-                        ass_ffmpeg = ass_path.replace("\\", "/")
-                        if len(ass_ffmpeg) > 2 and ass_ffmpeg[1] == ":":
-                            ass_ffmpeg = ass_ffmpeg[0] + "\\:" + ass_ffmpeg[2:]
-                        _r2 = subprocess.run(
-                            [ffmpeg, "-y", "-i", current,
-                             "-vf", f"ass='{ass_ffmpeg}'",
-                             "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
-                             "-c:a", "aac", "-b:a", "192k", "-pix_fmt", "yuv420p", final_in_temp],
-                            capture_output=True, text=True, timeout=3600,
-                        )
-                        if _r2.returncode == 0 and _has_video(final_in_temp):
-                            console.print("  [green]Legendas aplicadas (método ASS)![/green]")
-                        else:
-                            console.print("  [dim]Ambos métodos falharam — vídeo sem legenda[/dim]")
-                            shutil.copy2(current, final_in_temp)
-                    else:
-                        shutil.copy2(current, final_in_temp)
+                    console.print("  [green]Fresh subtitles applied![/green]")
             else:
-                console.print("  [dim]Sem SRT disponível — vídeo sem legenda[/dim]")
+                console.print("  [dim]No SRT available, skipping subtitles[/dim]")
                 shutil.copy2(current, final_in_temp)
         else:
-            console.print("\n[cyan]Step 6/6: Legendas DESATIVADAS[/cyan]")
+            console.print("\n[cyan]Step 6/6: Subtitles DISABLED[/cyan]")
             shutil.copy2(current, final_in_temp)
 
         # =============================================
-        # OPTIONAL: EFEITOS SONOROS DE TRANSIÇÃO (whoosh)
+        # OPTIONAL: BACKGROUND MUSIC
         # =============================================
-        sfx_enabled = config.get("sfx_enabled", True)
-        if sfx_enabled:
-            console.print("\n[yellow]Bonus: Efeitos sonoros de transição...[/yellow]")
+        if config.get("music_enabled", False):
+            console.print("\n[yellow]Bonus: Adding background music...[/yellow]")
             try:
-                from core.sound_effects import add_transition_sfx, extract_cut_times
-                cut_times = extract_cut_times(segments_plan)
-                if cut_times:
-                    with_sfx = os.path.join(temp_dir, "with_sfx.mp4")
-                    ok_sfx = add_transition_sfx(
-                        final_in_temp, cut_times, with_sfx, temp_dir,
-                        sfx_volume=config.get("sfx_volume", 0.18),
-                    )
-                    if ok_sfx and _has_video(with_sfx):
-                        os.replace(with_sfx, final_in_temp)
-                        console.print(f"  [green]{len(cut_times)} efeitos de transição adicionados![/green]")
-            except Exception as sfx_e:
-                console.print(f"  [dim]SFX ignorados: {sfx_e}[/dim]")
-
-        # =============================================
-        # OPTIONAL: MÚSICA SEM DIREITOS AUTORAIS
-        # =============================================
-        music_enabled = config.get("music_enabled", False)
-        if music_enabled:
-            console.print("\n[yellow]Bonus: Música de fundo (sem direitos autorais)...[/yellow]")
-            try:
-                from core.sound_effects import get_music_for_video, add_background_music_smart
-                video_theme = analysis.get("theme", "general_documentary")
-                console.print(f"  Tema do vídeo: {video_theme}")
+                from core.music_system import generate_ambient_track, add_background_music, detect_theme_from_text
+                theme = detect_theme_from_text(analysis.get("full_text", "")[:500])
+                console.print(f"  Music theme: {theme}")
 
                 music_file = os.path.join(temp_dir, "ambient_music.m4a")
-                got_music = get_music_for_video(
-                    theme=video_theme,
-                    duration=avatar_duration,
-                    output_path=music_file,
-                    pixabay_api_key=pixabay_key,
-                    temp_dir=temp_dir,
-                )
-
-                if got_music and os.path.exists(music_file):
+                generate_ambient_track(music_file, avatar_duration, theme)
+                
+                if os.path.exists(music_file):
                     with_music = os.path.join(temp_dir, "with_music.mp4")
-                    ok_music = add_background_music_smart(
-                        final_in_temp, music_file, with_music,
-                        music_volume=config.get("music_volume", 0.08),
-                    )
-                    if ok_music and _has_video(with_music):
+                    add_background_music(final_in_temp, music_file, with_music, music_volume=0.08)
+                    if _has_video(with_music):
                         os.replace(with_music, final_in_temp)
-                        console.print("  [green]Música de fundo adicionada (sem direitos autorais)![/green]")
-            except Exception as mus_e:
-                console.print(f"  [dim]Música ignorada: {mus_e}[/dim]")
+                        console.print("  Background music added")
+            except Exception as e:
+                console.print(f"  [dim]Music skipped: {e}[/dim]")
 
-        # =============================================
-        # OPTIONAL: STICKERS SUBSCRIBE/LIKE
-        # =============================================
-        stickers_enabled = config.get("stickers_enabled", True)
-        if stickers_enabled:
-            console.print("\n[yellow]Bonus: Stickers de engajamento...[/yellow]")
-            try:
-                from core.sticker_overlay import add_random_stickers
-                stickered = os.path.join(temp_dir, "stickered.mp4")
-                sticker_count = rng.randint(2, 3)
-                add_random_stickers(final_in_temp, stickered, avatar_duration,
-                                    temp_dir, rng=rng, count=sticker_count)
-                if os.path.exists(stickered) and os.path.getsize(stickered) > 1000 and _has_video(stickered):
-                    os.replace(stickered, final_in_temp)
-                    console.print(f"  [green]{sticker_count} stickers adicionados![/green]")
-            except Exception as stk_e:
-                console.print(f"  [dim]Stickers ignorados: {stk_e}[/dim]")
-
-        # =============================================
-        # IA AUDITOR FINAL — verificação completa do vídeo
-        # =============================================
-        if google_key and config.get("auditor_final_enabled", True):
-            if on_progress:
-                on_progress(97, 100, "IA Auditor Final: verificando vídeo completo...")
-            console.print("\n[bold yellow]=== IA Auditor Final: Verificando vídeo ===[/bold yellow]")
-            transcription_data = analysis.get("transcription", [])
-            audit_report = auditor.audit_final_video(
-                final_in_temp, transcription_data, temp_dir,
-                interval_sec=8.0,
-            )
-            # Salva relatório de qualidade junto ao output
-            try:
-                out_dir = os.path.dirname(output_path) or "."
-                os.makedirs(out_dir, exist_ok=True)
-                report_path = output_path.replace(".mp4", "_quality_report.json")
-                with open(report_path, "w", encoding="utf-8") as _rf:
-                    json.dump(audit_report, _rf, indent=2, ensure_ascii=False)
-                console.print(f"  Relatório salvo: {os.path.basename(report_path)}")
-            except Exception:
-                pass
-
-            qs = audit_report.get("quality_score", 1.0)
-            if audit_report.get("approved", True):
-                console.print(
-                    f"  [bold green]✅ Vídeo APROVADO pela IA Auditor "
-                    f"(score={qs:.0%})[/bold green]"
-                )
-            else:
-                console.print(
-                    f"  [bold yellow]⚠️  Vídeo com ressalvas "
-                    f"(score={qs:.0%})[/bold yellow]"
-                )
-                for issue in audit_report.get("issues", [])[:3]:
-                    console.print(f"  [dim]  • {issue[:100]}[/dim]")
-            if on_progress:
-                on_progress(98, 100, f"IA Auditor Final: score={qs:.0%} approved={audit_report.get('approved',True)}")
-
-        # VALIDAÇÃO FINAL DE INTEGRIDADE
+        # FINAL VALIDATION
         if not _has_video(final_in_temp):
-            console.print("  [red]Vídeo final perdeu stream! Usando concat diretamente.[/red]")
+            console.print("  [red]Final lost video! Using concat directly.[/red]")
             shutil.copy2(concat_out, final_in_temp)
 
         if not _has_video(final_in_temp):
             raise RuntimeError("PIPELINE FAILED: no video stream in final output!")
 
-        # Ensure output directory exists
-        out_dir = os.path.dirname(output_path)
-        if out_dir:
-            os.makedirs(out_dir, exist_ok=True)
+        os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
         shutil.copy2(final_in_temp, output_path)
 
         # Copy SRT next to output
         if analysis.get("subtitle_srt") and os.path.exists(analysis["subtitle_srt"]):
             shutil.copy2(analysis["subtitle_srt"], output_path.replace(".mp4", ".srt"))
 
+        # PHASE 3: Beat timeline JSON next to output (full traceability)
+        try:
+            from core.beat_timeline import build_beat_timeline, summarize_beat_timeline
+            timeline_path = output_path.replace(".mp4", "_beat_timeline.json")
+            timeline = build_beat_timeline(
+                segments_plan=segments_plan,
+                shot_list=analysis.get("shot_list", []),
+                transcription=analysis.get("transcription", []),
+                analysis=analysis,
+                mapped_clips=mapped_clips,
+                output_path=timeline_path,
+            )
+            console.print(f"\n[cyan]{summarize_beat_timeline(timeline)}[/cyan]")
+        except Exception as bt_e:
+            console.print(f"  [dim]Beat timeline export skipped: {bt_e}[/dim]")
+
+        # =============================================
+        # IA AUDITOR FINAL — quality check
+        # =============================================
+        quality_report = None
+        report_path = output_path.replace(".mp4", "_quality_report.json")
+        if google_key:
+            try:
+                if on_progress:
+                    on_progress(97, 100, "IA Auditor Final: analyzing video quality...")
+                from core.video_auditor import VideoAuditor
+                auditor = VideoAuditor(google_api_key=google_key)
+                transcription = analysis.get("transcription", [])
+                if transcription:
+                    audit_dir = os.path.join(temp_dir, "_auditor_final")
+                    os.makedirs(audit_dir, exist_ok=True)
+                    quality_report = auditor.audit_final_video(
+                        output_path, transcription, audit_dir,
+                        interval_sec=8.0, on_progress=on_progress,
+                    )
+                    with open(report_path, "w", encoding="utf-8") as f:
+                        json.dump(quality_report, f, indent=2)
+                    if quality_report.get("issues"):
+                        for issue in quality_report["issues"]:
+                            console.print(f"  [yellow]Audit issue: {issue}[/yellow]")
+                    status = "APROVADO" if quality_report.get("approved") else "COM RESSALVAS"
+                    score = quality_report.get("quality_score", 1.0)
+                    console.print(f"  [bold cyan]Auditor Final: {status} | Score: {score:.0%}[/bold cyan]")
+            except Exception as e:
+                console.print(f"  [dim]Auditor Final skipped: {e}[/dim]")
+        else:
+            # Write default report when no API key
+            default_report = {
+                "quality_score": 1.0, "issues": [], "approved": True,
+                "checkpoints_analyzed": 0, "total_duration": analysis.get("duration", 0),
+            }
+            try:
+                with open(report_path, "w", encoding="utf-8") as f:
+                    json.dump(default_report, f, indent=2)
+            except Exception:
+                pass
+
         final_size = os.path.getsize(output_path) / 1024 / 1024
-        console.print(f"\n[bold green]✅ DONE! {output_path} ({final_size:.1f} MB)[/bold green]")
+        console.print(f"\n[bold green]DONE! {output_path} ({final_size:.1f} MB)[/bold green]")
         console.print(f"[bold green]   Theme: {analysis['theme']} | {len(mapped_clips)} B-roll clips | {analysis['language'].upper()}[/bold green]")
 
         if on_progress:
@@ -833,484 +530,432 @@ def run_auto(config: dict, on_progress=None):
 
 
 def _download_from_shot_list(shot_list, output_folder, pexels_key, pixabay_key, unsplash_key,
-                              max_clips=30, on_progress=None, youtube_api_key="",
-                              youtube_channel_ids=None, youtube_channel_names=None, intel=None):
-    """
-    Download exatamente UM clip por shot da shot list.
+                              max_clips=30, on_progress=None,
+                              youtube_api_key="", youtube_channel_ids="",
+                              youtube_priority=False,
+                              validator=None, video_theme="general",
+                              min_validation_score=0.4):
+    """Download B-roll clips based on the AI-generated shot list.
+    Sources: Pexels → Pixabay → Coverr → YouTube.
+    Set youtube_priority=True to try YouTube FIRST.
+    All clips: trimmed to 5-8s, watermark removed, deduplicated.
 
-    Melhorias v11:
-    - 1 clip por shot (mapeamento 1:1 shot → clip garante sincronização)
-    - Todos os search_terms do shot são usados como fallback ordenado
-    - Deduplicação por URL E por hash do arquivo (sem clips repetidos)
-    - IA Validadora opcional: rejeita clips com score < 0.55
-    - YouTube: fonte primária quando channel_ids configurados; fallback CC quando não
-    - Nomeação de arquivo única por shot para evitar colisões
-    """
-    import time as _tm
-    import hashlib as _hl
-
-    shots_to_process = shot_list[:max_clips]
-    print(f"  [download] {len(shots_to_process)} shots para processar (máx={max_clips})")
-
-    # --- Setup fontes ---
+    PHASE 2: post-download validation.
+    If `validator` is a VideoIntelligence instance, every downloaded clip is
+    scored against its search terms via Gemini Vision (images) or heuristics
+    (videos). Clips with score < min_validation_score are discarded and the
+    next source/result is tried."""
+    
+    # Build keyword list from shot list (with mood + shot_type)
+    keywords = []
+    for shot in shot_list:
+        for term in shot.get("search_terms", []):
+            keywords.append({
+                "start": shot["start"],
+                "end": shot["end"],
+                "keyword": term,
+                "shot_type": shot.get("shot_type", "wide"),
+                "mood": shot.get("mood", "informative"),
+            })
+    
+    # Limit to max_clips
+    if len(keywords) > max_clips:
+        step = len(keywords) / max_clips
+        keywords = [keywords[int(i * step)] for i in range(max_clips)]
+    
+    # Import download sources
     sources = []
     downloaders = {}
-
+    
     if pexels_key:
         from core.pexels_stock import search_videos as pex_videos, search_photos as pex_photos
         from core.pexels_stock import download_file as pex_download
         sources.append("pexels")
         downloaders["pexels"] = (pex_videos, pex_photos, pex_download, pexels_key)
-
+    
     if pixabay_key:
         from core.pixabay_stock import search_videos as pix_videos, search_photos as pix_photos
         from core.pixabay_stock import download_file as pix_download
         sources.append("pixabay")
         downloaders["pixabay"] = (pix_videos, pix_photos, pix_download, pixabay_key)
-
+    
     if unsplash_key:
         from core.unsplash_stock import search_photos as uns_photos
         from core.unsplash_stock import download_file as uns_download
         sources.append("unsplash")
         downloaders["unsplash"] = (None, uns_photos, uns_download, unsplash_key)
-
+    
     try:
         from core.coverr_stock import search_videos as cov_videos, download_file as cov_download
         sources.append("coverr")
         downloaders["coverr"] = (cov_videos, None, cov_download, "")
     except ImportError:
         pass
-
-    youtube_key = youtube_api_key or ""
-    youtube_channels = youtube_channel_ids or []
-    yt_ch_names = youtube_channel_names or []
-    has_youtube = False
+    
+    # Mixkit (free HD/4K, no API key)
+    mk_available = False
     try:
-        import yt_dlp  # noqa
-        has_youtube = True
-        # YouTube como fonte primária quando channel_ids configurados
-        if youtube_channels:
-            sources.insert(0, "youtube_channels")
+        from core.mixkit_stock import search_and_download as mk_search_download
+        mk_available = True
+        sources.append("mixkit")
+    except ImportError:
+        pass
+    
+    # YouTube as fallback source (uses youtube_broll.py v4)
+    yt_available = False
+    try:
+        from core.youtube_broll import search_and_download as yt_search_download
+        yt_available = True
         sources.append("youtube")
     except ImportError:
         pass
-
+    
     if not sources:
-        print("  [download] Nenhuma fonte de stock disponível!")
+        print("  [download] No stock sources available!")
         return []
 
-    if youtube_channels:
-        print(f"  [download] YouTube canais: {youtube_channels}")
-    print(f"  [download] Fontes ativas: {', '.join(sources)}")
+    print(f"  [download] Active sources: {', '.join(sources)}")
+    if validator is not None:
+        print(f"  [download] Post-download validation: ENABLED (min_score={min_validation_score}, theme='{video_theme}')")
 
-    # --- Deduplicação ---
-    seen_urls = set()
-
-    def _rm(path):
-        try:
-            if path and os.path.exists(path):
-                os.remove(path)
-        except OSError:
-            pass
-
-    def _file_hash(path):
-        try:
-            h = _hl.md5()
-            with open(path, "rb") as fh:
-                h.update(fh.read(512 * 1024))  # Primeiros 512KB
-            return h.hexdigest()
-        except Exception:
-            return ""
-
-    seen_hashes = set()
-
-    def _try_one(source, keyword, base_out, attempt_tag):
-        """
-        Tenta baixar um clip/imagem de uma fonte.
-        Retorna (path, url) ou (None, None).
-
-        Validacao dupla:
-          - Video: tamanho >= 100KB, duracao >= 3s, largura >= 640px
-          - Imagem: tamanho >= 10KB, largura >= 640px
-          - Hash: nunca aceita arquivo identico a outro ja baixado
-        """
-        from core.video_auditor import validate_broll as _vbroll
-
-        dl = downloaders.get(source)
-        if not dl:
-            return None, None
-        search_vids, search_pics, download_fn, api_key = dl
-
-        # ── Video ──────────────────────────────────────────────────────────
-        if search_vids:
-            try:
-                if source == "pexels":
-                    vids = search_vids(api_key, keyword, count=4, min_duration=3)
-                elif source == "pixabay":
-                    vids = search_vids(api_key, keyword, count=4)
-                else:
-                    vids = search_vids(keyword, count=4)
-            except Exception:
-                vids = []
-
-            for vid in (vids or []):
-                url = vid.get("url", "")
-                if not url or url in seen_urls:
-                    continue
-                out_path = os.path.join(output_folder, f"{base_out}_{attempt_tag}.mp4")
-                try:
-                    download_fn(url, out_path)
-                except Exception:
-                    _rm(out_path)
-                    continue
-
-                # Validacao: tamanho minimo 100KB + duracao + resolucao
-                if os.path.exists(out_path) and os.path.getsize(out_path) >= 100_000:
-                    vr = _vbroll(out_path, min_duration=3, min_width=640)
-                    if not vr["valid"]:
-                        print(f"    [download] clip rejeitado ({vr['reason']}): {url[:60]}")
-                        _rm(out_path)
-                        continue
-                    fh = _file_hash(out_path)
-                    if fh and fh in seen_hashes:
-                        _rm(out_path)
-                        continue
-                    seen_urls.add(url)
-                    if fh:
-                        seen_hashes.add(fh)
-                    return out_path, url
-                else:
-                    _rm(out_path)
-
-        # ── Foto (fallback) ────────────────────────────────────────────────
-        if search_pics:
-            try:
-                if source in ("pexels", "pixabay", "unsplash"):
-                    pics = search_pics(api_key, keyword, count=4)
-                else:
-                    pics = search_pics(keyword, count=4)
-            except Exception:
-                pics = []
-
-            for pic in (pics or []):
-                url = pic.get("url", "")
-                if not url or url in seen_urls:
-                    continue
-                out_path = os.path.join(output_folder, f"{base_out}_{attempt_tag}.jpg")
-                try:
-                    download_fn(url, out_path)
-                except Exception:
-                    _rm(out_path)
-                    continue
-
-                if os.path.exists(out_path) and os.path.getsize(out_path) >= 10_000:
-                    vr = _vbroll(out_path, min_duration=0, min_width=640)
-                    if not vr["valid"]:
-                        _rm(out_path)
-                        continue
-                    fh = _file_hash(out_path)
-                    if fh and fh in seen_hashes:
-                        _rm(out_path)
-                        continue
-                    seen_urls.add(url)
-                    if fh:
-                        seen_hashes.add(fh)
-                    return out_path, url
-                else:
-                    _rm(out_path)
-
-        return None, None
-
+    # Deduplication tracker
+    used_urls = set()
+    used_ids = set()
     mapped_clips = []
 
-    for i, shot in enumerate(shots_to_process):
+    # Track validation scores keyed by file path so the beat_timeline can show them
+    validation_scores = {}
+
+    def _accept_or_reject(file_path, keyword_text, source_name):
+        """PHASE 2 validation. Returns True if clip passes, False to discard.
+
+        Uses VideoIntelligence.validate_clip() which scores via Gemini Vision
+        for images / heuristics for videos. On any error -> accept (fail open)
+        so the pipeline never gets stuck because of validator transient issues."""
+        if validator is None:
+            return True
+        if not (os.path.exists(file_path) and os.path.getsize(file_path) > 1000):
+            return False
+        try:
+            score = validator.validate_clip(
+                file_path, [keyword_text], video_theme
+            )
+        except Exception as ve:
+            print(f"    [validate] {source_name} '{keyword_text}': validator error ({ve}) — accepting (fail open)")
+            return True
+        if score is None:
+            return True
+        if score < min_validation_score:
+            print(f"    [validate] REJECTED ({score:.2f} < {min_validation_score}) {source_name} '{keyword_text}'")
+            try: os.remove(file_path)
+            except Exception: pass
+            return False
+        print(f"    [validate] OK ({score:.2f}) {source_name} '{keyword_text}'")
+        validation_scores[file_path] = score
+        return True
+    
+    for i, item in enumerate(keywords):
         if on_progress:
-            pct = 20 + int((i / max(len(shots_to_process), 1)) * 35)
-            first_term = shot.get("search_terms", ["?"])[0]
-            on_progress(pct, 100, f"B-roll {i+1}/{len(shots_to_process)}: '{first_term}'")
-
-        search_terms = shot.get("search_terms", [])
-        if not search_terms:
-            continue
-
-        text_preview = shot.get("text_preview", "")
-        base_out = f"shot_{i:03d}"
-        found_path = None
-        found_keyword = None
-
-        def _try_youtube(term, tag, ch_ids=None):
-            """Tenta baixar do YouTube (canais, CC ou yt-dlp com nomes). Retorna path ou None."""
-            out_path = os.path.join(output_folder, f"{base_out}_{tag}.mp4")
-            try:
-                from core.youtube_broll import search_and_download as yt_dl
-                ok = yt_dl(term, out_path,
-                           youtube_api_key=youtube_key,
-                           max_duration=30,
-                           channel_ids=ch_ids or None,
-                           channel_names=yt_ch_names or None)
-                if ok and os.path.exists(out_path) and os.path.getsize(out_path) > 10000:
-                    fh = _file_hash(out_path)
-                    if not fh or fh not in seen_hashes:
-                        if fh:
-                            seen_hashes.add(fh)
-                        return out_path
-            except Exception as yt_e:
-                print(f"    [YouTube] Erro: {yt_e}")
-            return None
-
-        # ── FASE 1: Canais YouTube configurados (fonte primária para nichos) ──
-        if youtube_channels and not found_path:
-            for term_idx, term in enumerate(search_terms[:2]):
-                yt_path = _try_youtube(term, f"ych_t{term_idx}", ch_ids=youtube_channels)
-                if yt_path:
-                    found_path = yt_path
-                    found_keyword = term
-                    print(f"    ✓ [YouTube-Canal] Shot {i} ({shot['start']:.0f}s): '{term}'")
-                    break
-
-        # ── FASE 2: Fontes stock (Pexels, Pixabay, Unsplash) ──
-        for term_idx, term in enumerate(search_terms):
-            if found_path:
-                break
-
-            stock_sources = [s for s in sources if s not in ("youtube", "youtube_channels")]
-            source_order = stock_sources[i % max(len(stock_sources), 1):] + stock_sources[:i % max(len(stock_sources), 1)]
-
-            for source in source_order:
-                try:
-                    path, url = _try_one(source, term, base_out, f"t{term_idx}_{source}")
-                    if path:
-                        # IA Validadora: rejeita clips com score < 0.55
-                        if intel and term_idx <= 1:
-                            score = intel.validate_clip(path, [term], text_preview)
-                            if score < 0.45:
-                                print(f"    [IA Validadora] Reprovado (score={score:.1f}), tentando próximo...")
-                                try:
-                                    os.remove(path)
-                                except Exception:
-                                    pass
-                                seen_urls.discard(url)
-                                continue
-                        found_path = path
-                        found_keyword = term
-                        print(f"    ✓ [{source}] Shot {i} ({shot['start']:.0f}s-{shot['end']:.0f}s): '{term}'")
-                        break
-                except Exception as exc:
-                    print(f"    [{source}] Erro para '{term}': {exc}")
-                    continue
-
-        # ── FASE 3: YouTube CC (fallback quando stock não encontrou) ──
-        if not found_path and has_youtube:
-            for term_idx, term in enumerate(search_terms[:3]):
-                yt_path = _try_youtube(term, f"ycc_t{term_idx}")
-                if yt_path:
-                    found_path = yt_path
-                    found_keyword = term
-                    print(f"    ✓ [YouTube-CC] Shot {i} ({shot['start']:.0f}s): '{term}'")
-                    break
-
-        # Fallback: keyword simplificado (2 primeiras palavras)
-        if not found_path and search_terms:
-            simplified = " ".join(search_terms[0].split()[:2])
-            if simplified != search_terms[0]:
-                print(f"    [FALLBACK simples] Tentando: '{simplified}'")
-                source_order = sources[i % len(sources):] + sources[:i % len(sources)]
-                for source in source_order:
-                    if source in ("youtube", "youtube_channels"):
-                        continue
-                    try:
-                        path, url = _try_one(source, simplified, base_out, "simplified")
-                        if path:
-                            found_path = path
-                            found_keyword = simplified
-                            print(f"    ✓ [{source}] Fallback simples Shot {i}: '{simplified}'")
-                            break
-                    except Exception:
-                        continue
-
-        if found_path:
-            mapped_clips.append({
-                "timeline_start": shot["start"],
-                "timeline_end": shot["end"],
-                "file": found_path,
-                "keyword": found_keyword,
-                "text_preview": text_preview,
-                "source": "stock",
-                "shot_idx": i,
-            })
+            pct = 20 + int((i / max(len(keywords), 1)) * 35)
+            on_progress(pct, 100, f"Downloading {i+1}/{len(keywords)}: '{item['keyword']}'")
+        
+        found = False
+        if youtube_priority and yt_available:
+            # YouTube FIRST, then rotate stock sources
+            stock_sources = [s for s in sources if s != "youtube"]
+            rotated = stock_sources[i % max(len(stock_sources), 1):] + stock_sources[:i % max(len(stock_sources), 1)]
+            source_order = ["youtube"] + rotated
         else:
-            print(f"    ✗ Shot {i} ({shot['start']:.0f}s): nenhum clip encontrado para {search_terms}")
-
-        _tm.sleep(0.3)
-
-    print(f"  [download] Resultado: {len(mapped_clips)}/{len(shots_to_process)} shots cobertos")
-    return mapped_clips
-
-
-def _redownload_bad_clips(bad_indices, mapped_clips, shot_list, output_folder,
-                           pexels_key, pixabay_key, unsplash_key):
-    """Re-baixa clips reprovados pelo Gerente Geral usando termos alternativos."""
-    import time as _tm
-
-    sources = []
-    downloaders = {}
-    if pexels_key:
-        from core.pexels_stock import search_videos as pex_videos, search_photos as pex_photos
-        from core.pexels_stock import download_file as pex_download
-        sources.append("pexels")
-        downloaders["pexels"] = (pex_videos, pex_photos, pex_download, pexels_key)
-    if pixabay_key:
-        from core.pixabay_stock import search_videos as pix_videos, search_photos as pix_photos
-        from core.pixabay_stock import download_file as pix_download
-        sources.append("pixabay")
-        downloaders["pixabay"] = (pix_videos, pix_photos, pix_download, pixabay_key)
-    if unsplash_key:
-        from core.unsplash_stock import search_photos as uns_photos
-        from core.unsplash_stock import download_file as uns_download
-        sources.append("unsplash")
-        downloaders["unsplash"] = (None, uns_photos, uns_download, unsplash_key)
-
-    for idx in bad_indices:
-        clip = mapped_clips[idx]
-        t_start = clip.get("timeline_start", 0)
-        current_kw = clip.get("keyword", "")
-
-        # Localiza o shot original para pegar search_terms alternativos
-        original_shot = None
-        for shot in shot_list:
-            if abs(shot["start"] - t_start) < 2.0:
-                original_shot = shot
-                break
-
-        alt_terms = []
-        if original_shot:
-            alt_terms = [t for t in original_shot.get("search_terms", []) if t != current_kw]
-
-        if not alt_terms:
-            alt_terms = [f"{current_kw} medical", f"{current_kw} close up", f"{current_kw} stock"]
-
-        for term in alt_terms:
-            out_path = os.path.join(output_folder, f"redl_{idx:03d}.mp4")
-            found = False
-            for source in sources:
-                dl = downloaders.get(source)
-                if not dl:
-                    continue
-                search_vids, search_pics, download_fn, api_key = dl
-                try:
-                    if search_vids:
-                        vids = search_vids(api_key, term, count=2) if source in ("pexels", "pixabay") else search_vids(term, count=2)
-                        for vid in (vids or []):
-                            url = vid.get("url", "")
-                            if not url:
-                                continue
-                            try:
-                                download_fn(url, out_path)
-                            except Exception:
-                                continue
-                            if os.path.exists(out_path) and os.path.getsize(out_path) >= 100_000:
-                                from core.video_auditor import validate_broll as _vbroll
-                                vr = _vbroll(out_path, min_duration=3, min_width=640)
-                                if not vr["valid"]:
-                                    try:
-                                        os.remove(out_path)
-                                    except OSError:
-                                        pass
-                                    continue
-                                mapped_clips[idx] = {**clip, "file": out_path, "keyword": term}
-                                print(f"  [Re-download] Clip {idx}: '{current_kw}' -> '{term}' OK")
-                                found = True
-                                break
-                            elif os.path.exists(out_path):
-                                try:
-                                    os.remove(out_path)
-                                except OSError:
-                                    pass
-                except Exception:
-                    continue
-                if found:
-                    break
+            # Stock sources first, YouTube last (fallback)
+            stock_sources = [s for s in sources if s != "youtube"]
+            source_order = stock_sources[i % max(len(stock_sources), 1):] + stock_sources[:i % max(len(stock_sources), 1)]
+            if yt_available:
+                source_order.append("youtube")
+        
+        for source in source_order:
             if found:
                 break
-            _tm.sleep(0.2)
+            try:
+                if source == "youtube":
+                    # YouTube: download 6s clip via youtube_broll.py v3
+                    out_path = os.path.join(output_folder, f"broll_{i+1:03d}.mp4")
+                    # Parse channel IDs if provided as comma-separated string
+                    ch_ids = [c.strip() for c in youtube_channel_ids.split(",") if c.strip()] if youtube_channel_ids else None
+                    ok = yt_search_download(
+                        item["keyword"], out_path,
+                        youtube_api_key=youtube_api_key,
+                        channel_ids=ch_ids,
+                    )
+                    if ok and os.path.exists(out_path) and os.path.getsize(out_path) > 1000:
+                        if _accept_or_reject(out_path, item["keyword"], "youtube"):
+                            mapped_clips.append({
+                                "timeline_start": item["start"],
+                                "timeline_end": item["end"],
+                                "file": out_path,
+                                "keyword": item["keyword"],
+                                "source": "youtube",
+                                "shot_type": item.get("shot_type", "wide"),
+                                "mood": item.get("mood", "informative"),
+                            })
+                            found = True
+                    continue
+                
+                if source == "mixkit" and mk_available:
+                    out_path = os.path.join(output_folder, f"broll_{i+1:03d}_mk.mp4")
+                    ok = mk_search_download(item["keyword"], out_path)
+                    if ok and os.path.exists(out_path) and os.path.getsize(out_path) > 1000:
+                        final_path = os.path.join(output_folder, f"broll_{i+1:03d}.mp4")
+                        _trim_and_clean(out_path, final_path)
+                        try: os.remove(out_path)
+                        except: pass
+                        if os.path.exists(final_path) and os.path.getsize(final_path) > 1000:
+                            if _accept_or_reject(final_path, item["keyword"], "mixkit"):
+                                mapped_clips.append({
+                                    "timeline_start": item["start"],
+                                    "timeline_end": item["end"],
+                                    "file": final_path,
+                                    "keyword": item["keyword"],
+                                    "source": "mixkit",
+                                    "shot_type": item.get("shot_type", "wide"),
+                                    "mood": item.get("mood", "informative"),
+                                })
+                                found = True
+                    continue
+                
+                dl_info = downloaders[source]
+                search_vids, search_pics, download_fn, api_key = dl_info
+                
+                # Try videos first (search 5 for dedup)
+                if search_vids:
+                    if source in ("pexels", "pixabay"):
+                        vids = search_vids(api_key, item["keyword"], count=5, min_duration=3) if source == "pexels" else search_vids(api_key, item["keyword"], count=5)
+                    else:
+                        vids = search_vids(item["keyword"], count=3)
+                    
+                    for vid in (vids or []):
+                        url = vid.get("url", "")
+                        vid_id = str(vid.get("id", ""))
+                        if not url or url in used_urls or (vid_id and vid_id in used_ids):
+                            continue
+                        
+                        raw_path = os.path.join(output_folder, f"broll_{i+1:03d}_raw.mp4")
+                        out_path = os.path.join(output_folder, f"broll_{i+1:03d}.mp4")
+                        download_fn(url, raw_path)
+                        
+                        if os.path.exists(raw_path) and os.path.getsize(raw_path) > 1000:
+                            # Trim to 5-8s + remove watermark (6% zoom crop)
+                            _trim_and_clean(raw_path, out_path)
+                            try: os.remove(raw_path)
+                            except: pass
 
+                            if os.path.exists(out_path) and os.path.getsize(out_path) > 1000:
+                                # PHASE 2: validate before accepting. Reject ones that don't match.
+                                if not _accept_or_reject(out_path, item["keyword"], source):
+                                    # Try next video candidate from same source — don't break
+                                    continue
+                                used_urls.add(url)
+                                if vid_id: used_ids.add(vid_id)
+                                mapped_clips.append({
+                                    "timeline_start": item["start"],
+                                    "timeline_end": item["end"],
+                                    "file": out_path,
+                                    "keyword": item["keyword"],
+                                    "source": source,
+                                    "shot_type": item.get("shot_type", "wide"),
+                                    "mood": item.get("mood", "informative"),
+                                })
+                                found = True
+                                break
+                
+                # Try photos (no trim needed, just dedup)
+                if search_pics and not found:
+                    if source in ("pexels", "pixabay", "unsplash"):
+                        pics = search_pics(api_key, item["keyword"], count=5)
+                    else:
+                        pics = search_pics(item["keyword"], count=3)
+                    
+                    for pic in (pics or []):
+                        pic_url = pic.get("url", "")
+                        pic_id = str(pic.get("id", ""))
+                        if not pic_url or pic_url in used_urls or (pic_id and pic_id in used_ids):
+                            continue
+                        
+                        out_path = os.path.join(output_folder, f"broll_{i+1:03d}.jpg")
+                        download_fn(pic_url, out_path)
+                        if os.path.exists(out_path) and os.path.getsize(out_path) > 1000:
+                            # PHASE 2: validate image via Gemini Vision (most reliable for stills)
+                            if not _accept_or_reject(out_path, item["keyword"], source):
+                                continue  # try next photo
+                            used_urls.add(pic_url)
+                            if pic_id: used_ids.add(pic_id)
+                            mapped_clips.append({
+                                "timeline_start": item["start"],
+                                "timeline_end": item["end"],
+                                "file": out_path,
+                                "keyword": item["keyword"],
+                                "source": source,
+                                "shot_type": item.get("shot_type", "wide"),
+                                "mood": item.get("mood", "informative"),
+                            })
+                            found = True
+                            break
+                            
+            except Exception as exc:
+                print(f"    [{source}] Error for '{item['keyword']}': {exc}")
+                continue
+    
+    # Attach validation_score to each clip (if Phase 2 was active)
+    for clip in mapped_clips:
+        fp = clip.get("file")
+        if fp in validation_scores:
+            clip["validation_score"] = round(validation_scores[fp], 3)
+
+    print(f"  [download] Dedup: {len(used_ids)} unique IDs, {len(used_urls)} unique URLs")
+    if validator is not None:
+        scored = [c for c in mapped_clips if "validation_score" in c]
+        if scored:
+            avg = sum(c["validation_score"] for c in scored) / len(scored)
+            print(f"  [download] Validation: {len(scored)}/{len(mapped_clips)} scored, avg={avg:.2f}")
     return mapped_clips
+
+
+def _trim_and_clean(input_path: str, output_path: str,
+                     max_dur: float = 8.0, min_dur: float = 5.0):
+    """Trim video to 5-8 seconds and apply watermark removal (6% zoom crop).
+    Extracts from middle of clip, avoiding intro/outro."""
+    ffmpeg = _find_ffmpeg()
+    
+    try:
+        dur = get_duration(input_path)
+    except:
+        dur = 0
+    
+    if dur <= 0:
+        shutil.copy2(input_path, output_path)
+        return
+    
+    # Calculate trim: use middle section, avoid first/last 10%
+    trim_dur = min(max_dur, dur)
+    if trim_dur < min_dur and dur >= min_dur:
+        trim_dur = min_dur
+    
+    if dur > max_dur:
+        safe_start = dur * 0.1
+        safe_end = dur * 0.9 - trim_dur
+        import random
+        start = random.uniform(safe_start, max(safe_start, safe_end))
+    else:
+        start = 0
+    
+    # Apply: trim + 6% zoom crop (removes corner watermarks)
+    zoom = 1.06
+    cmd = [
+        ffmpeg, "-y",
+        "-ss", str(round(start, 2)),
+        "-i", input_path,
+        "-t", str(round(trim_dur, 2)),
+        "-vf", (
+            f"scale=iw*{zoom}:ih*{zoom},"
+            f"crop=iw/{zoom}:ih/{zoom}"
+        ),
+        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
+        "-an", "-pix_fmt", "yuv420p",
+        output_path,
+    ]
+    
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    if r.returncode != 0:
+        # Fallback: just copy without processing
+        shutil.copy2(input_path, output_path)
 
 
 def _build_smart_timeline(avatar_duration, mapped_clips, rng,
-                           min_broll_dur=4, max_broll_dur=6, full_broll_mode=False):
-    """
-    v11 — Posicionamento exato por shot:
-    Cada clip é colocado EXATAMENTE na posição timeline_start do seu shot.
-    Avatar preenche todos os gaps. Zero repetição — cada clip aparece uma vez.
+                           min_broll_dur=4, max_broll_dur=6):
+    """Build DYNAMIC timeline — cut rhythm varies by shot type and pacing.
+    
+    InVideo/VidRush-level pacing:
+    - Wide shots: 6-9s (establishing)
+    - Closeups: 3-5s (detail)
+    - Default: 4-7s
+    - Avatar breaks: max 12s before next B-roll
+    - Pattern: 2 B-rolls → avatar break → 2 B-rolls
     """
     segments = []
+    mapped_clips.sort(key=lambda c: c["timeline_start"])
 
-    if full_broll_mode:
-        for clip in sorted(mapped_clips, key=lambda c: c["timeline_start"]):
-            dur = clip["timeline_end"] - clip["timeline_start"]
-            if dur < 0.5:
-                continue
-            segments.append({
-                "type": "broll",
-                "start": clip["timeline_start"],
-                "duration": dur,
-                "file": clip["file"],
-                "is_image": clip["file"].lower().endswith((".jpg", ".jpeg", ".png", ".bmp", ".webp")),
-                "keyword": clip.get("keyword", ""),
-                "speed_factor": clip.get("speed_factor", 1.0),
-                "reuse_count": 0,
-            })
-        return segments
-
-    if not mapped_clips:
-        return [{"type": "avatar", "start": 0.0, "duration": round(avatar_duration, 2)}]
-
-    # Ordena clips pela posição do shot no vídeo
-    clips_sorted = sorted(mapped_clips, key=lambda c: c["timeline_start"])
+    # Shot type → duration ranges
+    SHOT_DURATIONS = {
+        "wide": (6, 9),
+        "aerial": (6, 8),
+        "closeup": (3, 5),
+        "detail": (3, 5),
+        "pov": (4, 6),
+        "diagram": (5, 7),
+    }
+    MAX_AVATAR_DURATION = 12  # Max seconds of avatar before forcing B-roll
 
     current_time = 0.0
 
-    for clip in clips_sorted:
-        shot_start = clip["timeline_start"]
-        shot_end = clip["timeline_end"]
+    # Intro: avatar only (8-15s or 10% of video)
+    intro_dur = min(rng.uniform(8, 15), avatar_duration * 0.1)
+    segments.append({"type": "avatar", "start": 0, "duration": round(intro_dur, 2)})
+    current_time = intro_dur
 
-        # Pula clips que ficam além do vídeo
-        if shot_start >= avatar_duration - 1.0:
-            break
+    clip_idx = 0
+    consecutive_brolls = 0
 
-        # Avatar do ponto atual até o início deste shot
-        gap = shot_start - current_time
-        if gap >= 1.0:
+    while current_time < avatar_duration - 3 and clip_idx < len(mapped_clips):
+        clip = mapped_clips[clip_idx]
+
+        # Avatar segment before B-roll
+        avatar_end = clip["timeline_start"]
+        if avatar_end > current_time + 2:
+            av_dur = min(avatar_end - current_time, MAX_AVATAR_DURATION)
             segments.append({
                 "type": "avatar",
                 "start": round(current_time, 2),
-                "duration": round(gap, 2),
+                "duration": round(av_dur, 2),
             })
+            current_time += av_dur
+            consecutive_brolls = 0
 
-        # B-roll nesta posição exata — duração entre min e max, limitado ao shot
-        shot_dur = shot_end - shot_start
-        broll_dur = min(shot_dur, max_broll_dur, avatar_duration - shot_start)
-        broll_dur = max(broll_dur, min_broll_dur) if broll_dur >= min_broll_dur else broll_dur
+        # Determine B-roll duration based on shot type
+        shot_type = clip.get("shot_type", "wide") if isinstance(clip.get("shot_type"), str) else "wide"
+        dur_range = SHOT_DURATIONS.get(shot_type, (min_broll_dur, max_broll_dur))
+        broll_dur = rng.uniform(dur_range[0], dur_range[1])
+        broll_dur = min(broll_dur, avatar_duration - current_time)
 
-        if broll_dur >= 2.0:
+        if broll_dur >= 3:
             segments.append({
                 "type": "broll",
-                "start": round(shot_start, 2),
+                "start": round(current_time, 2),
                 "duration": round(broll_dur, 2),
                 "file": clip["file"],
                 "is_image": clip["file"].lower().endswith((".jpg", ".jpeg", ".png", ".bmp", ".webp")),
                 "keyword": clip.get("keyword", ""),
-                "speed_factor": 1.0,
-                "reuse_count": 0,
+                "shot_type": shot_type,
             })
-            current_time = shot_start + broll_dur
-        else:
-            current_time = max(current_time, shot_start)
+            current_time += broll_dur
+            consecutive_brolls += 1
 
-    # Avatar para o restante do vídeo após o último B-roll
+            # After 2 consecutive B-rolls, insert a short avatar break (3-5s)
+            if consecutive_brolls >= 2 and clip_idx < len(mapped_clips) - 1:
+                break_dur = rng.uniform(3, 5)
+                break_dur = min(break_dur, avatar_duration - current_time)
+                if break_dur >= 2:
+                    segments.append({
+                        "type": "avatar",
+                        "start": round(current_time, 2),
+                        "duration": round(break_dur, 2),
+                    })
+                    current_time += break_dur
+                consecutive_brolls = 0
+
+        clip_idx += 1
+
+    # Outro: remaining avatar
     remaining = avatar_duration - current_time
-    if remaining >= 0.3:
+    if remaining > 0.5:
         segments.append({
             "type": "avatar",
             "start": round(current_time, 2),

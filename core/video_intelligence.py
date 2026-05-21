@@ -354,64 +354,157 @@ Return ONLY valid JSON array (no markdown):
   ...
 ]"""
 
+        # Generic/abstract terms that produce bad B-roll (filler footage).
+        # If Gemini returns these, we strip and substitute with topic-aware fallbacks.
+        BANNED_GENERIC_TERMS = {
+            "people talking", "person talking", "beautiful scenery", "nice view",
+            "city skyline", "background", "footage", "broll", "b-roll",
+            "stock footage", "cinematic shot", "establishing shot",
+            "freedom", "hope", "power", "love", "peace", "happiness",
+            "abstract concept", "abstract visualization",
+            "generic video", "generic image", "random",
+        }
+
         def _parse_and_validate(text):
-            if text.startswith("```"):
-                text = text.split("\n", 1)[1] if "\n" in text else text
-                text = text.rsplit("```", 1)[0] if "```" in text else text
-            shot_list = json.loads(text.strip())
+            # Strip code fences if present (Gemini sometimes wraps in ```json...```)
+            raw = text.strip()
+            if raw.startswith("```"):
+                # Remove first fence line
+                if "\n" in raw:
+                    raw = raw.split("\n", 1)[1]
+                # Remove trailing fence
+                if "```" in raw:
+                    raw = raw.rsplit("```", 1)[0]
+            raw = raw.strip()
+            # Robust extraction: find first [ and last ] (handles trailing commentary from Gemini)
+            if "[" in raw and "]" in raw:
+                lb = raw.index("[")
+                rb = raw.rindex("]")
+                raw = raw[lb:rb + 1]
+            # Strip BOM and stray characters
+            raw = raw.lstrip("﻿​").strip()
+            shot_list = json.loads(raw)
+            if not isinstance(shot_list, list):
+                raise ValueError("Shot list root must be a JSON array")
+
             validated = []
             used_terms = set()
             last_shot_types = []
             valid_types = {"wide", "closeup", "aerial", "detail", "pov", "diagram"}
             valid_moods = {"dramatic", "calm", "urgent", "mysterious", "hopeful", "informative"}
-            
+
             for shot in shot_list:
-                shot["start"] = float(shot.get("start", 0))
-                shot["end"] = float(shot.get("end", shot["start"] + 8))
-                terms = shot.get("terms", [])
+                if not isinstance(shot, dict):
+                    continue
+                try:
+                    shot["start"] = float(shot.get("start", 0))
+                    shot["end"] = float(shot.get("end", shot["start"] + 8))
+                except (TypeError, ValueError):
+                    continue
+
+                # Accept both "terms" and "search_terms" — Gemini sometimes uses the latter
+                terms = shot.get("terms") or shot.get("search_terms") or []
+                if isinstance(terms, str):
+                    terms = [terms]
+
                 unique_terms = []
                 for t in terms:
-                    t_lower = t.lower().strip()
-                    if t_lower not in used_terms and 2 < len(t) < 60:
-                        used_terms.add(t_lower)
-                        unique_terms.append(t)
-                
+                    if not isinstance(t, str):
+                        continue
+                    t_clean = t.strip().strip('"\'').strip()
+                    t_lower = t_clean.lower()
+                    # Filter: length, banned generics, duplicates, no abstract concepts
+                    if len(t_clean) < 3 or len(t_clean) > 80:
+                        continue
+                    if t_lower in used_terms:
+                        continue
+                    if t_lower in BANNED_GENERIC_TERMS:
+                        print(f"    [shot_list] Filtered banned generic term: '{t_clean}'")
+                        continue
+                    # Must contain at least one noun-like word (>3 chars)
+                    if not any(len(w) > 3 for w in t_clean.split()):
+                        continue
+                    used_terms.add(t_lower)
+                    unique_terms.append(t_clean)
+
+                # If Gemini returned 0 valid terms for this shot, derive from text_preview
+                if not unique_terms:
+                    preview = shot.get("text_preview") or ""
+                    fallback = self._extract_visual_keywords_from_text(preview[:200], theme)
+                    for t in fallback:
+                        tl = t.lower()
+                        if tl not in used_terms and tl not in BANNED_GENERIC_TERMS:
+                            used_terms.add(tl)
+                            unique_terms.append(t)
+                            if len(unique_terms) >= 2: break
+
                 # Validate shot_type
-                st = shot.get("shot_type", "wide").lower()
+                st = str(shot.get("shot_type", "wide")).lower().strip()
                 if st not in valid_types:
                     st = "wide"
                 # Prevent 3+ same shot types in a row
                 if len(last_shot_types) >= 2 and all(x == st for x in last_shot_types[-2:]):
-                    alternatives = list(valid_types - {st})
+                    alternatives = sorted(valid_types - {st})
                     st = alternatives[len(validated) % len(alternatives)]
                 last_shot_types.append(st)
-                
+
                 # Validate mood
-                mood = shot.get("mood", "informative").lower()
+                mood = str(shot.get("mood", "informative")).lower().strip()
                 if mood not in valid_moods:
                     mood = "informative"
-                
+
                 shot["search_terms"] = unique_terms[:2]
                 shot["shot_type"] = st
                 shot["mood"] = mood
-                shot["text_preview"] = ""
+                # Preserve text_preview if Gemini provided it (used for picker UI)
+                if "text_preview" not in shot or not shot["text_preview"]:
+                    shot["text_preview"] = ""
                 shot["visual_description"] = f"[{st.upper()}] {unique_terms[0] if unique_terms else 'b-roll'}"
-                validated.append(shot)
+                # Only keep shots with at least 1 valid term — others would just download garbage
+                if unique_terms:
+                    validated.append(shot)
             return validated, used_terms
 
-        # Generate global shot list with Gemini
+        # Generate global shot list with Gemini — JSON mode + 2-attempt retry
         if self.client:
-            try:
-                response = self.client.models.generate_content(
-                    model="gemini-2.0-flash",
-                    contents=prompt,
-                )
-                if response and response.text:
-                    validated, used_terms = _parse_and_validate(response.text.strip())
-                    print(f"    → Global shot list: {len(validated)} segments, {len(used_terms)} unique terms")
-                    return validated
-            except Exception as e:
-                print(f"    Gemini shot list error: {e}")
+            for attempt in range(2):
+                try:
+                    # Try with JSON response mode first (more reliable parsing)
+                    try:
+                        from google.genai import types as _gen_types
+                        cfg = _gen_types.GenerateContentConfig(
+                            temperature=0.3,
+                            response_mime_type="application/json",
+                        )
+                        response = self.client.models.generate_content(
+                            model="gemini-2.0-flash",
+                            contents=prompt,
+                            config=cfg,
+                        )
+                    except Exception:
+                        # Fallback to plain mode if types not available
+                        response = self.client.models.generate_content(
+                            model="gemini-2.0-flash",
+                            contents=prompt,
+                        )
+                    if response and response.text:
+                        validated, used_terms = _parse_and_validate(response.text.strip())
+                        if validated:
+                            print(f"    → Global shot list: {len(validated)} segments, {len(used_terms)} unique terms")
+                            return validated
+                        else:
+                            print(f"    → Attempt {attempt+1}: 0 valid shots after filtering (banned/generic terms)")
+                except json.JSONDecodeError as je:
+                    print(f"    → Attempt {attempt+1} JSON parse error: {je}")
+                    if attempt == 0:
+                        prompt = prompt + "\n\nIMPORTANT: Return STRICTLY valid JSON. No markdown, no commentary, no trailing text."
+                        time.sleep(2)
+                        continue
+                except Exception as e:
+                    print(f"    → Attempt {attempt+1} Gemini error: {e}")
+                    if attempt == 0:
+                        time.sleep(3)
+                        continue
 
 
         # Fallback: per-chunk analysis (with batching for efficiency)
