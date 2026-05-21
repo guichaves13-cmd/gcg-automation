@@ -24,6 +24,7 @@ from core.video_processor import (
     get_duration, is_image_file, extract_audio,
     create_video_from_image,
     concat_segments_with_audio, _find_ffmpeg, _find_ffprobe,
+    _get_encoder,
 )
 from core.ken_burns import get_zoompan_filter
 from core.subtitle_generator import generate_subtitles
@@ -456,7 +457,7 @@ def run_auto(config: dict, on_progress=None):
 
                 ffmpeg = _find_ffmpeg()
                 srt_escaped = srt_path.replace("\\", "/").replace(":", "\\:")
-                enc = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20"]
+                enc = _get_encoder()
                 cmd_sub = [
                     ffmpeg, "-y",
                     "-hwaccel", "auto",

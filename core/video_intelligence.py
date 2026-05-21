@@ -407,6 +407,33 @@ Return ONLY valid JSON array (no markdown):
                 if isinstance(terms, str):
                     terms = [terms]
 
+                # Language guard: terms must look English. Otherwise YouTube
+                # CC-search matches by literal text and pulls Minecraft/random
+                # PT videos for "personalizar completamente". Detect PT/ES
+                # giveaways and anchor with theme as last-resort English context.
+                PT_GIVEAWAYS = {
+                    "voce","voces","nossa","nosso","nossos","nossas","muito","muitos",
+                    "pode","podem","tudo","apenas","tambem","sera","sao","esta","esto",
+                    "completamente","facilmente","rapidamente","totalmente","extremamente",
+                    "qualquer","alguma","algum","quando","onde","porque","entao","assim",
+                    "este","esta","aquele","aquela","isso","aquilo","esse","essa",
+                }
+                import re as _re_lang
+                def _looks_non_english(s):
+                    sl = s.lower()
+                    # PT/ES accent residue (after stripping should be gone, but Gemini
+                    # might emit raw PT) OR -mente/-ção suffix OR known PT function words
+                    if any(ch in sl for ch in "áéíóúãõçâêôà"):
+                        return True
+                    words = _re_lang.findall(r"[a-zA-ZÀ-ſ]+", sl)
+                    if any(w.endswith(("mente","cao","ções")) for w in words):
+                        return True
+                    if any(w in PT_GIVEAWAYS for w in words):
+                        return True
+                    return False
+
+                theme_word = (theme or "").strip().split()[0] if theme else ""
+
                 unique_terms = []
                 for t in terms:
                     if not isinstance(t, str):
@@ -424,6 +451,12 @@ Return ONLY valid JSON array (no markdown):
                     # Must contain at least one noun-like word (>3 chars)
                     if not any(len(w) > 3 for w in t_clean.split()):
                         continue
+                    # Language guard — append theme to non-English terms
+                    if _looks_non_english(t_clean) and theme_word:
+                        t_clean = f"{t_clean} {theme_word}"
+                        t_lower = t_clean.lower()
+                        if t_lower in used_terms:
+                            continue
                     used_terms.add(t_lower)
                     unique_terms.append(t_clean)
 
