@@ -296,36 +296,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           expression: `(function() {
             var best = null, bestRect = null;
             
-            // Strategy 1: Find arrow_forward or send icon
-            var icons = document.querySelectorAll('.google-symbols, .material-symbols-outlined, i, span');
-            for (var i = 0; i < icons.length; i++) {
-              var t = (icons[i].textContent || '').trim().toLowerCase();
-              if (t === 'arrow_forward' || t === 'send') {
-                var r = icons[i].getBoundingClientRect();
-                if (r.top > window.innerHeight * 0.4 && r.width > 0) {
-                  var parent = icons[i].closest('button, [role="button"]');
-                  best = parent || icons[i];
-                  bestRect = best.getBoundingClientRect();
-                  break;
-                }
-              }
-            }
-            
-            // Strategy 2: Rightmost button aligned with textbox
-            if (!best) {
-              var tb = document.querySelector('[role="textbox"]');
-              if (tb) {
-                var tbR = tb.getBoundingClientRect();
-                var btns = document.querySelectorAll('button, [role="button"]');
-                var maxR = -1;
-                for (var j = 0; j < btns.length; j++) {
-                  var r = btns[j].getBoundingClientRect();
-                  if (r.width > 10 && r.width < 80 && r.height > 10 && r.height < 80) {
-                    if (r.top > tbR.top - 40 && r.bottom < tbR.bottom + 40 && r.left > tbR.left + 50) {
-                      if (r.right > maxR) { maxR = r.right; best = btns[j]; bestRect = r; }
-                    }
-                  }
-                }
+            // 100% Bulletproof Strategy: Find the button with arrow_forward
+            var btns = document.querySelectorAll('button, [role="button"]');
+            for (var i = 0; i < btns.length; i++) {
+              var t = (btns[i].textContent || '').trim().toLowerCase();
+              if (t.includes('arrow_forward') || t === 'send') {
+                best = btns[i];
+                bestRect = best.getBoundingClientRect();
+                break;
               }
             }
             

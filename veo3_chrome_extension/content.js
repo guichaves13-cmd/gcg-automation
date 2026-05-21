@@ -1532,9 +1532,86 @@
           await delay(2000);
         }
       }
+      
+      // Fase 2: Detectar e baixar um por um sequencialmente
+      log('Todos os prompts enviados. Iniciando detecção e download sequencial...', 'info');
+      
+      const safeFolderName = 'veo3_automation';
+      let downloadedCountSeq = 0;
+      
+      for (let i = 0; i < totalPrompts; i++) {
+        if (shouldStop) break;
+        
+        updateProgress(i, totalPrompts, `Aguardando vídeo ${i+1}/${totalPrompts}...`);
+        log(`Aguardando renderização do vídeo ${i+1}...`, 'info');
+        
+        let foundVideoUrl = null;
+        let waitAttempts = 0;
+        
+        // Polling para o vídeo atual
+        while (!foundVideoUrl && waitAttempts < 120) { // Max 60 minutes por vídeo
+          if (shouldStop) break;
+          
+          // Varredura para encontrar a ordem física
+          const allVideos = await scanForVideos();
+          
+          // Filtra os vídeos que já existiam antes da automação
+          const newChronologicalVideos = allVideos.filter(v => !knownVideoUrls.has(v.url));
+          
+          // Remove duplicatas
+          const uniqueNewVideos = [];
+          const seenSorted = new Set();
+          for (const v of newChronologicalVideos) {
+              if (!seenSorted.has(v.url)) {
+                  seenSorted.add(v.url);
+                  uniqueNewVideos.push(v);
+              }
+          }
+          
+          // O vídeo i já existe na página?
+          if (uniqueNewVideos.length > i) {
+              foundVideoUrl = uniqueNewVideos[i].url;
+              const isBlob = uniqueNewVideos[i].isBlob;
+              log(`Vídeo ${i+1} gerado com sucesso! Iniciando download...`, 'success');
+              
+              // Baixar este vídeo imediatamente
+              let downloadUrl = foundVideoUrl;
+              if (isBlob || downloadUrl.startsWith('blob:')) {
+                  try {
+                      downloadUrl = await blobToDataUrlGlobal(downloadUrl);
+                  } catch (e) {
+                      log(`Erro ao converter blob para o vídeo ${i+1}`, 'error');
+                  }
+              }
+              
+              const paddedIndex = String(i + 1).padStart(3, '0');
+              const filename = `${safeFolderName}/${paddedIndex}.mp4`;
+              
+              const result = await downloadViaBackgroundGlobal(downloadUrl, filename);
+              if (result && result.success) {
+                  log(`Vídeo ${i+1} salvo como ${filename}`, 'success');
+                  downloadedCountSeq++;
+              } else {
+                  log(`Falha no download do vídeo ${i+1}: ${result?.error || 'erro desconhecido'}`, 'error');
+              }
+              
+              // Aguarda exatamente 2 segundos antes de passar para a detecção do próximo (conforme pedido)
+              await delay(2000);
+              
+          } else {
+              // Se o vídeo i ainda não existe, espera 30 segundos
+              await waitWithCountdown(30, `Aguardando renderização do vídeo ${i+1} (${uniqueNewVideos.length}/${totalPrompts} prontos)`);
+              waitAttempts++;
+          }
+        }
+        
+        if (!foundVideoUrl && !shouldStop) {
+            log(`Tempo esgotado aguardando o vídeo ${i+1}. Pulando...`, 'error');
+        }
+      }
 
       updateProgress(totalPrompts, totalPrompts, 'Concluído!');
-      log(`Automação concluída! ${processedCount}/${totalPrompts} prompts processados.`, 'success');
+      log(`Automação concluída! ${downloadedCountSeq}/${totalPrompts} vídeos baixados com sucesso.`, 'success');
       
       chrome.runtime.sendMessage({ type: 'complete' });
 
@@ -1581,6 +1658,34 @@
     saveAutomationState();
     broadcastState();
     log('Automação retomada.', 'success');
+  }
+
+  // Helper functions for download
+  async function blobToDataUrlGlobal(blobUrl) {
+    const response = await fetch(blobUrl);
+    const blob = await response.blob();
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  function downloadViaBackgroundGlobal(url, filename) {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage({
+        type: 'downloadVideo',
+        url: url,
+        filename: filename
+      }, (response) => {
+        if (chrome.runtime.lastError) {
+          resolve({ success: false, error: chrome.runtime.lastError.message });
+        } else {
+          resolve(response || { success: false, error: 'no response' });
+        }
+      });
+    });
   }
 
   // Scan for video elements on the page with scrolling
@@ -1875,7 +1980,7 @@
         
         // Wait between downloads to avoid overwhelming the browser
         if (i < downloadBatch.length - 1) {
-          await delay(1000);
+          await delay(2000); // 2 seconds between downloads as requested
         }
       } catch (e) {
         failedCount++;
