@@ -4667,9 +4667,37 @@ def run_pipeline(job_id: str, config: dict):
                 # on RTX 4060 — auto-skip to Wav2Lip which handles 1h in ~30min with good quality.
                 _face_src = _base_video if _base_video else config["image_path"]
                 _mode_label = "vídeo animado" if _base_video else "imagem estática"
-                _skip_musetalk = bool(_base_video) and dur > 1800
+                # Downscale face-swapped video to 720p before lip sync (MuseTalk/Wav2Lip OOM at 1080p on 8GB VRAM)
+                if _base_video:
+                    try:
+                        import cv2 as _cvds
+                        _ds_cap = _cvds.VideoCapture(_base_video)
+                        _ds_w = int(_ds_cap.get(_cvds.CAP_PROP_FRAME_WIDTH))
+                        _ds_h = int(_ds_cap.get(_cvds.CAP_PROP_FRAME_HEIGHT))
+                        _ds_cap.release()
+                        if max(_ds_w, _ds_h) > 720:
+                            jobs[job_id]["message"] = f"Otimizando resolução do vídeo de gestos ({_ds_w}x{_ds_h} -> 720p)..."
+                            _ds_out = _base_video.replace(".mp4", "_720p.mp4")
+                            _ds_cmd = [_ffmpeg_path(), "-y", "-i", _base_video,
+                                       "-vf", "scale='if(gt(iw,ih),min(1280,iw),-2)':'if(gt(iw,ih),-2,min(1280,ih))'",
+                                       "-c:v", "libx264", "-preset", "fast", "-crf", "20",
+                                       "-pix_fmt", "yuv420p", "-an", _ds_out]
+                            subprocess.run(_ds_cmd, capture_output=True, timeout=max(300, int(dur * 2)))
+                            if os.path.exists(_ds_out) and os.path.getsize(_ds_out) > 10000:
+                                _safe_rm(_base_video)
+                                _base_video = _ds_out
+                                _face_src = _ds_out
+                                print(f"  [Pipeline] Downscaled face video to 720p OK")
+                    except Exception as _dse:
+                        print(f"  [Pipeline] Downscale falhou ({_dse}) — continuando com res original")
+
+                # Skip MuseTalk in gesture-pack path: it OOMs on 8GB GPUs with multi-template
+                # face-swapped video (1080p, hundreds of distinct face regions). Wav2Lip is
+                # ~5-10x faster, handles arbitrary length, and lip-sync quality difference is
+                # marginal on face-swapped footage where the body motion is real human.
+                _skip_musetalk = bool(_base_video)  # always skip in long-clip path with video face
                 if _skip_musetalk:
-                    print(f"  [Pipeline] {dur:.0f}s > 1800s + video face — pulando MuseTalk (custo proibitivo), usando Wav2Lip direto")
+                    print(f"  [Pipeline] {dur:.0f}s gesture-pack — usando Wav2Lip (MuseTalk OOM em 8GB com video 1080p)")
                 _mst_ok = check_musetalk() and not _skip_musetalk
                 if _mst_ok:
                     jobs[job_id]["message"] = f"MuseTalk: lip sync em {_mode_label} ({dur:.0f}s)..."
