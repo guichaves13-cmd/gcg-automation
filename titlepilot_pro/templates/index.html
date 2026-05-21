@@ -6,6 +6,7 @@
 <title>TitlePilot Pro — Viral Title Intelligence</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/style.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
 <div class="app">
@@ -38,6 +39,15 @@
       </button>
       <button class="nav-btn" data-page="remix" onclick="showPage('remix')">
         <span>🔀</span> Strategy Remix (A/B)
+      </button>
+      <button class="nav-btn" data-page="ab-battle" onclick="showPage('ab-battle')">
+        <span>⚔️</span> A/B Battle Simulator
+      </button>
+      <button class="nav-btn" data-page="thumb-gen" onclick="showPage('thumb-gen')">
+        <span>🖼️</span> Thumbnail Prompts
+      </button>
+      <button class="nav-btn" data-page="vision" onclick="showPage('vision')">
+        <span>👁️</span> Vision Auditor (AI)
       </button>
       <button class="nav-btn" data-page="batch" onclick="showPage('batch')">
         <span>📋</span> Batch Analysis
@@ -206,6 +216,58 @@
       </div>
       <button class="btn-primary btn-full" onclick="generateRemix()" style="margin-top:12px">🔀 GENERATE A/B STRATEGY</button>
       <div id="remix-result" class="result-area"></div>
+    </div>
+
+    <!-- AB BATTLE PAGE -->
+    <div class="page" id="page-ab-battle">
+      <div class="page-header">
+        <h1>⚔️ A/B Battle Simulator</h1>
+        <p>Input two titles. The AI will simulate the 2026 YouTube algorithm to declare the winner and calculate the CTR difference based on psychological triggers.</p>
+      </div>
+      <div class="input-row">
+        <input type="text" id="battle-title-a" placeholder="Title A (e.g., Why 90% of channels fail)">
+        <input type="text" id="battle-title-b" placeholder="Title B (e.g., The dark truth about YouTube)">
+      </div>
+      <select id="battle-lang" style="margin-top:12px;width:100%">
+        <option>English</option><option>Portuguese</option><option>Spanish</option>
+      </select>
+      <button class="btn-primary btn-full" onclick="runBattle()" style="margin-top:12px">⚔️ SIMULATE BATTLE</button>
+      <div id="battle-result" class="result-area"></div>
+    </div>
+
+    <!-- THUMBNAIL GENERATOR PAGE -->
+    <div class="page" id="page-thumb-gen">
+      <div class="page-header">
+        <h1>🖼️ Thumbnail Prompt Generator</h1>
+        <p>Design hyper-realistic, high-CTR thumbnail concepts for Midjourney/Ideogram v6</p>
+      </div>
+      <div class="input-row">
+        <input type="text" id="thumb-title" placeholder="What is the final title of your video?">
+      </div>
+      <button class="btn-primary btn-full" onclick="generateThumbs()">🎨 GENERATE THUMBNAIL CONCEPTS</button>
+      <div id="thumb-result" class="result-area"></div>
+    </div>
+
+    <!-- VISION AUDITOR PAGE -->
+    <div class="page" id="page-vision">
+      <div class="page-header">
+        <h1>👁️ AI Vision Thumbnail Auditor</h1>
+        <p>Upload your thumbnail and let Gemini Pro Vision brutally analyze it for CTR flaws.</p>
+      </div>
+      <div class="section" style="text-align:center;border:2px dashed var(--border)">
+        <input type="file" id="vision-upload" accept="image/*" style="display:none" onchange="previewVisionImage(event)">
+        <label for="vision-upload" style="cursor:pointer;display:block;padding:40px 20px">
+          <div style="font-size:40px;margin-bottom:12px">📥</div>
+          <h3 style="margin-bottom:8px">Click to Upload Thumbnail</h3>
+          <p style="color:var(--dim);font-size:12px">JPG, PNG (Max 5MB)</p>
+        </label>
+        <img id="vision-preview" style="max-width:100%;max-height:300px;border-radius:12px;margin-top:16px;display:none;border:1px solid var(--border);box-shadow:var(--shadow)">
+      </div>
+      <div class="input-row" style="margin-top:16px">
+        <input type="text" id="vision-title" placeholder="Context: What is the exact title of this video?">
+      </div>
+      <button class="btn-primary btn-full" onclick="auditThumbnail()">👁️ RUN VISION AUDIT</button>
+      <div id="vision-result" class="result-area"></div>
     </div>
 
     <!-- BATCH PAGE -->

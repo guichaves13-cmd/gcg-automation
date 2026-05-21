@@ -40,12 +40,12 @@ GOOGLE_API_KEY = _load_key()
 # =============================================
 from core.ai_engine import ask_ai as _ask_ai_engine, get_model_status, clear_cooldowns
 
-def ask_gemini(prompt, user_api_key=None, max_retries=None):
+def ask_gemini(prompt, user_api_key=None, max_retries=None, image_b64=None):
     """Send prompt to AI with automatic model failover.
     Uses 3 Gemini models with smart rotation on rate limits.
     """
     key = user_api_key if user_api_key and len(user_api_key) > 10 else GOOGLE_API_KEY
-    return _ask_ai_engine(prompt, api_key=key or None, max_retries=max_retries)
+    return _ask_ai_engine(prompt, api_key=key or None, max_retries=max_retries, image_b64=image_b64)
 
 # =============================================
 # VIRAL ANALYSIS ENGINE
@@ -93,16 +93,44 @@ VIRAL_STRUCTURES = {
         "ctr_boost": 1.40,
         "desc": "Restricted = must-see content",
     },
+    "absolute_negative": {
+        "pattern": r"(?:never|stop|don't|quit|avoid|ruin|destroy|fail|fake|lie)",
+        "name": "Absolute Negative",
+        "ctr_boost": 1.35,
+        "desc": "Negative framing prevents viewers from making mistakes",
+    },
+    "timeline_urgency": {
+        "pattern": r"(?:in the last|just|finally|minutes|seconds|imminent|too late|now|before it's too late)",
+        "name": "Timeline Urgency",
+        "ctr_boost": 1.30,
+        "desc": "Creates immediate FOMO (Fear Of Missing Out)",
+    },
+    "antagonist": {
+        "pattern": r"(?:vs|versus|against|enemy|villain|monster|predator|killer|scam|fraud)",
+        "name": "Antagonist / Conflict",
+        "ctr_boost": 1.35,
+        "desc": "Conflict naturally drives human curiosity",
+    },
+    "scientific_breakthrough": {
+        "pattern": r"(?:discovered|solved|proved|breakthrough|unlocked|found|revealed)",
+        "name": "Scientific Breakthrough",
+        "ctr_boost": 1.25,
+        "desc": "Satisfies intellectual curiosity and truth-seeking",
+    },
 }
 
 EMOTIONAL_WORDS = {
-    "terrifying": 9, "shocking": 8, "insane": 8, "unbelievable": 7,
-    "deadly": 9, "dangerous": 8, "forbidden": 9, "secret": 8,
-    "hidden": 7, "impossible": 8, "extreme": 7, "incredible": 6,
-    "mysterious": 7, "ancient": 6, "cursed": 8, "haunted": 7,
-    "brutal": 9, "savage": 8, "horrifying": 9, "catastrophic": 8,
-    "abandoned": 7, "destroyed": 7, "unstoppable": 7, "legendary": 6,
-    "massive": 6, "terrified": 9, "speechless": 7, "nightmare": 8,
+    # TIER 1 - Extreme (Score 9-10)
+    "terrifying": 10, "deadly": 10, "forbidden": 10, "brutal": 10, "horrifying": 10, 
+    "terrified": 10, "fatal": 10, "doomed": 9, "banned": 10, "chilling": 9, "illegal": 9,
+    # TIER 2 - High (Score 7-8)
+    "shocking": 8, "insane": 8, "dangerous": 8, "secret": 8, "impossible": 8, 
+    "cursed": 8, "savage": 8, "catastrophic": 8, "nightmare": 8, "destroyed": 8,
+    "unstoppable": 8, "speechless": 8, "unbelievable": 7, "hidden": 7, "extreme": 7, 
+    "mysterious": 7, "haunted": 7, "abandoned": 7, "genius": 7, "bizarre": 7, "creepy": 7,
+    # TIER 3 - Medium (Score 5-6)
+    "incredible": 6, "ancient": 6, "legendary": 6, "massive": 6, "epic": 6, 
+    "weird": 5, "strange": 5, "lost": 6, "unsolved": 6, "dark": 5, "wild": 5,
 }
 
 def analyze_title(title):
@@ -206,18 +234,150 @@ def api_analyze():
         return jsonify({"error": "No title provided"}), 400
     return jsonify(analyze_title(title))
 
+@app.route("/api/ab_battle", methods=["POST"])
+def api_ab_battle():
+    data = request.json
+    title_a = data.get("title_a", "")[:300]
+    title_b = data.get("title_b", "")[:300]
+    language = data.get("language", "English")[:50]
+    
+    if not title_a or not title_b:
+        return jsonify({"error": "Both titles must be provided for a battle."}), 400
+        
+    prompt = f"""You are the ultimate 2026 YouTube Algorithm Simulator.
+Two titles are fighting for impressions on the homepage. Evaluate them head-to-head based on high-CTR psychological triggers (Curiosity Gap, Negative Framing, Fear of Missing Out, Professional Villains, Concrete Data).
+
+Title A: "{title_a}"
+Title B: "{title_b}"
+Language: {language}
+
+Output MUST be a valid JSON with the following schema exactly (no markdown formatting, no backticks, just the raw JSON object):
+{{
+  "winner": "A or B",
+  "ctr_delta": "+X% CTR difference prediction",
+  "reasoning": "A concise paragraph explaining why the winner commands more attention and clicks.",
+  "breakdown_a": "Strengths/weaknesses of A",
+  "breakdown_b": "Strengths/weaknesses of B"
+}}
+"""
+    try:
+        result = ask_gemini(prompt, request.json.get("ai_api_key"))
+        import re
+        
+        # Strip markdown fences if present
+        clean_result = result.replace("```json", "").replace("```", "").strip()
+        
+        match = re.search(r'\{.*\}', clean_result, re.DOTALL)
+        if match:
+            return jsonify({"battle": json.loads(match.group())})
+        return jsonify({"battle": json.loads(clean_result)})
+    except Exception as e:
+        return jsonify({"error": f"AI Battle Failed: {str(e)}"}), 500
+
+@app.route("/api/thumb_prompt", methods=["POST"])
+def api_thumb_prompt():
+    data = request.json
+    title = data.get("title", "")[:300]
+    
+    if not title:
+        return jsonify({"error": "Title required for thumbnail generation."}), 400
+        
+    prompt = f"""You are an elite YouTube Thumbnail Director in 2026.
+You are tasked with designing the perfect, high-CTR thumbnail for this title: "{title}"
+
+Generate 3 distinct Midjourney/Ideogram v2 image generation prompts. The thumbnails must strictly follow these rules:
+1. Low visual clutter (max 3 elements)
+2. High contrast, cinematic lighting, dramatic mood
+3. Must perfectly complement the title by leaving a "Curiosity Gap" (don't show the answer, show the mystery/danger)
+
+Output MUST be a valid JSON with the following schema exactly (no markdown formatting, no backticks, just the raw JSON object):
+{{
+  "prompts": [
+    {{
+      "style": "e.g., Hyper-realistic Documentary",
+      "visuals": "Describe exactly what is shown (e.g., 'Close up of a giant shadow underwater, dark blue lighting...')",
+      "text_overlay": "Optional 1-3 words of text for the thumbnail",
+      "midjourney_prompt": "The exact English prompt string for Midjourney v6 (e.g., 'Hyper realistic photo of a giant shadow... --ar 16:9 --v 6.0')"
+    }},
+    ... (2 more)
+  ]
+}}
+"""
+    try:
+        result = ask_gemini(prompt, request.json.get("ai_api_key"))
+        import re
+        
+        # Strip markdown fences if present
+        clean_result = result.replace("```json", "").replace("```", "").strip()
+        
+        match = re.search(r'\{.*\}', clean_result, re.DOTALL)
+        if match:
+            return jsonify({"thumbs": json.loads(match.group())})
+        return jsonify({"thumbs": json.loads(clean_result)})
+    except Exception as e:
+        return jsonify({"error": f"AI Thumb Gen Failed: {str(e)}"}), 500
+
+@app.route("/api/vision_audit", methods=["POST"])
+def api_vision_audit():
+    data = request.json
+    image_b64 = data.get("image", "")
+    title = data.get("title", "")[:200]
+    
+    if not image_b64:
+        return jsonify({"error": "No image provided"}), 400
+        
+    prompt = f"""You are the world's most brutal YouTube Thumbnail Designer and CTR Expert.
+I am providing you with a YouTube thumbnail image.
+
+Title Context: "{title}"
+
+Analyze this thumbnail rigorously. Provide EXACTLY the following structure using Markdown:
+
+### 🖼️ Instant Visual Impression (0.5s Rule)
+[Can a viewer understand the thumbnail in 0.5 seconds? Is it too cluttered?]
+
+### 🎯 Composition & Focal Point
+[What is the main subject? Does it stand out? Is the Rule of Thirds respected?]
+
+### 🎨 Color Psychology & Contrast
+[Do the colors pop? Is there good contrast between the foreground and background?]
+
+### 🔤 Typography & Readability (if applicable)
+[Is the text legible on a small mobile screen? Are there too many words? Max 3 words recommended.]
+
+### 💡 The "Curiosity Gap" Verdict
+[Does this image actually make someone want to click? Why or why not?]
+
+### 🛠️ 3 Brutal Suggestions to Improve CTR
+1. [Suggestion 1]
+2. [Suggestion 2]
+3. [Suggestion 3]
+
+Be highly critical. If it looks amateur, say exactly why."""
+
+    try:
+        # Strip header (e.g. data:image/jpeg;base64,...)
+        if "," in image_b64:
+            image_b64 = image_b64.split(",")[1]
+            
+        result = ask_gemini(prompt, request.json.get("ai_api_key"), image_b64=image_b64)
+        return jsonify({"audit": result})
+    except Exception as e:
+        return jsonify({"error": f"Vision Audit failed: {str(e)}"}), 500
+
+
 @app.route("/api/analyze_hook", methods=["POST"])
 def api_analyze_hook():
     data = request.json
-    hook_script = data.get("hook", "")
-    video_title = data.get("title", "")
-    language = data.get("language", "English")
+    hook_script = data.get("hook", "")[:2500]  # Max ~500 words
+    video_title = data.get("title", "")[:300]
+    language = data.get("language", "English")[:50]
     
     if not hook_script or len(hook_script) < 20:
         return jsonify({"error": "Script is too short to analyze."}), 400
         
-    prompt = f"""You are a master YouTube retention analyst. 
-Analyze the FIRST 30 SECONDS (the hook) of a YouTube script.
+    prompt = f"""You are an elite YouTube Retention Architect who has studied thousands of videos with >70% AVD (Average View Duration).
+Your goal is to tear apart the FIRST 30 SECONDS (the hook) of this script and rebuild it for maximum psychological grip.
 
 VIDEO TITLE: "{video_title}"
 TARGET LANGUAGE: {language}
@@ -225,21 +385,26 @@ TARGET LANGUAGE: {language}
 SCRIPT HOOK:
 "{hook_script}"
 
-Do a brutal, honest analysis of why this hook will succeed or fail at retaining the viewer past 30 seconds.
-Provide EXACTLY the following structure (Use Markdown formatting for readability, but no JSON or code blocks):
+Do a brutal, surgical analysis of why this hook will succeed or fail. Look for pacing issues, lack of pattern interrupts, missing visual cues, and weak curiosity loops.
+
+Provide EXACTLY the following structure (Use Markdown formatting, no code blocks):
 
 ### 📊 Predicted 30s Retention: [XX]%
 
-### 🔍 What Works (Strengths)
-- [Strength 1]
-- [Strength 2]
+### 🧠 Psychological Grip Analysis
+- **Curiosity Loop:** [Is the core question established immediately?]
+- **Pacing & Rhythm:** [Is it too slow? Too fast? Too much exposition?]
+- **The "So What" Factor:** [Why should the viewer care right now?]
 
-### ⚠️ What Kills Retention (Weaknesses)
-- [Weakness 1]
-- [Weakness 2]
+### ⚠️ Retention Killers (Drop-off Points)
+- [Identify the exact sentence where viewers will click away and why]
+- [Identify wasted words or boring context]
 
-### ✍️ The "Viral" Re-Write
-[Provide a completely rewritten, incredibly punchy, curiosity-driven version of their hook that guarantees >75% retention. Make it fast-paced, visceral, and directly bridge the gap set by the title.]
+### ✍️ The "Viral" Re-Write (Script + B-Roll)
+[Rewrite the hook to be incredibly punchy, visceral, and fast-paced. Format it as a two-column table or clear list showing AUDIO (What to say) and VISUAL (What to show on screen to create pattern interrupts).]
+
+### 💡 Secret Sauce
+[1 advanced psychological tip to hold attention from second 30 to second 60]
 """
     result = ask_gemini(prompt, request.json.get("ai_api_key"))
     return jsonify({"analysis": result})
@@ -247,15 +412,15 @@ Provide EXACTLY the following structure (Use Markdown formatting for readability
 @app.route("/api/seo_optimize", methods=["POST"])
 def api_seo_optimize():
     data = request.json
-    title = data.get("title", "")
-    context = data.get("context", "")
-    language = data.get("language", "English")
+    title = data.get("title", "")[:300]
+    context = data.get("context", "")[:1500]
+    language = data.get("language", "English")[:50]
     
     if not title:
         return jsonify({"error": "Title is required"}), 400
         
-    prompt = f"""You are an elite YouTube SEO expert.
-Your goal is to write the ultimate YouTube metadata package for this video.
+    prompt = f"""You are an elite YouTube SEO & Algorithm Expert who has ranked hundreds of videos on page 1 of YouTube Search.
+Your goal is to write the ultimate YouTube metadata package to trigger algorithmic recommendations and search discovery.
 
 VIDEO TITLE: "{title}"
 VIDEO CONTEXT/HOOK: "{context}"
@@ -263,18 +428,21 @@ TARGET LANGUAGE: {language}
 
 Provide EXACTLY the following structure (Use Markdown formatting):
 
-### 📝 Optimized Description (First 3 Lines)
-[Write the critical first 3 lines of the description. This is what shows above the "Show More" button. It must hook the viewer, contain the main keyword organically, and NOT just repeat the title.]
+### 📝 Optimized Description (The "Above The Fold" 3 Lines)
+[Write the critical first 3 lines of the description. This is what shows above the "Show More" button. It MUST contain the primary keyword in the first sentence naturally, create curiosity, and establish authority. DO NOT just repeat the title.]
 
-### 🕒 Suggested Chapters (Timestamps)
+### 📌 Pinned Comment Strategy
+[Write exactly what the creator should pin in the comments to drive massive engagement (e.g., a controversial question, a poll, or an extension of the hook).]
+
+### 🕒 Algorithmic Chapters (Timestamps)
 0:00 - [Hook/Intro name]
-[Suggest 3 to 5 logical timestamp chapters based on the context. Make the chapter titles curiosity-driven, not boring.]
+[Suggest 4 to 6 logical timestamp chapters based on the context. Make the chapter titles highly searchable (LSI keywords) but still curiosity-driven.]
 
-### 🏷️ Top 500-Character Tags
-[Provide a comma-separated list of highly searched, long-tail and short-tail tags related to this topic. Do not exceed 500 characters total.]
+### 🏷️ Top 500-Character Tags (Short & Long-Tail)
+[Provide a comma-separated list of highly searched tags. Start with broad terms, then niche down into specific long-tail phrases that people actually type. Do not exceed 500 characters total.]
 
-### 💡 Search Ranking Strategy
-[Give 2 brief tips on how to rank this specific video higher based on current YouTube algorithm trends.]
+### 💡 Search Ranking Strategy & CTR Boost
+[Give 2 specific, aggressive tips on how to push this exact video into YouTube's "Suggested Videos" sidebar based on current 2026 algorithmic trends.]
 """
     result = ask_gemini(prompt, request.json.get("ai_api_key"))
     return jsonify({"seo": result})
@@ -313,9 +481,9 @@ def api_analyze_batch():
 @app.route("/api/generate", methods=["POST"])
 def api_generate():
     data = request.json
-    topic = data.get("topic", "")
-    language = data.get("language", "English")
-    niche = data.get("niche", "")
+    topic = data.get("topic", "")[:500]
+    language = data.get("language", "English")[:50]
+    niche = data.get("niche", "")[:300]
     
     prompt = f"""You are the #1 YouTube title engineer. You've studied every 100M+ view viral video.
 
@@ -431,28 +599,32 @@ Return ONLY the expanded titles, one per line, numbered. No explanations."""
 @app.route("/api/subniche", methods=["POST"])
 def api_subniche():
     data = request.json
-    theme = data.get("theme", "")
-    language = data.get("language", "English")
+    theme = data.get("theme", "")[:300]
+    language = data.get("language", "English")[:50]
     
-    prompt = f"""You are an expert YouTube niche analyst who has studied thousands of channels.
+    prompt = f"""You are a master YouTube Niche Strategist using the "Blue Ocean Strategy". 
+Instead of finding saturated markets, you find UNTAPPED intersections and micro-niches where competition is irrelevant.
 
 {"MAIN THEME: " + theme if theme else "Analyze ALL trending YouTube themes."}
 TARGET LANGUAGE: {language}
 
-Your task: Find the most PROFITABLE subniches that have:
-- HIGH viewer demand (people actively searching)
-- LOW creator supply (few channels covering it well)
-- VIRAL potential (emotional, curiosity-driven topics)
+Your task: Find the 8 most PROFITABLE and EXPLOSIVE subniches that have:
+- MASSIVE viewer curiosity (people are desperately searching for this)
+- ZERO strong creator supply (the current videos are old, boring, or non-existent)
+- HIGH RPM potential (topics that attract adult, premium advertisers)
+- CROSS-NICHE appeal (e.g., mixing History with Psychology, or Finance with True Crime)
 
 For each subniche provide:
-1. SUBNICHE NAME (specific, not broad)
-2. DEMAND LEVEL (1-10): How much viewers want this content
-3. SUPPLY LEVEL (1-10): How many creators already do this well
+1. SUBNICHE NAME (Be highly specific, e.g., "Financial Disasters of the 1900s" instead of "Finance History")
+2. DEMAND LEVEL (1-10): Search volume and curiosity depth
+3. SUPPLY LEVEL (1-10): How saturated it is (should be low)
 4. OPPORTUNITY SCORE: demand minus supply
-5. TARGET AUDIENCE: Who watches this
-6. AUDIENCE PAIN: What problem/curiosity they have
-7. CONTENT ANGLE: The unique approach to stand out
-8. 3 EXAMPLE VIRAL TITLES: Using proven structures, max 100 chars each
+5. TARGET AUDIENCE: Psychographics (not just demographics)
+6. AUDIENCE PAIN: What specific intellectual itch or problem this solves
+7. CONTENT ANGLE: The "Blue Ocean" approach to dominate this space instantly
+8. 3 EXAMPLE VIRAL TITLES: Must be 70-100 chars, highly emotional
+9. KEYWORDS: 3 highly searched tags
+10. ESTIMATED VIEWS PER VIDEO: Realistic viral baseline
 
 Return exactly 8 subniches in this JSON format:
 [
@@ -722,14 +894,15 @@ Be brutally honest. Be specific. No generic advice."""
 def api_channel_strategy():
     """AI-powered channel strategy analysis."""
     data = request.json
-    channel_type = data.get("channel_type", "")
+    channel_type = data.get("channel_type", "")[:200]
     current_titles = data.get("titles", [])
-    target_audience = data.get("target_audience", "")
-    language = data.get("language", "English")
+    target_audience = data.get("target_audience", "")[:300]
+    language = data.get("language", "English")[:50]
     
     titles_text = "\n".join(f"- {t}" for t in current_titles[:20]) if current_titles else "No titles provided"
     
-    prompt = f"""You are a YouTube growth strategist who has scaled channels from 0 to 1M subscribers.
+    prompt = f"""You are a master YouTube Channel Architect who has scaled channels from 0 to 1M+ subscribers in record time.
+Your superpower is identifying what everyone else in the niche is doing wrong and exploiting it.
 
 CHANNEL TYPE: {channel_type}
 TARGET AUDIENCE: {target_audience}
@@ -738,41 +911,40 @@ LANGUAGE: {language}
 CURRENT TITLES (if any):
 {titles_text}
 
-Provide a COMPLETE channel strategy:
+Provide a MASTERCLASS channel strategy. You MUST use Markdown formatting, bolding, and extreme specificity.
 
-1. NICHE POSITIONING
-   - What exact micro-niche should this channel own?
-   - What's the unique value proposition?
-   - Name 3 successful reference channels and what they do right
+### 🎯 1. THE BLUE OCEAN POSITIONING
+- **The Core Identity:** What exact micro-niche should this channel own?
+- **The Competitor Gap:** What are the biggest channels in this niche failing to do?
+- **The "Unfair Advantage":** What makes this channel's angle impossible to copy?
 
-2. CONTENT PILLARS (4 types of videos to make)
-   For each pillar:
-   - Pillar name
-   - Why it works
-   - 2 example titles (60-100 chars, viral structures)
-   - Expected performance
+### 🏛️ 2. THE 4 CONTENT PILLARS
+For each of the 4 pillars provide:
+- **Pillar Name & Goal:** (e.g., "The 'Expose' Pillar - Built for Virality")
+- **The Psychological Hook:** Why it works on human nature
+- **2 Example Titles:** (Must be 70-100 characters, extremely optimized)
+- **Thumbnail Synergy:** Exactly what the thumbnail should show to compliment the titles
 
-3. TITLE FORMULA
-   - The 3 best title structures for this niche
-   - 5 power words that work best in this niche
-   - Ideal title length
+### 💡 3. THE VIRAL PACKAGING FORMULA
+- The 3 absolute best title structures for this specific audience.
+- 5 "Power Words" that trigger clicks in this specific niche.
+- The optimal pacing structure (e.g., "Hook -> Context -> Conflict -> Resolution").
 
-4. AUDIENCE ANALYSIS
-   - Demographics (age, gender, interests)
-   - Primary pain point / curiosity
-   - What makes them subscribe
-   - Best posting schedule
+### 🧠 4. AUDIENCE PSYCHOGRAPHICS
+- **Demographics:** Age, gender, interests.
+- **The Burning Pain Point:** The deep intellectual or emotional itch they need scratched.
+- **Retention Anchors:** 3 specific editing/scripting techniques to keep them watching past 3 minutes.
 
-5. GROWTH ROADMAP
-   - First 10 videos: what to publish
-   - Months 1-3: strategy
-   - Months 3-6: scaling approach
+### 📈 5. THE 6-MONTH EXPLOSION ROADMAP
+- **Phase 1 (Videos 1-10):** The "Broad Net" strategy (What to publish first).
+- **Phase 2 (Months 2-3):** The "Authority" strategy (Doubling down on what works).
+- **Phase 3 (Months 4-6):** The "Market Dominance" strategy (Scaling and cross-pollination).
 
-6. TOP 10 VIDEO IDEAS
-   - Full titles (60-100 chars each)
-   - Why each would perform
+### 🏆 6. TOP 10 IMMEDIATE VIDEO IDEAS
+- Provide 10 fully optimized titles (70-100 chars).
+- Explain exactly *why* each one is structurally guaranteed to get a high CTR.
 
-Be extremely specific. No generic advice. Real actionable strategy."""
+Be brutal, highly specific, and actionable. Zero generic advice."""
 
     result = ask_gemini(prompt)
     return jsonify({"strategy": result, "channel_type": channel_type})
@@ -781,32 +953,42 @@ Be extremely specific. No generic advice. Real actionable strategy."""
 def api_strategy_remix():
     """Generates a dual-path A/B Strategy for titles."""
     data = request.json
-    topic = data.get("topic", "")
-    language = data.get("language", "English")
-    path_a = data.get("path_a", "Curiosity & Mystery")
-    path_b = data.get("path_b", "Fear & Consequence")
+    topic = data.get("topic", "")[:300]
+    language = data.get("language", "English")[:50]
+    path_a = data.get("path_a", "Curiosity & Mystery")[:100]
+    path_b = data.get("path_b", "Fear & Consequence")[:100]
     
-    prompt = f"""You are the world's #1 YouTube growth strategist and title engineer.
+    prompt = f"""You are the world's #1 YouTube A/B Testing Strategist and Behavioral Psychologist.
 
 TOPIC: {topic}
 LANGUAGE: {language}
 
-Your task is to create a "Strategy Remix" (A/B Test) for this topic. You must generate two entirely different strategic paths to hook the audience.
+Your task is to create a "Strategy Remix" (A/B Test) for this topic. You must generate two ENTIRELY DIFFERENT psychological paths to hook the audience.
 
 PATH A: {path_a}
 PATH B: {path_b}
 
 For EACH PATH, provide:
-1. THE ANGLE: A 2-sentence explanation of why this psychological angle works for this topic.
-2. THE HOOK: The core emotional trigger being used.
-3. 5 VIRAL TITLES: 
-   - Must be 70-100 characters long
-   - Must use 1-2 ALL CAPS power words
-   - Must fit the psychological angle of the path perfectly
 
-4. THE WINNING SCENARIO: When to use this path (e.g., "Use Path A if your thumbnail is dark and mysterious").
+### 🧠 1. THE PSYCHOLOGICAL ANGLE
+- **The Click Trigger:** What specific human emotion (fear, greed, curiosity, status) is being manipulated here?
+- **Why it works:** A 2-sentence explanation of why this angle forces the viewer to click immediately.
 
-Provide a clear, highly structured comparison between Path A and Path B. Be specific, aggressive with the copy, and highly persuasive."""
+### 🖼️ 2. THUMBNAIL SYNERGY RULES
+- **Visual Subject:** What exactly must be shown on screen?
+- **Lighting & Color Psychology:** (e.g., "Dark and desaturated with a neon red arrow").
+- **Text on Thumbnail:** (Maximum 3 words. What should it say?)
+
+### ✍️ 3. 5 VIRAL TITLES (70-100 chars)
+- Must be exactly 70-100 characters long.
+- Must use 1-2 ALL CAPS power words (e.g., TERRIFYING, NEVER, ILLEGAL).
+- Must perfectly compliment the thumbnail without repeating the text on the thumbnail.
+
+### 🏆 4. THE WINNING SCENARIO
+- **Use Path A if:** [Describe the exact scenario, channel size, or audience mood where this wins].
+- **Use Path B if:** [Describe the exact scenario where this path dominates].
+
+Provide a highly structured, brutal, and aggressive comparison. Your goal is to make the creator understand exactly how to manipulate viewer psychology for maximum CTR."""
 
     result = ask_gemini(prompt)
     return jsonify({"remix": result, "topic": topic, "path_a": path_a, "path_b": path_b})
@@ -815,8 +997,8 @@ Provide a clear, highly structured comparison between Path A and Path B. Be spec
 def api_trend_scanner():
     """Scan for trending topics and emerging niches."""
     data = request.json
-    category = data.get("category", "all")
-    language = data.get("language", "English")
+    category = data.get("category", "all")[:200]
+    language = data.get("language", "English")[:50]
     
     prompt = f"""You are a YouTube trend analyst with access to the latest data.
 
@@ -987,10 +1169,69 @@ def yt_compare():
     results = compare_channels(channels, key)
     return jsonify({"comparisons": results})
 
+@app.route("/api/youtube/sync_channels", methods=["POST"])
+def yt_sync_channels():
+    """Auto-Sync: Checks if tracked channels posted any explosive new video (High VPH)."""
+    from core.youtube_api import _get
+    from datetime import datetime
+    data = request.json
+    channel_ids = data.get("channels", [])
+    key = data.get("yt_api_key") or YOUTUBE_API_KEY
+    if not key:
+        return jsonify({"error": "YouTube API key not set"}), 400
+    if not channel_ids:
+        return jsonify({"sync_results": []})
+        
+    try:
+        results = []
+        for cid in channel_ids[:20]:  # Limit to 20 tracked channels to avoid huge latency
+            sr = _get("search", {
+                "part": "snippet", "channelId": cid, "type": "video",
+                "order": "date", "maxResults": 2
+            }, key)
+            
+            video_ids = [i["id"]["videoId"] for i in sr.get("items", []) if "videoId" in i.get("id", {})]
+            if not video_ids: continue
+                
+            stats_r = _get("videos", {
+                "part": "snippet,statistics", "id": ",".join(video_ids)
+            }, key)
+            
+            for item in stats_r.get("items", []):
+                snip = item.get("snippet", {})
+                stat = item.get("statistics", {})
+                pub = snip.get("publishedAt", "")
+                views = int(stat.get("viewCount", 0))
+                hours_ago = 1
+                try:
+                    pub_dt = datetime.strptime(pub[:19], "%Y-%m-%dT%H:%M:%S")
+                    hours_ago = max(1, (datetime.utcnow() - pub_dt).total_seconds() / 3600)
+                except: pass
+                
+                vph = round(views / hours_ago, 1)
+                
+                # Only alert if it's a hot video (VPH > 50 or newer than 48h)
+                if hours_ago <= 48 and vph > 10:
+                    results.append({
+                        "channel_id": cid,
+                        "channel_name": snip.get("channelTitle", ""),
+                        "video_id": item["id"],
+                        "title": snip.get("title", ""),
+                        "vph": vph,
+                        "views": views,
+                        "hours_ago": int(hours_ago)
+                    })
+                    
+        results.sort(key=lambda x: x["vph"], reverse=True)
+        return jsonify({"sync_results": results})
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/api/youtube/newborn_virals", methods=["POST"])
 def yt_newborn_virals():
     """Scans for extremely viral videos from NEW or SMALL channels (Newborn Virals)."""
-    import requests as _req
+    from core.youtube_api import _get
     from datetime import datetime, timedelta
     data = request.json
     query = data.get("query", "")
@@ -1000,30 +1241,25 @@ def yt_newborn_virals():
     
     # Search for highly viewed videos in the last 40 days
     published_after = (datetime.utcnow() - timedelta(days=40)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    search_url = "https://www.googleapis.com/youtube/v3/search"
-    search_params = {
-        "part": "snippet",
-        "q": query,
-        "type": "video",
-        "order": "viewCount",
-        "maxResults": 30,
-        "publishedAfter": published_after,
-        "key": key
-    }
     
     try:
-        sr = _req.get(search_url, params=search_params, timeout=10).json()
-        if "error" in sr:
-            return jsonify({"error": sr["error"].get("message", "Unknown error")}), 400
+        sr = _get("search", {
+            "part": "snippet",
+            "q": query,
+            "type": "video",
+            "order": "viewCount",
+            "maxResults": 30,
+            "publishedAfter": published_after
+        }, key)
         
         video_ids = [i["id"]["videoId"] for i in sr.get("items", []) if "videoId" in i.get("id", {})]
         if not video_ids:
             return jsonify({"virals": [], "query": query})
             
         # Get video stats to calculate VPH
-        stats_r = _req.get("https://www.googleapis.com/youtube/v3/videos", params={
-            "part": "snippet,statistics", "id": ",".join(video_ids), "key": key
-        }).json()
+        stats_r = _get("videos", {
+            "part": "snippet,statistics", "id": ",".join(video_ids)
+        }, key)
         
         videos_data = []
         channel_ids = []
@@ -1057,9 +1293,9 @@ def yt_newborn_virals():
         channels_info = {}
         for i in range(0, len(channel_ids), 50):
             batch = channel_ids[i:i+50]
-            ch_r = _req.get("https://www.googleapis.com/youtube/v3/channels", params={
-                "part": "snippet,statistics", "id": ",".join(batch), "key": key
-            }).json()
+            ch_r = _get("channels", {
+                "part": "snippet,statistics", "id": ",".join(batch)
+            }, key)
             for ch in ch_r.get("items", []):
                 stat = ch.get("statistics", {})
                 snip = ch.get("snippet", {})
@@ -1094,22 +1330,43 @@ def api_strategy_from_viral():
     niche = data.get("niche", "")
     language = data.get("language", "English")
     
-    prompt = f"""You are a master YouTube strategist. The user found a VIRAL NEWBORN video with this title:
+    prompt = f"""You are a master YouTube Viral Architect. The user just discovered a "Newborn Viral" video (a video that exploded on a very small, new channel).
     
 VIRAL TITLE: "{video_title}"
 NICHE CONTEXT: "{niche}"
 TARGET LANGUAGE: {language}
 
-This title just went viral for a small channel. We want to extract its DNA and remix it for our channel.
+Your objective is to extract the exact structural and psychological DNA of this title and CLONE IT into 3 different sub-niches.
 
-Provide:
-1. THE ANGLE EXPLAINED: Why exactly did this video go viral? What psychological triggers were used?
-2. 3 NEW SUBNICHES: Give 3 different subniches/topics where this exact SAME psychological angle would work perfectly.
-3. 9 REMIXED TITLES: Create 3 viral titles for EACH of the 3 new subniches (Total 9 titles).
-   - They MUST mimic the structure and emotion of the original viral title.
-   - They MUST be 70-100 characters long.
-   - Use CAPS for power words.
-"""
+Provide exactly this Markdown structure:
+
+### 🧬 The Viral DNA Extracted
+- **Psychological Trigger:** Why exactly did people click this? (Fear, Greed, Identity, Curiosity gap?)
+- **The Structural Syntax:** (e.g., "[Negative Word] + [Subject] + [Consequence]")
+- **Thumbnail Hypothesis:** What visual element likely accompanied this title to make it viral?
+
+### 🔄 The Cloning Process (3 New Subniches)
+Provide 3 new, unsaturated subniches where this exact same psychological trigger will work perfectly.
+
+**1. [Subniche Name 1]**
+- Why this works here: [1 sentence]
+- ⚡ Title 1: [Cloned title 70-100 chars]
+- ⚡ Title 2: [Cloned title 70-100 chars]
+- ⚡ Title 3: [Cloned title 70-100 chars]
+
+**2. [Subniche Name 2]**
+- Why this works here: [1 sentence]
+- ⚡ Title 1: [Cloned title 70-100 chars]
+- ⚡ Title 2: [Cloned title 70-100 chars]
+- ⚡ Title 3: [Cloned title 70-100 chars]
+
+**3. [Subniche Name 3]**
+- Why this works here: [1 sentence]
+- ⚡ Title 1: [Cloned title 70-100 chars]
+- ⚡ Title 2: [Cloned title 70-100 chars]
+- ⚡ Title 3: [Cloned title 70-100 chars]
+
+Be brutal, aggressive, and highly strategic. Use power words in ALL CAPS."""
     result = ask_gemini(prompt, request.json.get("ai_api_key"))
     return jsonify({"strategy": result, "original_title": video_title})
 
@@ -1177,67 +1434,52 @@ def analyze_channel():
     titles_text = "\n".join(f"- {t}" for t in channel.get("titles", [])[:20]) if channel.get("titles") else "None"
     metrics_text = json.dumps(channel.get("metrics", [])[:10], indent=2) if channel.get("metrics") else "No metrics yet"
     
-    prompt = f"""You are the world's #1 YouTube channel strategist. You specialize in finding UNTAPPED subniches.
+    prompt = f"""You are the ultimate YouTube Trend Hacker and Blue Ocean Strategist. 
+Your goal is to extract the exact "DNA" of trending channels and clone their psychological mechanics into UNTAPPED subniches with maximum demand and minimum competition.
 
-=== CHANNEL DNA ===
+=== CHANNEL DNA & CONTEXT ===
 NAME: {channel.get('name', '')}
-URL: {channel.get('url', '')}
 CURRENT NICHE: {channel.get('niche', '')}
 CURRENT MICRO-NICHE: {channel.get('micro_niche', '')}
-SUBNICHES BEING USED: {', '.join(channel.get('subniches', []))}
-KEYWORDS: {', '.join(channel.get('keywords', []))}
 LANGUAGE: {channel.get('language', 'English')}
 
-=== EXISTING TITLES ===
-{titles_text}
-
-=== REFERENCE TITLE STRUCTURES (from successful channels) ===
+=== REFERENCE TITLE STRUCTURES (From Trending Competitors) ===
 {ref_text}
 
-=== TRENDING THEMES IN THE MARKET ===
+=== TRENDING THEMES IN THIS NICHE ===
 {trend_text}
 
-=== PERFORMANCE METRICS ===
-{metrics_text}
+=== YOUR ALGORITHMIC MISSION ===
 
-=== YOUR MISSION ===
+**STEP 1: REVERSE ENGINEER TRENDING STRUCTURES**
+- Analyze the "Reference Title Structures" provided above.
+- Identify the exact psychological trigger that is making these competitor structures go viral (e.g., "The Negative Authority Hook" or "The Hidden Cost Hook").
+- Select the 3 most lethal, high-CTR structures from the list.
 
-**STEP 1: CHANNEL DNA ANALYSIS**
-- Identify the channel's EXACT DNA: what themes work, what structures get clicks
-- Analyze what's working and what's NOT based on metrics (if available)
+**STEP 2: BLUE OCEAN SUBNICHE DISCOVERY**
+Do NOT recommend generic subniches. You must cross-reference the "Trending Themes" with High Demand / Low Supply logic to invent 5 BRAND NEW, unsaturated subthemes.
+- **Rule of Demand/Supply:** The subniche must have a massive existing audience (Demand: 9/10) but almost zero modern, high-quality channels covering it specifically (Supply: 2/10).
+- **Example of Cloning:** If the trending structure is "Why Nobody Lives In [Place]", and the trending theme is "Ocean", the new Blue Ocean subniche is "Deep Sea Infrastructure" -> "Why Nobody Dares To Build In The Mariana Trench".
 
-**STEP 2: NEW SUBNICHE DISCOVERY** (THIS IS THE KEY)
-The goal is NOT to copy existing subniches. The goal is to CREATE NEW ONES.
+**STEP 3: CLONING THE DNA (THE OUTPUT)**
+For each of the 5 new Blue Ocean Subniches, provide:
+### 🌊 Subniche #[X]: [Name of Subniche]
+- **Market Viability:** Why does this have HIGHEST DEMAND and LOWEST SUPPLY? (Be specific).
+- **The Audience Hunger:** What exact question are they desperately searching for?
+- **The Cloned Strategy:** How are we applying the trending competitor structures to this new subtheme?
 
-METHOD:
-1. Take a VALIDATED TRENDING THEME (e.g., "construction" is trending)
-2. Take a VALIDATED TITLE STRUCTURE (e.g., "Why Nobody Lives In..." works)
-3. CHANGE THE SUBNICHE to something NEW with the same theme
-   - Example: Construction is trending → "cities" is the obvious subniche (too much competition)
-   - NEW subniche: "underground bunkers", "underwater tunnels", "impossible bridges"
-   - Same theme (construction), same validated structure, but DIFFERENT angle = less competition
+**Generate 3 Viral Titles for this Subniche:**
+- MUST use the exact syntax of the trending structures you reverse-engineered.
+- MUST be 70-100 characters long.
+- 1. [Title 1]
+- 2. [Title 2]
+- 3. [Title 3]
 
-For each new subniche:
-- Name it precisely
-- Explain WHY it has demand but low supply
-- Show 3 viral titles using VALIDATED structures (max 100 chars each)
-- Estimated competition level (low/medium/high)
-- Target audience pain point
+**STEP 4: IMMEDIATE EXECUTION PLAN**
+- Which of these 5 subniches has the absolute highest "Opportunity Score" (Demand minus Supply) right now?
+- Give the creator a direct, 3-step instruction on what their next video should be based on this data.
 
-**STEP 3: TITLE OPTIMIZATION**
-- Take the validated structures and adapt them to each new subniche
-- Every title MUST be 60-100 characters
-- Use 1-2 CAPS words per title
-- Use emotional triggers
-
-**STEP 4: WEEKLY ACTION PLAN**
-Based on the analysis, suggest:
-- 5 video topics for THIS WEEK
-- Which subniche to prioritize
-- What title structure to use for each
-
-Provide 5 NEW subniches with 3 titles each.
-Be extremely specific. No generic advice. Real differentiated opportunities."""
+Provide the analysis in beautiful, structured Markdown. Be aggressive, highly strategic, and focus exclusively on data-driven CTR manipulation."""
 
     result = ask_gemini(prompt, request.json.get("ai_api_key"))
     return jsonify({"analysis": result, "channel": channel})

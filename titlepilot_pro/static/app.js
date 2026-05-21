@@ -41,6 +41,7 @@ async function analyzeTitle(){
   const title=document.getElementById('analyze-input').value.trim();
   if(!title)return;
   const r=await post('/api/analyze',{title});
+  if(r.error){document.getElementById('analyze-result').innerHTML=`<div class="score-card" style="color:var(--red)">Erro: ${escHtml(r.error)}</div>`;return;}
   document.getElementById('analyze-result').innerHTML=renderScoreCard(r);
 }
 async function deepAnalyze(){
@@ -48,6 +49,7 @@ async function deepAnalyze(){
   if(!title)return;
   loading(true,'Running AI deep analysis...');
   const r=await post('/api/deep_analysis',{title});
+  if(r.error){document.getElementById('analyze-result').innerHTML=`<div class="score-card" style="color:var(--red)">Erro: ${escHtml(r.error)}</div>`;return;}
   let html=renderScoreCard(r);
   if(r.ai_deep_analysis){
     html+=`<div class="ai-text">${escHtml(r.ai_deep_analysis)}</div>`;
@@ -105,6 +107,7 @@ async function generateTitles(){
   const niche=document.getElementById('gen-niche').value.trim();
   loading(true,'Generating viral titles with AI...');
   const r=await post('/api/generate',{topic,language:lang,niche});
+  if(r.error){document.getElementById('gen-result').innerHTML=`<div class="score-card" style="color:var(--red)">Erro: ${escHtml(r.error)}</div>`;return;}
   const titles=r.titles||[];
   const avgScore=titles.length?Math.round(titles.reduce((s,t)=>s+t.score,0)/titles.length):0;
   const avgLen=titles.length?Math.round(titles.reduce((s,t)=>s+t.length,0)/titles.length):0;
@@ -162,6 +165,7 @@ async function findSubniches(){
   const lang=document.getElementById('sub-lang').value;
   loading(true,'Discovering subniches with AI...');
   const r=await post('/api/subniche',{theme,language:lang});
+  if(r.error){document.getElementById('sub-result').innerHTML=`<div class="score-card" style="color:var(--red)">Erro: ${escHtml(r.error)}</div>`;return;}
   let html='';
   if(r.niches&&r.niches.length){
     html+=`<div class="results-header"><h3>🔥 ${r.niches.length} Subniches Found</h3><div class="results-count">${escHtml(theme||'All themes')} · ${lang}</div></div>`;
@@ -333,6 +337,7 @@ async function scanTrends(){
   const lang=document.getElementById('trend-lang').value;
   loading(true,'Scanning YouTube trends...');
   const r=await post('/api/trend_scanner',{category:cat,language:lang});
+  if(r.error){document.getElementById('trend-result').innerHTML=`<div class="score-card" style="color:var(--red)">Erro: ${escHtml(r.error)}</div>`;return;}
   const text=r.trends||'';
   document.getElementById('trend-result').innerHTML=`<div class="results-header"><h3>📈 Trend Analysis</h3><div class="results-count">${cat==='all'?'All Categories':cat} · ${lang}</div></div><div class="ai-text">${formatAiText(text)}</div>`;
 }
@@ -346,6 +351,7 @@ async function getStrategy(){
   if(!type){alert('Enter channel type');return}
   loading(true,'Building channel strategy...');
   const r=await post('/api/channel_strategy',{channel_type:type,target_audience:audience,language:lang,titles});
+  if(r.error){document.getElementById('strat-result').innerHTML=`<div class="score-card" style="color:var(--red)">Erro: ${escHtml(r.error)}</div>`;return;}
   const text=r.strategy||'';
   document.getElementById('strat-result').innerHTML=`<div class="results-header"><h3>🏆 Channel Strategy</h3><div class="results-count">${escHtml(type)} · ${lang}</div></div><div class="ai-text">${formatAiText(text)}</div>`;
 }
@@ -361,6 +367,7 @@ async function generateRemix(){
   loading(true,'Generating Dual-Path A/B Strategy...');
   try{
     const r=await post('/api/strategy_remix',{topic,language:lang,path_a,path_b});
+    if(r.error){document.getElementById('remix-result').innerHTML=`<div class="score-card" style="color:var(--red)">Erro: ${escHtml(r.error)}</div>`;return;}
     const text=r.remix||'';
     document.getElementById('remix-result').innerHTML=`<div class="results-header"><h3>🔀 A/B Remix Strategy</h3><div class="results-count">${escHtml(topic)}</div></div><div class="ai-text">${formatAiText(text)}</div>`;
   }catch(e){
@@ -388,6 +395,129 @@ function formatAiText(text){
   html = html.replace(/\n/g, '<br>');
   return html;
 }
+
+// A/B BATTLE SIMULATOR
+async function runBattle(){
+  const title_a=document.getElementById('battle-title-a').value.trim();
+  const title_b=document.getElementById('battle-title-b').value.trim();
+  const lang=document.getElementById('battle-lang').value;
+  
+  if(!title_a || !title_b){alert('Please provide two titles to battle.');return;}
+  loading(true,'Simulating 2026 YouTube Algorithm (Battle A/B)...');
+  try{
+    const r=await post('/api/ab_battle',{title_a, title_b, language:lang});
+    if(r.error) {
+      document.getElementById('battle-result').innerHTML=`<div class="score-card" style="color:var(--red)">${escHtml(r.error)}</div>`;
+      return;
+    }
+    const b = r.battle;
+    const winnerColor = b.winner.includes('A') ? '#4ecca3' : '#FFD700';
+    document.getElementById('battle-result').innerHTML=`
+      <div class="score-card" style="border: 2px solid ${winnerColor}; background: rgba(0,0,0,0.3);">
+        <h2 style="color:${winnerColor};text-align:center;font-size:24px;margin-bottom:8px">👑 WINNER: TITLE ${b.winner}</h2>
+        <div style="text-align:center;font-size:18px;color:#fff;margin-bottom:16px;font-weight:bold">${escHtml(b.ctr_delta)}</div>
+        <p style="color:#ccc;font-size:14px;line-height:1.6;margin-bottom:16px">${escHtml(b.reasoning)}</p>
+        
+        <div style="display:flex;gap:12px;margin-top:16px;">
+          <div style="flex:1;background:#1a1a2e;padding:12px;border-radius:8px;">
+            <b style="color:#4ecca3">Title A:</b><br><span style="font-size:12px">${escHtml(b.breakdown_a)}</span>
+          </div>
+          <div style="flex:1;background:#1a1a2e;padding:12px;border-radius:8px;">
+            <b style="color:#FFD700">Title B:</b><br><span style="font-size:12px">${escHtml(b.breakdown_b)}</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }catch(e){
+    document.getElementById('battle-result').innerHTML=`<div class="score-card" style="color:var(--red)">Error: ${e.message}</div>`;
+  }
+}
+
+// THUMBNAIL GENERATOR (Midjourney Prompts)
+async function generateThumbs(){
+  const title=document.getElementById('thumb-title').value.trim();
+  if(!title){alert('Please provide the video title.');return;}
+  
+  loading(true,'Designing Midjourney Thumbnail Prompts...');
+  try{
+    const r=await post('/api/thumb_prompt',{title});
+    if(r.error) {
+      document.getElementById('thumb-result').innerHTML=`<div class="score-card" style="color:var(--red)">${escHtml(r.error)}</div>`;
+      return;
+    }
+    
+    let html = `<div class="results-header"><h3>🖼️ 3 Thumbnail Concepts</h3></div>`;
+    (r.thumbs.prompts || []).forEach((p, idx) => {
+      html += `
+        <div class="score-card" style="margin-bottom:12px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <h4 style="color:#4ecca3;margin:0">Idea ${idx+1}: ${escHtml(p.style)}</h4>
+          </div>
+          <p style="color:#ccc;font-size:13px;line-height:1.5;margin:8px 0"><b>Visuals:</b> ${escHtml(p.visuals)}</p>
+          ${p.text_overlay ? `<p style="color:#FFD700;font-size:13px;margin:8px 0"><b>Text on Thumb:</b> "${escHtml(p.text_overlay)}"</p>` : ''}
+          
+          <div style="background:#0d1117;padding:12px;border-radius:6px;border:1px dashed #30363d;margin-top:12px;position:relative">
+            <div style="font-size:11px;color:#888;margin-bottom:4px">Midjourney Prompt:</div>
+            <code style="color:#e6edf3;font-size:12px;font-family:monospace;word-break:break-all">${escHtml(p.midjourney_prompt)}</code>
+            <button class="btn-secondary" style="position:absolute;top:8px;right:8px;padding:4px 8px;font-size:10px" onclick="navigator.clipboard.writeText('${escHtml(p.midjourney_prompt).replace(/'/g, "\\'")}');this.innerText='Copied!';setTimeout(()=>this.innerText='Copy',2000)">Copy</button>
+          </div>
+        </div>
+      `;
+    });
+    document.getElementById('thumb-result').innerHTML = html;
+  }catch(e){
+    document.getElementById('thumb-result').innerHTML=`<div class="score-card" style="color:var(--red)">Error: ${e.message}</div>`;
+  }
+}
+
+// VISION AUDITOR (Multimodal AI)
+let visionImageB64 = "";
+
+function previewVisionImage(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = function(e){
+    visionImageB64 = e.target.result;
+    const preview = document.getElementById('vision-preview');
+    preview.src = visionImageB64;
+    preview.style.display = 'block';
+  };
+  reader.readAsDataURL(file);
+}
+
+async function auditThumbnail(){
+  const title = document.getElementById('vision-title').value.trim();
+  
+  if(!visionImageB64){
+    alert('Please upload a thumbnail image first.');
+    return;
+  }
+  if(!title){
+    alert('Please provide the video title so the AI has context.');
+    return;
+  }
+  
+  loading(true, 'Gemini Pro Vision is analyzing your thumbnail...');
+  try {
+    const r = await post('/api/vision_audit', { image: visionImageB64, title });
+    if(r.error) {
+      document.getElementById('vision-result').innerHTML=`<div class="score-card" style="color:var(--red)">${escHtml(r.error)}</div>`;
+      return;
+    }
+    
+    document.getElementById('vision-result').innerHTML=`
+      <div class="score-card" style="border:1px solid rgba(139, 92, 246, 0.4); box-shadow: 0 0 20px rgba(139, 92, 246, 0.1);">
+        <h2 style="color:var(--purple);text-align:center;font-size:20px;margin-bottom:16px">👁️ AI Vision Analysis Complete</h2>
+        <div class="ai-text">${formatAiText(r.audit)}</div>
+      </div>
+    `;
+  } catch(e) {
+    document.getElementById('vision-result').innerHTML=`<div class="score-card" style="color:var(--red)">Error: ${e.message}</div>`;
+  }
+}
+
 
 // HOOK ANALYZER
 async function analyzeHook(){
@@ -439,6 +569,7 @@ async function batchAnalyze(){
   const titles=text.split('\n').filter(t=>t.trim());
   loading(true,`Analyzing ${titles.length} titles...`);
   const r=await post('/api/analyze_batch',{titles});
+  if(r.error){document.getElementById('batch-result').innerHTML=`<div class="score-card" style="color:var(--red)">Erro: ${escHtml(r.error)}</div>`;return;}
   let html=`<div class="score-card">
     <div style="display:flex;gap:20px;margin-bottom:16px">
       <div style="flex:1;text-align:center"><div style="font-size:32px;font-weight:900;color:${barColor(r.avg_score)}">${r.avg_score}</div><div style="font-size:11px;color:#666">Avg Score</div></div>
@@ -469,9 +600,34 @@ function escHtml(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').re
 // Each user's data lives ONLY in their browser
 // =============================================
 function getMyChannels(){ try{ return JSON.parse(localStorage.getItem('my_channels')||'[]'); }catch(e){ return []; } }
-function saveMyChannels(arr){ localStorage.setItem('my_channels', JSON.stringify(arr)); }
+function saveMyChannels(arr){ 
+  try {
+    localStorage.setItem('my_channels', JSON.stringify(arr)); 
+    return true;
+  } catch(e) {
+    if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
+      alert("🚨 A memória do seu navegador está CHEIA (Limite de 5MB do LocalStorage atingido). Por favor, delete alguns canais antigos para poder salvar novos dados.");
+    } else {
+      console.error("Erro ao salvar canal:", e);
+    }
+    return false;
+  }
+}
+
+// Wrapper for other saves
+function safeStorageSet(key, value) {
+  try {
+    localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
+    return true;
+  } catch(e) {
+    if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
+      alert("🚨 O banco de dados local está cheio. Exclua canais ou análises antigas para liberar espaço.");
+    }
+    return false;
+  }
+}
 function getSavedChannels(){ try{ return JSON.parse(localStorage.getItem('saved_channels')||'[]'); }catch(e){ return []; } }
-function saveSavedChannels(arr){ localStorage.setItem('saved_channels', JSON.stringify(arr)); }
+function saveSavedChannels(arr){ safeStorageSet('saved_channels', arr); }
 
 // MY CHANNELS — 100% client-side (no server call)
 function loadChannels(){
@@ -509,10 +665,67 @@ function loadChannels(){
       ${kws?'<div style="margin:6px 0"><b style="font-size:10px;color:#3b82f6">KEYWORDS</b><div class="tags">'+kws+'</div></div>':''}
       ${structs?'<div style="margin:6px 0"><b style="font-size:10px;color:#8b5cf6">TITLE STRUCTURES</b><div class="tags">'+structs+'</div></div>':''}
       ${trends?'<div style="margin:6px 0"><b style="font-size:10px;color:#FFD700">TRENDING THEMES</b><div class="tags">'+trends+'</div></div>':''}
-      ${metricsCount?`<div style="font-size:11px;color:#4ecca3;margin-top:6px">📊 ${metricsCount} performance entries tracked</div>`:''}
+      ${metricsCount?`<div style="font-size:11px;color:#4ecca3;margin-top:12px;margin-bottom:6px">📊 Performance Metrics Tracker</div>
+      <div style="background:#0d1117;padding:12px;border-radius:8px;border:1px solid var(--border)">
+        <canvas id="chart-${c.id}" style="max-height:200px;width:100%"></canvas>
+      </div>`:''}
     </div>`;
   });
   el.innerHTML=html;
+  
+  // Render charts after HTML is injected
+  channels.forEach(c => {
+    if(!c.metrics || !c.metrics.length) return;
+    const ctx = document.getElementById(`chart-${c.id}`);
+    if(!ctx) return;
+    
+    // Sort metrics by date
+    const m = [...c.metrics].sort((a,b) => new Date(a.date) - new Date(b.date));
+    
+    new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: m.map(x => x.title.substring(0,15) + '...'),
+        datasets: [
+          {
+            label: 'Views',
+            data: m.map(x => x.views),
+            borderColor: '#4ecca3',
+            backgroundColor: 'rgba(78, 204, 163, 0.1)',
+            yAxisID: 'y',
+            tension: 0.3,
+            fill: true
+          },
+          {
+            label: 'CTR (%)',
+            data: m.map(x => x.ctr),
+            borderColor: '#FFD700',
+            backgroundColor: 'transparent',
+            yAxisID: 'y1',
+            tension: 0.3
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: { color: '#ccc', font: {family: 'Inter'} } }
+        },
+        scales: {
+          x: { ticks: { color: '#888', font: {size: 10} }, grid: { color: '#1e1e2f' } },
+          y: { 
+            type: 'linear', display: true, position: 'left',
+            ticks: { color: '#4ecca3', font: {size: 10} }, grid: { color: '#1e1e2f' } 
+          },
+          y1: { 
+            type: 'linear', display: true, position: 'right',
+            ticks: { color: '#FFD700', font: {size: 10} }, grid: { drawOnChartArea: false } 
+          }
+        }
+      }
+    });
+  });
 }
 
 async function addChannel(){
@@ -553,7 +766,11 @@ async function analyzeChannel(channel){
     reference_structures: channel.reference_structures||[],
     trending_themes: channel.trending_themes||[],
   });
-  document.getElementById('channel-analysis').innerHTML=`<div class="ai-text">${escHtml(r.analysis||'')}</div>`;
+  if(r.error){
+    document.getElementById('channel-analysis').innerHTML=`<div class="score-card" style="color:var(--red)">Erro: ${escHtml(r.error)}</div>`;
+    return;
+  }
+  document.getElementById('channel-analysis').innerHTML=`<div class="ai-text">${formatAiText(r.analysis||'')}</div>`;
 }
 
 async function addMetrics(){
@@ -790,6 +1007,16 @@ async function loadSavedChannels(){
       return;
     }
     
+    html += `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <h3 style="color:var(--accent)">📡 Competitor Radar</h3>
+      <div>
+        <button class="btn-primary" style="padding:8px 16px;background:var(--purple);border:none" onclick="syncChannels()">🔄 Auto-Sync Radar (VPH)</button>
+        <button class="btn-secondary" style="padding:8px 16px" onclick="exportSavedChannelsCSV()">📥 Export CSV</button>
+      </div>
+    </div>
+    <div id="yt-radar-result" style="margin-bottom:20px"></div>
+    `;
+    
     saved.forEach(ch => {
       html += `<div class="score-card" style="margin-bottom:12px;display:flex;align-items:center;gap:16px">
         ${ch.thumbnail?`<img src="${ch.thumbnail}" style="width:50px;height:50px;border-radius:50%">`:''}
@@ -814,6 +1041,63 @@ async function loadSavedChannels(){
   } finally {
     loading(false);
   }
+}
+
+async function syncChannels() {
+  const saved = JSON.parse(localStorage.getItem('saved_channels') || '[]');
+  if (!saved.length) return;
+  const channel_ids = saved.map(c => c.id);
+  
+  const el = document.getElementById('yt-radar-result');
+  el.innerHTML = '<div style="color:var(--accent);padding:12px;text-align:center"><div class="spinner" style="width:20px;height:20px;margin:0 auto 8px"></div>Scanning all competitors for explosive videos...</div>';
+  
+  try {
+    const payload = {channels: channel_ids, yt_api_key: localStorage.getItem('yt_api_key')||''};
+    const r = await fetch('/api/youtube/sync_channels', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+    const d = await r.json();
+    
+    if(d.error) { el.innerHTML = `<div class="score-card" style="color:var(--red)">Erro: ${escHtml(d.error)}</div>`; return; }
+    
+    if(!d.sync_results || !d.sync_results.length) {
+      el.innerHTML = `<div class="score-card" style="border-left:4px solid var(--border);color:var(--dim)">✅ All scanned. No explosive new videos (VPH > 10 in last 48h) detected.</div>`;
+      return;
+    }
+    
+    let html = `<div class="score-card" style="border-left:4px solid var(--purple)">
+      <h3 style="color:var(--purple);margin-bottom:12px">🚨 EXPLOSIVE VIDEOS DETECTED!</h3>
+    `;
+    d.sync_results.forEach(v => {
+      html += `<div style="display:flex;gap:12px;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--border)">
+        <div style="flex:1">
+          <div style="font-size:12px;color:var(--dim);margin-bottom:4px">${escHtml(v.channel_name)} · ${v.hours_ago} hours ago</div>
+          <a href="https://youtube.com/watch?v=${v.video_id}" target="_blank" style="color:var(--text);font-weight:600;font-size:14px;text-decoration:none">${escHtml(v.title)} 🔗</a>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:18px;font-weight:800;color:#ff2a2a">${v.vph} <span style="font-size:10px;color:var(--dim)">VPH</span></div>
+          <div style="font-size:12px;color:var(--dim)">${fmtNum(v.views)} views</div>
+        </div>
+      </div>`;
+    });
+    html += `</div>`;
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = `<div class="score-card" style="color:var(--red)">Erro: ${e.message}</div>`;
+  }
+}
+
+function exportSavedChannelsCSV() {
+  const saved = JSON.parse(localStorage.getItem('saved_channels') || '[]');
+  if(!saved.length) return;
+  let csv = "Channel Name,Subniche,Subscribers,Avg VPH,Channel URL\n";
+  saved.forEach(c => {
+    csv += `"${c.name.replace(/"/g, '""')}","${(c.subniche||'').replace(/"/g, '""')}",${c.subscribers},${c.avg_vph},https://youtube.com/channel/${c.id}\n`;
+  });
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `competitor_radar_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
 }
 
 // NEWBORN VIRALS (SMALL CHANNELS VIRALIZING)
@@ -881,12 +1165,18 @@ async function remixStrategyFromViral(title, niche){
     // Switch to strategy tab and show result
     showPage('strategy');
     document.getElementById('strat-type').value=niche;
+    
+    if(d.error){
+      document.getElementById('strat-result').innerHTML=`<div class="score-card" style="color:var(--red)">Erro: ${escHtml(d.error)}</div>`;
+      return;
+    }
+    
     document.getElementById('strat-result').innerHTML=`
       <div class="results-header">
         <h3>🔥 Strategy Extracted from Viral Video</h3>
         <div class="results-count">Base: "${escHtml(title)}"</div>
       </div>
-      <div class="ai-text">${formatAiText(d.strategy)}</div>
+      <div class="ai-text">${formatAiText(d.strategy||'')}</div>
     `;
   }catch(e){
     alert('Erro ao gerar estratégia: '+e.message);
