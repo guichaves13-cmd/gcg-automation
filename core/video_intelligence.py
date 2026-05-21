@@ -681,50 +681,140 @@ Return ONLY terms, 2 per segment, in order. No explanation, no numbers."""
         ms = int((seconds % 1) * 1000)
         return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
     
-    def validate_clip(self, clip_path: str, expected_keywords: list, theme: str) -> float:
-        """Validate if a downloaded clip matches the expected content. Returns score 0-1.
-        
-        Uses Gemini Vision for images, file heuristics for videos.
+    def _textual_match_score(self, title_or_meta: str, expected_keywords: list, theme: str) -> float:
+        """Offline textual similarity: how well does the asset title/metadata
+        match the expected keywords + theme? Returns 0-1. Used as a free
+        fallback when Vision API is unavailable (quota), and as a cheap
+        pre-filter before spending a Vision call.
         """
+        if not title_or_meta:
+            return -1.0
+        import re as _re, unicodedata as _ud
+        def norm(s):
+            s = _ud.normalize("NFKD", s).encode("ascii", "ignore").decode().lower()
+            return _re.sub(r"[^a-z0-9 ]+", " ", s)
+        meta_words = set(w for w in norm(title_or_meta).split() if len(w) > 2)
+        kw_words = set()
+        for k in expected_keywords[:5]:
+            kw_words.update(w for w in norm(k).split() if len(w) > 2)
+        theme_words = set(w for w in norm(theme).split() if len(w) > 2)
+        all_target = kw_words | theme_words
+        if not all_target or not meta_words:
+            return -1.0
+        overlap = len(meta_words & all_target)
+        # Direct keyword match weighted 2x, theme 1x
+        kw_hits = len(meta_words & kw_words)
+        theme_hits = len(meta_words & theme_words)
+        score = (kw_hits * 2 + theme_hits) / max(1, len(kw_words) * 2 + len(theme_words))
+        # Clamp 0..1
+        return max(0.0, min(1.0, score))
+
+    def validate_clip(self, clip_path: str, expected_keywords: list, theme: str,
+                      metadata_text: str = "") -> float:
+        """Validate clip matches expected content. Returns score 0-1.
+
+        Strategy (in order):
+          1. File integrity check
+          2. Frame extraction + Gemini Vision (if quota available)
+          3. Textual fallback (title/metadata vs keywords+theme)
+
+        Special return:
+          -1.0 = validator unavailable AND no metadata to score textually.
+                 Caller should accept without filtering.
+        """
+        import subprocess, tempfile, re
+
         if not os.path.exists(clip_path) or os.path.getsize(clip_path) < 1000:
             return 0.0
-        
-        # For images: use Gemini Vision to validate
+
+        # If no Gemini client, fall straight to textual
+        if not self.client:
+            return self._textual_match_score(metadata_text, expected_keywords, theme)
+
+        # Quick file-integrity check for videos
         is_image = clip_path.lower().endswith(('.jpg', '.jpeg', '.png', '.webp', '.bmp'))
-        if is_image and self.client:
+        frame_path = None
+        if is_image:
+            frame_path = clip_path
+        else:
             try:
-                from google.genai import types
-                with open(clip_path, 'rb') as f:
-                    img_data = f.read()
-                
-                kw_text = ", ".join(expected_keywords[:3])
-                response = self.client.models.generate_content(
-                    model="gemini-2.0-flash",
-                    contents=[
-                        types.Part.from_bytes(data=img_data, mime_type="image/jpeg"),
-                        f"Does this image match these keywords: '{kw_text}'? "
-                        f"Context: {theme}. Reply ONLY with a score 0-10."
-                    ],
-                )
-                if response and response.text:
-                    import re
-                    match = re.search(r'(\d+)', response.text)
-                    if match:
-                        score = int(match.group(1)) / 10.0
-                        if score < 0.3:
-                            print(f"    [validate_clip] LOW SCORE ({score:.1f}): '{kw_text}' does not match image")
-                        return score
+                from core.video_processor import get_duration, get_resolution
+                dur = get_duration(clip_path)
+                w, h = get_resolution(clip_path)
+                if dur < 2.0 or w < 320 or h < 240:
+                    return 0.2  # technically bad file
+            except Exception:
+                pass
+            # Extract midpoint frame
+            try:
+                dur = 3.0
+                try:
+                    from core.video_processor import get_duration
+                    dur = max(1.0, get_duration(clip_path))
+                except Exception:
+                    pass
+                mid = dur / 2.0
+                ffmpeg = os.environ.get("FFMPEG_BIN") or "ffmpeg"
+                if not os.path.isfile(ffmpeg):
+                    ffmpeg = r"C:\Users\Guilherme\Music\automaçao video\ffmpeg\ffmpeg.exe"
+                with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tf:
+                    frame_path = tf.name
+                cmd = [ffmpeg, "-y", "-ss", str(mid), "-i", clip_path,
+                       "-frames:v", "1", "-q:v", "3",
+                       "-vf", "scale=640:-1", frame_path]
+                r = subprocess.run(cmd, capture_output=True, timeout=30)
+                if r.returncode != 0 or not os.path.exists(frame_path) or os.path.getsize(frame_path) < 500:
+                    return -1.0
             except Exception as e:
-                print(f"    [validate_clip] Vision error: {e}")
-        
-        # For videos: validate file integrity + basic heuristics
+                print(f"    [validate_clip] frame extract error: {e}")
+                return -1.0
+
+        # Call Gemini Vision with retry on 429
         try:
-            from core.video_processor import get_duration, get_resolution
-            dur = get_duration(clip_path)
-            w, h = get_resolution(clip_path)
-            # Video should be at least 3 seconds and have reasonable resolution
-            if dur < 2.0 or w < 320 or h < 240:
-                return 0.3
-            return 0.8  # Can't fully validate video content without more analysis
-        except Exception:
-            return 0.5  # Can't validate, assume OK
+            from google.genai import types
+            with open(frame_path, "rb") as f:
+                img_data = f.read()
+            kw_text = ", ".join(expected_keywords[:3])
+            prompt = (
+                f"You are auditing whether a video B-roll visually matches narration.\n"
+                f"Topic/theme: {theme}\n"
+                f"Search keywords: {kw_text}\n\n"
+                f"Rate how well the image visually illustrates the topic, 0-10.\n"
+                f"10=perfect literal match; 7=related; 4=weak; 0=wrong/unrelated.\n"
+                f"Reply ONLY with a single integer 0-10."
+            )
+            for attempt in range(3):
+                try:
+                    resp = self.client.models.generate_content(
+                        model="gemini-2.0-flash-lite",  # higher RPM than flash
+                        contents=[
+                            types.Part.from_bytes(data=img_data, mime_type="image/jpeg"),
+                            prompt,
+                        ],
+                    )
+                    if resp and resp.text:
+                        m = re.search(r"\b(\d{1,2})\b", resp.text)
+                        if m:
+                            score = min(10, max(0, int(m.group(1)))) / 10.0
+                            if score < 0.4:
+                                print(f"    [validate_clip] LOW {score:.2f} '{kw_text}' ({resp.text.strip()[:30]})")
+                            return score
+                    # Vision returned no usable score — try textual fallback
+                    txt_score = self._textual_match_score(metadata_text, expected_keywords, theme)
+                    return txt_score
+                except Exception as e:
+                    msg = str(e)
+                    if "429" in msg or "RESOURCE_EXHAUSTED" in msg or "quota" in msg.lower():
+                        if attempt < 2:
+                            import time as _t
+                            _t.sleep(8 * (attempt + 1))
+                            continue
+                        print(f"    [validate_clip] quota exhausted — falling back to textual")
+                        return self._textual_match_score(metadata_text, expected_keywords, theme)
+                    print(f"    [validate_clip] Vision error ({msg[:80]}) — textual fallback")
+                    return self._textual_match_score(metadata_text, expected_keywords, theme)
+        finally:
+            if frame_path and frame_path != clip_path and os.path.exists(frame_path):
+                try: os.remove(frame_path)
+                except Exception: pass
+        return -1.0

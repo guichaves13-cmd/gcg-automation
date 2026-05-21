@@ -456,7 +456,7 @@ def run_auto(config: dict, on_progress=None):
 
                 ffmpeg = _find_ffmpeg()
                 srt_escaped = srt_path.replace("\\", "/").replace(":", "\\:")
-                enc = _get_encoder()
+                enc = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20"]
                 cmd_sub = [
                     ffmpeg, "-y",
                     "-hwaccel", "auto",
@@ -710,13 +710,17 @@ def _download_from_shot_list(shot_list, output_folder, pexels_key, pixabay_key, 
         if not (os.path.exists(file_path) and os.path.getsize(file_path) > 1000):
             return False
         try:
+            # Use filename as metadata hint (stock sources often encode title in filename)
+            meta = os.path.splitext(os.path.basename(file_path))[0].replace("_", " ").replace("-", " ")
             score = validator.validate_clip(
-                file_path, [keyword_text], video_theme
+                file_path, [keyword_text], video_theme, metadata_text=meta
             )
         except Exception as ve:
             print(f"    [validate] {source_name} '{keyword_text}': validator error ({ve}) — accepting (fail open)")
             return True
-        if score is None:
+        if score is None or score < 0:
+            # validator unavailable (quota/error) — fail open but don't store a fake score
+            print(f"    [validate] {source_name} '{keyword_text}': validator unavailable — accepting without score")
             return True
         if score < min_validation_score:
             print(f"    [validate] REJECTED ({score:.2f} < {min_validation_score}) {source_name} '{keyword_text}'")
