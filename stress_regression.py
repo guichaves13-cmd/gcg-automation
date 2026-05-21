@@ -368,6 +368,78 @@ t("validator: no temp .jpg leak on video", test_validator_no_temp_leak)
 
 
 # ============================================================
+section("13. FFPROBE PATH DERIVATION — DIRNAME/BASENAME SAFETY")
+# ============================================================
+
+def _derive_ffprobe(ffmpeg_path):
+    """Replicates the safe derivation pattern used in fixed modules."""
+    ff_dir = os.path.dirname(ffmpeg_path)
+    ff_base = os.path.basename(ffmpeg_path)
+    probe_base = ff_base.replace("ffmpeg", "ffprobe")
+    return os.path.join(ff_dir, probe_base) if ff_dir else probe_base
+
+def test_ffprobe_path_with_ffmpeg_in_dir():
+    # The classic broken pattern: path contains 'ffmpeg' as DIRECTORY name
+    bad_input = r"C:\Users\X\ffmpeg\bin\ffmpeg.exe"
+    # Naive replace would corrupt directory: C:\Users\X\ffprobe\bin\ffprobe.exe
+    naive = bad_input.replace("ffmpeg", "ffprobe")
+    assert "ffprobe\\bin" in naive, "this assertion proves the naive bug exists"
+    # Safe derivation only changes basename:
+    safe = _derive_ffprobe(bad_input)
+    assert safe == r"C:\Users\X\ffmpeg\bin\ffprobe.exe", f"safe got {safe!r}"
+t("ffprobe derivation: dir 'ffmpeg' preserved, only basename changes", test_ffprobe_path_with_ffmpeg_in_dir)
+
+def test_ffprobe_path_bare_name():
+    safe = _derive_ffprobe("ffmpeg")
+    assert safe == "ffprobe", f"bare-name got {safe!r}"
+t("ffprobe derivation: bare 'ffmpeg' -> 'ffprobe'", test_ffprobe_path_bare_name)
+
+def test_ffprobe_path_no_ext():
+    safe = _derive_ffprobe("/usr/bin/ffmpeg")
+    assert safe.endswith("/ffprobe") or safe.endswith("\\ffprobe"), f"got {safe!r}"
+t("ffprobe derivation: unix path", test_ffprobe_path_no_ext)
+
+
+# ============================================================
+section("14. SMART BROLL — keyword extraction sanity")
+# ============================================================
+from core.smart_broll import _group_segments
+
+def test_group_segments_basic():
+    segs = [
+        {"start": 0, "end": 2, "text": "hello"},
+        {"start": 2, "end": 4, "text": "world"},
+        {"start": 10, "end": 13, "text": "later"},
+    ]
+    chunks = _group_segments(segs, chunk_duration=5.0, total_duration=15)
+    assert len(chunks) >= 1
+    assert all("start" in c and "end" in c and "text" in c for c in chunks)
+t("smart_broll: _group_segments produces well-formed chunks", test_group_segments_basic)
+
+def test_group_segments_empty():
+    chunks = _group_segments([], chunk_duration=5.0, total_duration=0)
+    assert chunks == []
+t("smart_broll: _group_segments handles empty input", test_group_segments_empty)
+
+
+# ============================================================
+section("15. ALL CORE MODULES IMPORT")
+# ============================================================
+def test_all_core_imports():
+    import importlib
+    mods = [f[:-3] for f in os.listdir(os.path.join(r"C:\Users\Guilherme\Music\automaçao video", "core"))
+            if f.endswith(".py") and not f.startswith("_")]
+    failed = []
+    for m in mods:
+        try:
+            importlib.import_module(f"core.{m}")
+        except Exception as e:
+            failed.append((m, str(e)[:80]))
+    assert not failed, f"import failures: {failed}"
+t(f"imports: all core/*.py modules ({sum(1 for f in os.listdir(os.path.join(r'C:\Users\Guilherme\Music\automaçao video','core')) if f.endswith('.py') and not f.startswith('_'))} files)", test_all_core_imports)
+
+
+# ============================================================
 shutil.rmtree(TMP, ignore_errors=True)
 
 print(f"\n{'='*72}")
