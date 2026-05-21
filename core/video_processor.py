@@ -47,8 +47,16 @@ def _get_encoder() -> list:
     global _ENCODER_CACHE
     if _ENCODER_CACHE is not None:
         return _ENCODER_CACHE
-    # Using libx264 ultrafast (reliable, fast)
-    # NVENC disabled: produces corrupted video on this FFmpeg build
+    # Try NVENC first — 4x faster than CPU
+    ffmpeg = _find_ffmpeg()
+    try:
+        r = subprocess.run([ffmpeg, "-encoders"], capture_output=True, text=True, timeout=10)
+        if "h264_nvenc" in r.stdout:
+            _ENCODER_CACHE = ["-c:v", "h264_nvenc", "-preset", "p7", "-rc", "vbr", "-b:v", "20M", "-maxrate", "25M"]
+            print("  [GPU] Using h264_nvenc encoder (NVENC)")
+            return _ENCODER_CACHE
+    except Exception:
+        pass
     _ENCODER_CACHE = ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "23"]
     print("  [CPU] Using libx264 ultrafast encoder")
     return _ENCODER_CACHE
@@ -76,7 +84,7 @@ def get_media_info(filepath: str) -> dict:
         "-show_format", "-show_streams",
         filepath
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
     if result.returncode != 0:
         raise RuntimeError(f"Cannot probe {filepath}: {result.stderr}")
     return json.loads(result.stdout)
@@ -307,15 +315,42 @@ def trim_video_with_audio(input_path: str, start: float, duration: float, output
 
 
 def concat_segments_with_audio(segment_paths: List[str], output_path: str):
-    """Concatenate video segments that already have audio tracks."""
+    """Concatenate video segments that already have audio tracks.
+    Auto-skips missing/corrupt segments and falls back gracefully.
+    """
     if not segment_paths:
         raise ValueError("No segments to concatenate")
 
     if len(segment_paths) == 1:
+        if os.path.exists(segment_paths[0]) and os.path.getsize(segment_paths[0]) > 1000:
+            shutil.copy2(segment_paths[0], output_path)
+            return
+        raise RuntimeError(f"Single segment missing or corrupt: {segment_paths[0]}")
+
+    ffmpeg = _find_ffmpeg()
+    # Validate all segments exist before building concat file
+    valid_paths = []
+    missing = []
+    for i, path in enumerate(segment_paths):
+        if os.path.exists(path) and os.path.getsize(path) > 500:
+            valid_paths.append(path)
+        else:
+            missing.append((i, path))
+
+    if missing:
+        print(f"  [concat] WARNING: {len(missing)} segment(s) missing/corrupt. Auto-skipping.")
+        for idx, mp in missing:
+            print(f"    Missing seg[{idx}]: {mp}")
+
+    if not valid_paths:
+        raise RuntimeError(f"All {len(segment_paths)} segments are missing or corrupt!")
+
+    # Use only valid paths
+    segment_paths = valid_paths
+    if len(segment_paths) == 1:
         shutil.copy2(segment_paths[0], output_path)
         return
 
-    ffmpeg = _find_ffmpeg()
     concat_file = output_path + ".concat.txt"
     with open(concat_file, "w") as f:
         for path in segment_paths:
@@ -441,224 +476,22 @@ def burn_subtitles(video_path: str, srt_path: str, font: str, font_size: int,
     )
 
     enc = _get_encoder()
+
+    def _try_burn(cmd, desc):
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
+        if result.returncode != 0:
+            raise RuntimeError(f"FFmpeg error ({desc}):\n{result.stderr[-1500:]}")
+        return result
+
     cmd = [
         ffmpeg, "-y",
+        "-hwaccel", "auto",
         "-i", video_path,
         "-vf", f"subtitles='{srt_escaped}':force_style='{style}'",
     ] + enc + ["-c:a", "copy", "-pix_fmt", "yuv420p", output_path]
-    _run_cmd(cmd, "burn_subtitles")
-
-
-# ════════════════════════════════════════════════════════════════════════
-#  LONG VIDEO SUPPORT — Chunk-based Processing (Task 1.9)
-# ════════════════════════════════════════════════════════════════════════
-
-def get_chunk_timestamps(
-    total_duration: float,
-    chunk_duration: float = 300.0,
-) -> List[Tuple[float, float]]:
-    """
-    Split a video duration into (start, end) pairs for chunk processing.
-
-    Example for a 750s video with 300s chunks:
-        [(0, 300), (300, 600), (600, 750)]
-    """
-    chunks = []
-    start = 0.0
-    while start < total_duration - 0.5:
-        end = min(start + chunk_duration, total_duration)
-        chunks.append((round(start, 3), round(end, 3)))
-        start = end
-    return chunks
-
-
-def split_video_into_chunks(
-    input_path: str,
-    chunk_duration: float,
-    output_dir: str,
-    on_progress=None,
-) -> List[str]:
-    """
-    Split a long video into temporary chunk files using stream copy (fast).
-
-    Returns list of chunk file paths. Empty if splitting failed.
-    """
-    os.makedirs(output_dir, exist_ok=True)
-    ffmpeg = _find_ffmpeg()
-
-    total = get_duration(input_path)
-    timestamps = get_chunk_timestamps(total, chunk_duration)
-    chunk_paths: List[str] = []
-
-    for idx, (start, end) in enumerate(timestamps):
-        out = os.path.join(output_dir, f"chunk_{idx:04d}.mp4")
-        cmd = [
-            ffmpeg, "-y",
-            "-ss", str(start),
-            "-i", input_path,
-            "-t", str(round(end - start, 3)),
-            "-c", "copy",          # stream copy: no re-encode, very fast
-            "-avoid_negative_ts", "make_zero",
-            out,
-        ]
-        try:
-            _run_cmd(cmd, f"split_chunk_{idx}")
-            if os.path.exists(out) and os.path.getsize(out) > 1000:
-                chunk_paths.append(out)
-                if on_progress:
-                    pct = int((idx + 1) / len(timestamps) * 100)
-                    on_progress(pct, 100, f"Split {idx+1}/{len(timestamps)}: {start:.0f}s-{end:.0f}s")
-            else:
-                print(f"  [video_processor] Chunk {idx} vazio -- ignorando")
-        except Exception as e:
-            print(f"  [video_processor] Erro ao dividir chunk {idx}: {e}")
-
-    return chunk_paths
-
-
-def merge_video_chunks(chunk_paths: List[str], output_path: str) -> None:
-    """Concatenate processed chunks into final video. Wraps concat_segments."""
-    if not chunk_paths:
-        raise ValueError("Nenhum chunk para concatenar")
-    concat_segments(chunk_paths, output_path)
-
-
-def process_video_in_chunks(
-    input_path: str,
-    output_path: str,
-    process_fn,
-    chunk_duration: float = 300.0,
-    on_progress=None,
-    total_timeout: float = 1800.0,
-) -> None:
-    """
-    Process a long video by splitting into chunks, processing each, then concatenating.
-
-    This prevents memory exhaustion on videos > 15 minutes.
-
-    Args:
-        input_path:     source video file
-        output_path:    destination for the final assembled video
-        process_fn:     callable(chunk_path: str, chunk_idx: int, total: int) -> str
-                        Must return path to the processed chunk output file.
-                        Returning None or raising an exception causes the original
-                        chunk to be used as fallback.
-        chunk_duration: size of each chunk in seconds (default 5 minutes)
-        on_progress:    optional callable(current, total, message)
-        total_timeout:  hard timeout in seconds (default 30 minutes); raises
-                        RuntimeError if exceeded
-
-    Memory management:
-        gc.collect() is called after each chunk and temp files are removed
-        immediately, keeping peak RAM proportional to one chunk, not the full video.
-    """
-    import gc
-
-    start_wall = time.time()
-    tmp_dir = output_path + "_proc_chunks"
-    os.makedirs(tmp_dir, exist_ok=True)
-
     try:
-        total_dur = get_duration(input_path)
-        timestamps = get_chunk_timestamps(total_dur, chunk_duration)
-        total_chunks = len(timestamps)
-
-        print(
-            f"  [video_processor] Video longo: {total_dur:.0f}s "
-            f"-> {total_chunks} chunks de {chunk_duration:.0f}s"
-        )
-
-        processed: List[str] = []
-
-        for idx, (start, end) in enumerate(timestamps):
-            # Enforce total timeout
-            elapsed = time.time() - start_wall
-            if elapsed > total_timeout:
-                raise RuntimeError(
-                    f"Timeout: processamento levou {elapsed:.0f}s "
-                    f"(maximo {total_timeout:.0f}s)"
-                )
-
-            if on_progress:
-                pct = int(idx / total_chunks * 80)
-                on_progress(pct, 100,
-                            f"Chunk {idx+1}/{total_chunks} ({start:.0f}s-{end:.0f}s)...")
-
-            # Extract this chunk (stream copy, fast)
-            chunk_in = os.path.join(tmp_dir, f"in_{idx:04d}.mp4")
-            ffmpeg = _find_ffmpeg()
-            split_cmd = [
-                ffmpeg, "-y",
-                "-ss", str(start),
-                "-i", input_path,
-                "-t", str(round(end - start, 3)),
-                "-c", "copy",
-                "-avoid_negative_ts", "make_zero",
-                chunk_in,
-            ]
-            try:
-                _run_cmd(split_cmd, f"chunk_split_{idx}")
-            except Exception as e:
-                print(f"  [video_processor] Falha ao extrair chunk {idx}: {e}")
-                continue
-
-            if not os.path.exists(chunk_in) or os.path.getsize(chunk_in) < 1000:
-                print(f"  [video_processor] Chunk {idx} vazio -- pulando")
-                _safe_remove_vp(chunk_in)
-                continue
-
-            # Process this chunk
-            chunk_out = chunk_in  # fallback: use raw chunk
-            try:
-                result_path = process_fn(chunk_in, idx, total_chunks)
-                if result_path and os.path.exists(result_path):
-                    chunk_out = result_path
-                elif result_path:
-                    print(f"  [video_processor] process_fn retornou path inexistente para chunk {idx}")
-            except Exception as e:
-                print(f"  [video_processor] process_fn falhou no chunk {idx}: {e} -- usando fallback")
-
-            processed.append(chunk_out)
-
-            # Free memory and clean up input chunk
-            gc.collect()
-            if chunk_in != chunk_out:
-                _safe_remove_vp(chunk_in)
-
-            elapsed = time.time() - start_wall
-            pct_done = (idx + 1) / total_chunks * 100
-            print(
-                f"  [video_processor] Chunk {idx+1}/{total_chunks} OK "
-                f"({pct_done:.0f}% | {elapsed:.0f}s decorridos)"
-            )
-
-        if not processed:
-            raise RuntimeError("Nenhum chunk foi processado com sucesso")
-
-        if on_progress:
-            on_progress(90, 100, f"Concatenando {len(processed)} chunks...")
-
-        concat_segments(processed, output_path)
-
-        if on_progress:
-            on_progress(100, 100, "Video longo concluido!")
-
-        elapsed = time.time() - start_wall
-        print(
-            f"  [video_processor] Concluido: {len(processed)} chunks em {elapsed:.0f}s "
-            f"-> {output_path}"
-        )
-
-    finally:
-        try:
-            shutil.rmtree(tmp_dir, ignore_errors=True)
-        except Exception:
-            pass
-
-
-def _safe_remove_vp(path: str) -> None:
-    try:
-        if path and os.path.exists(path):
-            os.remove(path)
-    except OSError:
-        pass
+        _try_burn(cmd, "burn_subtitles")
+    except (RuntimeError, subprocess.TimeoutExpired):
+        print("  [yellow]burn_subtitles: hwaccel failed, retrying without...[/yellow]")
+        cmd_no_hw = [ffmpeg, "-y", "-i", video_path, "-vf", cmd[7]] + enc + ["-c:a", "copy", "-pix_fmt", "yuv420p", output_path]
+        _try_burn(cmd_no_hw, "burn_subtitles (no hwaccel)")
