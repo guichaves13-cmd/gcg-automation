@@ -2796,7 +2796,9 @@ Be brutally honest and specific. No generic advice."""
 @app.route("/api/ti/generate", methods=["POST"])
 def ti_generate():
     data = request.json or {}
-    topic = data.get("topic", "")[:500]
+    topic = (data.get("topic") or "").strip()[:500]
+    if not topic:
+        return jsonify({"error": "Topic required"}), 400
     language = data.get("language", "English")[:50]
     niche = data.get("niche", "")[:300]
     prompt = f"""You are the #1 YouTube title engineer. You've studied every 100M+ view viral video.
@@ -2836,7 +2838,7 @@ No explanations. Verify each title is 70+ characters."""
 def ti_batch():
     data = request.json or {}
     titles = data.get("titles", [])
-    results = [_analyze_title_viral(t) for t in titles if t.strip()]
+    results = [_analyze_title_viral(t) for t in titles if isinstance(t, str) and t.strip()]
     if not results:
         return jsonify({"error": "No titles"}), 400
     scores = [r["score"] for r in results]
@@ -2876,8 +2878,22 @@ Output MUST be valid JSON (no markdown):
         result = _ask_gemini_gcg(prompt, data.get("ai_api_key"))
         clean = result.replace("```json","").replace("```","").strip()
         m = _re.search(r'\{.*\}', clean, _re.DOTALL)
-        if m: return jsonify({"battle": json.loads(m.group())})
-        return jsonify({"battle": json.loads(clean)})
+        if m:
+            raw = m.group()
+            raw = _re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', raw)
+            try:
+                return jsonify({"battle": json.loads(raw)})
+            except Exception:
+                pass
+        # Fallback: extract structured info from free text
+        winner = "A" if "title a" in clean.lower() or '"winner":"a"' in clean.lower() else "B"
+        return jsonify({"battle": {
+            "winner": winner,
+            "ctr_delta": "AI analysis unavailable — response was unstructured",
+            "reasoning": clean[:500] if clean else "AI temporarily unavailable",
+            "breakdown_a": "See reasoning above",
+            "breakdown_b": "See reasoning above"
+        }})
     except Exception as e:
         return jsonify({"error": f"AI Battle Failed: {e}"}), 500
 
@@ -2934,7 +2950,9 @@ Provide Markdown-formatted:
 @app.route("/api/ti/channel_strategy", methods=["POST"])
 def ti_channel_strategy():
     data = request.json or {}
-    channel_type = data.get("channel_type", "")[:200]
+    channel_type = (data.get("channel_type") or "").strip()[:200]
+    if not channel_type:
+        return jsonify({"error": "Channel type required"}), 400
     current_titles = data.get("titles", [])
     target_audience = data.get("target_audience", "")[:300]
     language = data.get("language", "English")[:50]
@@ -2958,7 +2976,9 @@ Be brutal, highly specific, zero generic advice."""
 @app.route("/api/ti/strategy_remix", methods=["POST"])
 def ti_strategy_remix():
     data = request.json or {}
-    topic = data.get("topic", "")[:300]
+    topic = (data.get("topic") or "").strip()[:300]
+    if not topic:
+        return jsonify({"error": "Topic required"}), 400
     language = data.get("language", "English")[:50]
     path_a = data.get("path_a", "Curiosity & Mystery")[:100]
     path_b = data.get("path_b", "Fear & Consequence")[:100]
@@ -3112,8 +3132,28 @@ Output MUST be valid JSON (no markdown):
         result = _ask_gemini_gcg(prompt, data.get("ai_api_key"))
         clean = result.replace("```json","").replace("```","").strip()
         m = _re.search(r'\{.*\}', clean, _re.DOTALL)
-        if m: return jsonify({"thumbs": json.loads(m.group())})
-        return jsonify({"thumbs": json.loads(clean)})
+        if m:
+            raw = m.group()
+            raw = _re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', raw)
+            try:
+                return jsonify({"thumbs": json.loads(raw)})
+            except Exception:
+                pass
+        # Fallback: synthesize a basic prompt from the title
+        return jsonify({"thumbs": {"prompts": [
+            {"style": "Cinematic Documentary",
+             "visuals": f"Dramatic wide shot illustrating the concept of: {title}",
+             "text_overlay": title[:20] + "...",
+             "midjourney_prompt": f"cinematic dramatic thumbnail, {title}, dark atmosphere, high contrast, 8k --ar 16:9 --v 6.0"},
+            {"style": "Mystery & Curiosity",
+             "visuals": f"Close-up mysterious element related to: {title}",
+             "text_overlay": "SHOCKING",
+             "midjourney_prompt": f"mysterious dramatic photo, curiosity gap, dark background, {title[:50]}, photorealistic --ar 16:9 --v 6.0"},
+            {"style": "Human Reaction",
+             "visuals": "Person with shocked/amazed expression looking at camera",
+             "text_overlay": "REVEALED",
+             "midjourney_prompt": f"person shocked expression, thumbnail style, dramatic lighting, {title[:40]} --ar 16:9 --v 6.0"},
+        ]}})
     except Exception as e:
         return jsonify({"error": f"Thumb Gen Failed: {e}"}), 500
 
@@ -3122,9 +3162,11 @@ def ti_vision_audit():
     """Gemini Pro Vision — brutally analyzes a thumbnail image for CTR flaws."""
     data = request.json or {}
     image_b64 = data.get("image", "")
-    title = data.get("title", "")[:200]
+    title = (data.get("title") or "").strip()[:200]
     if not image_b64:
         return jsonify({"error": "No image provided"}), 400
+    if not title:
+        return jsonify({"error": "Title required for context"}), 400
     if "," in image_b64:
         image_b64 = image_b64.split(",")[1]
     prompt = f"""You are the world's most brutal YouTube Thumbnail Designer and CTR Expert.
@@ -3249,6 +3291,137 @@ def ti_sync_channels():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route("/api/ti/youtube/save_key", methods=["POST"])
+def ti_save_yt_key():
+    data = request.json or {}
+    key = data.get("key", "").strip()
+    if not key:
+        return jsonify({"error": "No key provided"}), 400
+    from core.api_keys import save_api_key
+    save_api_key("youtube", key)
+    return jsonify({"status": "ok"})
+
+@app.route("/api/ti/youtube/channel", methods=["POST"])
+def ti_yt_channel():
+    """Analyze a YouTube channel with real YouTube Data API."""
+    from core.youtube_api import get_channel_info, get_channel_videos
+    from collections import Counter
+    data = request.json or {}
+    channel_input = data.get("channel", "")
+    from core.api_keys import load_api_key
+    key = data.get("yt_api_key") or load_api_key("youtube")
+    if not key:
+        return jsonify({"error": "YouTube API key não configurado. Salve a chave na aba YouTube Scanner."}), 400
+    info = get_channel_info(channel_input, key)
+    if not info:
+        return jsonify({"error": f"Canal não encontrado: {channel_input}"}), 404
+    videos = get_channel_videos(info["id"], key, max_videos=int(data.get("max_videos", 30)))
+    vph_list = [v["vph"] for v in videos if v["vph"] > 0]
+    views_list = [v["views"] for v in videos]
+    eng_list = [v["engagement"] for v in videos if v["engagement"] > 0]
+    avg_vph = round(sum(vph_list) / max(len(vph_list), 1), 1)
+    avg_views = round(sum(views_list) / max(len(views_list), 1))
+    for v in videos:
+        v["vph_multiplier"] = round(v["vph"] / max(avg_vph, 0.1), 1)
+        v["outlier_score"] = round(v["views"] / max(avg_views, 1), 1)
+    word_freq = Counter()
+    skip = {"the","a","an","is","in","on","of","and","to","that","this","for","with","are","was","you","your","it","o","a","e","os","as","de","da","do","um","uma"}
+    for v in videos:
+        for w in v["title"].lower().split():
+            w = w.strip(".,!?;:'\"()-[]|#")
+            if w and len(w) > 2 and w not in skip:
+                word_freq[w] += 1
+    return jsonify({
+        "channel": info,
+        "videos": sorted(videos, key=lambda v: v["vph"], reverse=True),
+        "metrics": {
+            "avg_vph": avg_vph,
+            "max_vph": max(vph_list) if vph_list else 0,
+            "avg_views": avg_views,
+            "avg_engagement": round(sum(eng_list) / max(len(eng_list), 1), 2),
+            "total_analyzed": len(videos),
+        },
+        "top_words": dict(word_freq.most_common(25)),
+    })
+
+@app.route("/api/ti/youtube/niche", methods=["POST"])
+def ti_yt_niche():
+    """Deep niche analysis with real YouTube data."""
+    from core.youtube_api import analyze_niche
+    data = request.json or {}
+    query = data.get("query", "")
+    region = data.get("region", "US")
+    from core.api_keys import load_api_key
+    key = data.get("yt_api_key") or load_api_key("youtube")
+    if not key:
+        return jsonify({"error": "YouTube API key não configurado"}), 400
+    if not query:
+        return jsonify({"error": "Nenhuma query fornecida"}), 400
+    result = analyze_niche(query, key, region=region)
+    return jsonify(result)
+
+@app.route("/api/ti/youtube/trending", methods=["POST"])
+def ti_yt_trending():
+    """Get trending/popular videos from YouTube."""
+    from core.youtube_api import get_most_popular, search_trending
+    data = request.json or {}
+    query = data.get("query", "")
+    region = data.get("region", "US")
+    category = data.get("category_id", "")
+    from core.api_keys import load_api_key
+    key = data.get("yt_api_key") or load_api_key("youtube")
+    if not key:
+        return jsonify({"error": "YouTube API key não configurado"}), 400
+    if query:
+        week_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        videos = search_trending(query, key, max_results=25,
+                                 published_after=week_ago, region=region,
+                                 category_id=category or None)
+    else:
+        videos = get_most_popular(key, region=region,
+                                  category_id=category or None, max_results=25)
+    return jsonify({"videos": videos, "query": query, "region": region})
+
+@app.route("/api/ti/youtube/compare", methods=["POST"])
+def ti_yt_compare():
+    """Compare multiple YouTube channels side by side."""
+    from core.youtube_api import compare_channels
+    data = request.json or {}
+    channels = data.get("channels", [])
+    from core.api_keys import load_api_key
+    key = data.get("yt_api_key") or load_api_key("youtube")
+    if not key:
+        return jsonify({"error": "YouTube API key não configurado"}), 400
+    results = compare_channels(channels, key)
+    return jsonify({"comparisons": results})
+
+@app.route("/api/ti/channels/update", methods=["POST"])
+def ti_update_channel():
+    """Update channel data — merges new subniches, keywords, structures, themes."""
+    data = request.json or {}
+    channel_id = str(data.get("id",""))
+    updates = data.get("updates", {})
+    channels = _ti_load_channels()
+    for c in channels:
+        if str(c.get("id","")) == channel_id:
+            for key in ["subniches", "keywords", "titles"]:
+                if key in updates and updates[key]:
+                    existing = c.get(key, [])
+                    c[key] = existing + [i for i in updates[key] if i not in existing]
+            for key in ["niche", "micro_niche", "name", "url", "language"]:
+                if key in updates and updates[key]:
+                    c[key] = updates[key]
+            if "reference_structures" in updates:
+                existing = c.get("reference_structures", [])
+                c["reference_structures"] = existing + [s for s in updates["reference_structures"] if s not in existing]
+            if "trending_themes" in updates:
+                existing = c.get("trending_themes", [])
+                c["trending_themes"] = existing + [t for t in updates["trending_themes"] if t not in existing]
+            c["last_updated"] = datetime.now().isoformat()
+            break
+    _ti_save_channels(channels)
+    return jsonify({"status": "ok"})
+
 @app.route("/api/ti/strategy_from_viral", methods=["POST"])
 def ti_strategy_from_viral():
     data = request.json or {}
@@ -3292,21 +3465,24 @@ def ti_get_channels():
 def ti_add_channel():
     data = request.json or {}
     channels = _ti_load_channels()
-    ch = {"id":len(channels)+1,"name":data.get("name",""),"url":data.get("url",""),
-          "niche":data.get("niche",""),"micro_niche":data.get("micro_niche",""),
-          "subniches":data.get("subniches",[]),"keywords":data.get("keywords",[]),
-          "language":data.get("language","English"),"titles":data.get("titles",[]),
-          "reference_structures":data.get("reference_structures",[]),
-          "trending_themes":data.get("trending_themes",[]),"metrics":[],
-          "created":datetime.now().isoformat()}
+    # Use client-provided id if available, otherwise generate one
+    ch_id = data.get("id") or f"ti_ch_{int(datetime.now().timestamp()*1000)}"
+    ch = {"id": ch_id, "name": data.get("name",""), "url": data.get("url",""),
+          "niche": data.get("niche",""), "micro_niche": data.get("micro_niche",""),
+          "subniches": data.get("subniches",[]), "keywords": data.get("keywords",[]),
+          "language": data.get("language","English"), "titles": data.get("titles",[]),
+          "reference_structures": data.get("reference_structures",[]),
+          "trending_themes": data.get("trending_themes",[]), "metrics": [],
+          "created": datetime.now().isoformat()}
     channels.append(ch)
     _ti_save_channels(channels)
-    return jsonify({"status":"ok","channel":ch})
+    return jsonify({"status": "ok", "id": ch_id, "channel": ch})
 
 @app.route("/api/ti/channels/delete", methods=["POST"])
 def ti_delete_channel():
     data = request.json or {}
-    channels = [c for c in _ti_load_channels() if c.get("id") != data.get("id")]
+    del_id = str(data.get("id",""))
+    channels = [c for c in _ti_load_channels() if str(c.get("id","")) != del_id]
     _ti_save_channels(channels)
     return jsonify({"status":"ok"})
 
@@ -3338,10 +3514,11 @@ Be aggressive, data-driven, Markdown formatted."""
 @app.route("/api/ti/channels/update_metrics", methods=["POST"])
 def ti_update_metrics():
     data = request.json or {}
-    cid = data.get("id"); metrics = data.get("metrics", {})
+    cid = str(data.get("id",""))
+    metrics = data.get("metrics", {})
     channels = _ti_load_channels()
     for c in channels:
-        if c.get("id") == cid:
+        if str(c.get("id","")) == cid:
             if "metrics" not in c: c["metrics"] = []
             c["metrics"].append({**metrics,"date":datetime.now().isoformat()})
             c["metrics"] = c["metrics"][-50:]
@@ -3362,19 +3539,22 @@ def ti_get_saved_channels():
 @app.route("/api/ti/saved_channels", methods=["POST"])
 def ti_save_channel():
     data = request.json or {}
+    # Accept channel data from either root or nested "channel" key
+    ch = data.get("channel", data)
     try:
         try:
             with open(_SAVED_TREND_PATH,"r",encoding="utf-8") as f: saved = json.load(f)
         except:
             saved = {"channels":[]}
         existing_ids = {c.get("id") for c in saved["channels"]}
-        if data.get("id") not in existing_ids:
-            saved["channels"].append({"id":data.get("id",""),"name":data.get("name",""),
-                "subscribers":data.get("subscribers",0),"avg_vph":data.get("avg_vph",0),
-                "subniche":data.get("subniche",""),"saved_at":datetime.now().isoformat(),
-                "thumbnail":data.get("thumbnail","")})
+        if ch.get("id") not in existing_ids:
+            saved["channels"].append({
+                "id": ch.get("id",""), "name": ch.get("name",""),
+                "subscribers": ch.get("subscribers",0), "avg_vph": ch.get("avg_vph",0),
+                "subniche": ch.get("subniche",""), "saved_at": datetime.now().isoformat(),
+                "thumbnail": ch.get("thumbnail","")})
             with open(_SAVED_TREND_PATH,"w",encoding="utf-8") as f: json.dump(saved,f,indent=2)
-        return jsonify({"ok":True,"total":len(saved["channels"])})
+        return jsonify({"status":"ok","total":len(saved["channels"])})
     except Exception as e:
         return jsonify({"error":str(e)}),500
 
