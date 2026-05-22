@@ -102,6 +102,41 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     cursor: pointer; font-size: 14px; font-weight: 600;
     box-shadow: 0 4px 12px rgba(0,0,0,0.3);
   }}
+  #apply-btn {{
+    position: fixed; bottom: 20px; right: 220px; padding: 12px 20px;
+    background: #2ea043; color: white; border: none; border-radius: 8px;
+    cursor: pointer; font-size: 14px; font-weight: 600;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  }}
+  #apply-btn:hover {{ background: #3fb950; }}
+  #apply-panel {{
+    display: none; position: fixed; bottom: 70px; right: 20px;
+    background: #161b22; border: 1px solid #30363d; border-radius: 10px;
+    padding: 18px; width: 390px; z-index: 50;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  }}
+  #apply-panel h3 {{ margin: 0 0 12px; font-size: 15px; color: #e6edf3; }}
+  #apply-panel label {{ font-size: 12px; color: #8b949e; display: block; margin-bottom: 4px; }}
+  #apply-panel input[type=text] {{
+    width: 100%; padding: 7px 10px; background: #0d1117; border: 1px solid #30363d;
+    border-radius: 6px; color: #e6edf3; font-size: 12px; margin-bottom: 10px;
+    box-sizing: border-box;
+  }}
+  #apply-panel .panel-row {{ display: flex; gap: 8px; margin-top: 10px; }}
+  #apply-panel .panel-row button {{ flex: 1; padding: 9px; border-radius: 6px; border: none;
+    cursor: pointer; font-size: 13px; font-weight: 600; }}
+  #btn-do-apply {{ background: #2ea043; color: white; }}
+  #btn-do-apply:hover {{ background: #3fb950; }}
+  #btn-analyze {{ background: #1f6feb; color: white; }}
+  #btn-analyze:hover {{ background: #388bfd; }}
+  #apply-status {{ margin-top: 10px; font-size: 12px; min-height: 18px; }}
+  .replace-file-row {{ margin-top: 6px; display: none; }}
+  .replace-file-row label {{ font-size: 11px; color: #d29922; margin-bottom: 3px; }}
+  .replace-file-row input[type=text] {{
+    width: 100%; padding: 5px 8px; background: #0d1117; border: 1px solid #d29922;
+    border-radius: 5px; color: #e3b341; font-size: 11px; font-family: monospace;
+    box-sizing: border-box;
+  }}
 </style>
 </head>
 <body>
@@ -120,21 +155,43 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <main>
   <div class="controls">
     <button onclick="approveAll()">Aprovar todos</button>
-    <button onclick="resetAll()">Resetar</button>
+    <button onclick="rejectLowScore()">Rejeitar score &lt; 0.5</button>
+    <button onclick="resetAll()">Resetar tudo</button>
     <button onclick="filterShow('all')">Mostrar todos</button>
     <button onclick="filterShow('broll')">Apenas B-roll</button>
-    <button onclick="filterShow('low')">Apenas score baixo</button>
+    <button onclick="filterShow('low')">Score baixo</button>
   </div>
   <div id="beats">
 {beats_html}
   </div>
 </main>
-<button id="export" onclick="exportSelections()">Exportar seleções</button>
+<button id="apply-btn" onclick="toggleApplyPanel()">Aplicar no Re-render</button>
+<button id="export" onclick="exportSelections()">Exportar Decisoes</button>
+
+<div id="apply-panel">
+  <h3>Aplicar Decisoes — Re-render</h3>
+  <label>Timeline JSON (gerado pelo pipeline)</label>
+  <input type="text" id="inp-timeline" placeholder="C:\\...\\output_beat_timeline.json">
+  <label>Avatar / Video base</label>
+  <input type="text" id="inp-avatar" placeholder="C:\\...\\avatar.mp4">
+  <label>Legendas SRT (opcional)</label>
+  <input type="text" id="inp-srt" placeholder="C:\\...\\output.srt">
+  <label>Nome do output (opcional)</label>
+  <input type="text" id="inp-output" placeholder="output_v2.mp4">
+  <div class="panel-row">
+    <button id="btn-analyze" onclick="doAnalyze()">Pre-visualizar impacto</button>
+    <button id="btn-do-apply" onclick="doApply()">Re-renderizar agora</button>
+  </div>
+  <div id="apply-status"></div>
+</div>
+
 <footer>
   Gerado em {generated_at} · Schema {schema_version}
 </footer>
 <script>
   const decisions = {{}};
+  const replacements = {{}};
+  const SERVER = 'http://localhost:5051';
 
   function setDecision(id, value) {{
     decisions[id] = value;
@@ -142,8 +199,20 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     if (el) {{
       el.classList.remove('approved', 'rejected', 'replace');
       if (value) el.classList.add(value);
+      // Show/hide replace file input
+      const rfRow = el.querySelector('.replace-file-row');
+      if (rfRow) rfRow.style.display = (value === 'replace') ? '' : 'none';
     }}
     updateStats();
+    persist();
+  }}
+
+  function setReplacement(id, path) {{
+    if (path && path.trim()) {{
+      replacements[id] = path.trim();
+    }} else {{
+      delete replacements[id];
+    }}
     persist();
   }}
 
@@ -159,15 +228,28 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
   function persist() {{
     localStorage.setItem('broll_picker_decisions', JSON.stringify(decisions));
+    localStorage.setItem('broll_picker_replacements', JSON.stringify(replacements));
   }}
 
   function load() {{
     try {{
-      const data = JSON.parse(localStorage.getItem('broll_picker_decisions') || '{{}}');
-      Object.entries(data).forEach(([id, v]) => {{
+      const dData = JSON.parse(localStorage.getItem('broll_picker_decisions') || '{{}}');
+      const rData = JSON.parse(localStorage.getItem('broll_picker_replacements') || '{{}}');
+      Object.entries(dData).forEach(([id, v]) => {{
         decisions[id] = v;
         const el = document.querySelector('[data-beat-id="' + id + '"]');
-        if (el && v) el.classList.add(v);
+        if (el && v) {{
+          el.classList.add(v);
+          if (v === 'replace') {{
+            const rfRow = el.querySelector('.replace-file-row');
+            if (rfRow) rfRow.style.display = '';
+          }}
+        }}
+      }});
+      Object.entries(rData).forEach(([id, path]) => {{
+        replacements[id] = path;
+        const inp = document.querySelector('[data-repl-id="' + id + '"]');
+        if (inp) inp.value = path;
       }});
       updateStats();
     }} catch (e) {{ console.error(e); }}
@@ -175,16 +257,25 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
   function approveAll() {{
     document.querySelectorAll('.beat[data-type="broll"]').forEach(el => {{
-      const id = el.dataset.beatId;
-      setDecision(id, 'approved');
+      setDecision(el.dataset.beatId, 'approved');
+    }});
+  }}
+
+  function rejectLowScore() {{
+    document.querySelectorAll('.beat[data-type="broll"]').forEach(el => {{
+      const score = parseFloat(el.dataset.score || '1');
+      if (score < 0.5) setDecision(el.dataset.beatId, 'rejected');
     }});
   }}
 
   function resetAll() {{
-    if (!confirm('Limpar todas as seleções?')) return;
+    if (!confirm('Limpar todas as selecoes?')) return;
     Object.keys(decisions).forEach(k => delete decisions[k]);
+    Object.keys(replacements).forEach(k => delete replacements[k]);
     document.querySelectorAll('.beat').forEach(el => {{
       el.classList.remove('approved', 'rejected', 'replace');
+      const rfRow = el.querySelector('.replace-file-row');
+      if (rfRow) rfRow.style.display = 'none';
     }});
     updateStats();
     persist();
@@ -203,14 +294,94 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   }}
 
   function exportSelections() {{
-    const out = JSON.stringify(decisions, null, 2);
+    const out = JSON.stringify({{decisions, replacements}}, null, 2);
     const blob = new Blob([out], {{type: 'application/json'}});
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url;
-    a.download = 'picker_decisions.json';
-    a.click();
+    a.href = url; a.download = 'picker_decisions.json'; a.click();
     URL.revokeObjectURL(url);
+  }}
+
+  function toggleApplyPanel() {{
+    const panel = document.getElementById('apply-panel');
+    panel.style.display = panel.style.display === 'none' ? '' : 'none';
+  }}
+
+  function setStatus(msg, color) {{
+    const el = document.getElementById('apply-status');
+    el.textContent = msg;
+    el.style.color = color || '#8b949e';
+  }}
+
+  function doAnalyze() {{
+    const tl = document.getElementById('inp-timeline').value.trim();
+    if (!tl) {{ setStatus('Informe o caminho do timeline JSON.', '#ff7b72'); return; }}
+    setStatus('Analisando...', '#8b949e');
+    fetch(SERVER + '/api/pipeline/auditor/analyze', {{
+      method: 'POST',
+      headers: {{'Content-Type': 'application/json'}},
+      body: JSON.stringify({{
+        timeline_path: tl,
+        decisions: decisions,
+        replacements: replacements,
+      }})
+    }}).then(r => r.json()).then(d => {{
+      if (d.ok) {{
+        setStatus(
+          'Impacto: ' + d.approved + ' aprovados | ' + d.rejected + ' rejeitados | ' +
+          d.replace_manual + ' subst. manual | ' + d.replace_auto + ' re-busca | ' +
+          d.unchanged + ' inalterados',
+          '#56d364'
+        );
+      }} else {{
+        setStatus('Erro: ' + (d.error || 'desconhecido'), '#ff7b72');
+      }}
+    }}).catch(e => setStatus('Conexao recusada. Servidor rodando?', '#ff7b72'));
+  }}
+
+  function doApply() {{
+    const tl = document.getElementById('inp-timeline').value.trim();
+    const av = document.getElementById('inp-avatar').value.trim();
+    const srt = document.getElementById('inp-srt').value.trim();
+    const out = document.getElementById('inp-output').value.trim();
+
+    if (!tl) {{ setStatus('Informe o caminho do timeline JSON.', '#ff7b72'); return; }}
+    if (!av) {{ setStatus('Informe o caminho do avatar/video.', '#ff7b72'); return; }}
+    if (Object.keys(decisions).length === 0) {{
+      setStatus('Nenhuma decisao feita ainda.', '#d29922'); return;
+    }}
+
+    setStatus('Enviando para re-render...', '#e3b341');
+    fetch(SERVER + '/api/pipeline/rerender', {{
+      method: 'POST',
+      headers: {{'Content-Type': 'application/json'}},
+      body: JSON.stringify({{
+        timeline_path: tl,
+        avatar_path: av,
+        subtitles_srt: srt,
+        output_name: out || undefined,
+        decisions: decisions,
+        replacements: replacements,
+      }})
+    }}).then(r => r.json()).then(d => {{
+      if (d.started) {{
+        setStatus('Re-render iniciado! Acompanhe em: ' + (d.output_name || d.output), '#56d364');
+        pollProgress();
+      }} else {{
+        setStatus('Erro: ' + (d.error || JSON.stringify(d)), '#ff7b72');
+      }}
+    }}).catch(e => setStatus('Conexao recusada. Servidor rodando em 5051?', '#ff7b72'));
+  }}
+
+  function pollProgress() {{
+    const poll = setInterval(() => {{
+      fetch(SERVER + '/api/pipeline/status').then(r => r.json()).then(d => {{
+        const pct = d.progress || 0;
+        const msg = d.message || '';
+        setStatus('Re-render: ' + pct + '% — ' + msg, pct === 100 ? '#56d364' : '#e3b341');
+        if (!d.running || pct >= 100) clearInterval(poll);
+      }}).catch(() => clearInterval(poll));
+    }}, 1500);
   }}
 
   load();
@@ -277,6 +448,12 @@ def _beat_card_html(beat: dict) -> str:
         <button class="btn-approve" onclick="setDecision('{bid}', 'approved')">Aprovar</button>
         <button class="btn-replace" onclick="setDecision('{bid}', 'replace')">Substituir</button>
         <button class="btn-reject" onclick="setDecision('{bid}', 'rejected')">Rejeitar</button>
+      </div>
+      <div class="replace-file-row" style="display:none">
+        <label>Caminho do novo arquivo (deixe vazio para re-busca automatica):</label>
+        <input type="text" data-repl-id="{bid}" placeholder="C:\\...\\meu_clip.mp4"
+               onchange="setReplacement('{bid}', this.value)"
+               oninput="setReplacement('{bid}', this.value)">
       </div>"""
 
     return f"""    <div class="beat" data-beat-id="{bid}" data-type="{btype}" data-score="{score if score is not None else 1}">

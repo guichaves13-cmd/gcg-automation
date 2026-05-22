@@ -830,6 +830,210 @@ def api_pipeline_reset():
     pipeline_status["elapsed"] = 0
     return jsonify({"success": True, "message": "Estado resetado com sucesso."})
 
+@app.route("/api/pipeline/rerender", methods=["POST"])
+def api_pipeline_rerender():
+    """
+    Re-renderiza um video aplicando picker_decisions.json.
+
+    Body JSON:
+      {
+        "timeline_path":   "/abs/path/output_beat_timeline.json",
+        "decisions_path":  "/abs/path/picker_decisions.json",
+        "avatar_path":     "/abs/path/avatar.mp4",
+        "output_name":     "output_v2.mp4",          # opcional
+        "subtitles_srt":   "/abs/path/subs.srt",     # opcional
+        "decisions":       {"3":"approved","5":"rejected",...},  # inline (sem arquivo)
+        "replacements":    {"7":"/path/file.mp4"}    # inline replacements
+      }
+    """
+    global active_pipelines, pipeline_status, _pipeline_thread
+
+    data = request.json or {}
+
+    timeline_path = data.get("timeline_path", "").strip()
+    decisions_path = data.get("decisions_path", "").strip()
+    avatar_path = data.get("avatar_path", "").strip()
+    inline_decisions = data.get("decisions")      # dict ou None
+    inline_replacements = data.get("replacements", {})
+    subtitles_srt = data.get("subtitles_srt", "").strip()
+
+    # Validacoes (antes de checar pipeline ativo para retornar 400 em inputs invalidos)
+    if not avatar_path:
+        return jsonify({"error": "avatar_path e obrigatorio"}), 400
+
+    if not os.path.isfile(avatar_path):
+        return jsonify({"error": f"avatar_path invalido: {avatar_path}"}), 400
+
+    if not timeline_path:
+        return jsonify({"error": "timeline_path e obrigatorio"}), 400
+
+    if not os.path.isfile(timeline_path):
+        return jsonify({"error": f"timeline_path invalido: {timeline_path}"}), 400
+
+    if not inline_decisions and (not decisions_path or not os.path.isfile(decisions_path)):
+        return jsonify({"error": "Forneca decisions_path ou decisions inline"}), 400
+
+    # Reset dead pipeline
+    if _pipeline_thread is not None and not _pipeline_thread.is_alive():
+        active_pipelines = 0
+        pipeline_status["running"] = False
+
+    if active_pipelines >= 1:
+        return jsonify({"error": "Pipeline ja em execucao. Cancele antes de re-renderizar."}), 409
+
+    # Aceita decisions inline (dict no body) OU decisions_path (arquivo JSON)
+    if inline_decisions and isinstance(inline_decisions, dict):
+        # Salva temporariamente para o auditor
+        import tempfile as _tmp
+        tf = _tmp.NamedTemporaryFile(mode="w", suffix=".json",
+                                     delete=False, encoding="utf-8")
+        json.dump({"decisions": inline_decisions, "replacements": inline_replacements}, tf)
+        tf.close()
+        decisions_path = tf.name
+
+    # Output
+    output_name = data.get("output_name") or \
+        f"rerender_{os.path.splitext(os.path.basename(timeline_path))[0]}_{int(time.time())}.mp4"
+    output_path = os.path.join(OUTPUT_DIR, output_name)
+
+    from core.api_keys import load_api_key
+    width, height = (3840, 2160) if data.get("resolution") == "4k" else (1920, 1080)
+
+    # Configurar pipeline_status
+    active_pipelines += 1
+    pipeline_status.update({
+        "running": True, "progress": 0,
+        "message": "Auditor: carregando decisoes...",
+        "error": "", "phase": "Auditor", "phase_idx": 0,
+        "logs": [], "start_time": time.time(), "elapsed": 0,
+        "ai_stats": {"clips_downloaded": 0, "clips_validated": 0, "clips_rejected": 0,
+                     "clips_fixed": 0, "segments_total": 0, "segments_done": 0,
+                     "bad_segments": 0, "quality_score": None, "theme": "", "language": ""},
+    })
+
+    def _progress_cb(current, total, msg):
+        pct = int((current / max(total, 1)) * 100)
+        pipeline_status["progress"] = pct
+        pipeline_status["message"] = msg
+        pipeline_status["elapsed"] = round(time.time() - pipeline_status["start_time"], 1)
+        _push_log(msg, "info")
+
+    def run():
+        global pipeline_status, active_pipelines
+        try:
+            from core.broll_auditor import run_auditor
+            result = run_auditor(
+                timeline_path=timeline_path,
+                decisions_path=decisions_path,
+                avatar_path=avatar_path,
+                output_path=output_path,
+                pexels_key=load_api_key("pexels") or "",
+                pixabay_key=load_api_key("pixabay") or "",
+                unsplash_key=load_api_key("unsplash") or "",
+                width=width, height=height, fps=30,
+                subtitles_srt=subtitles_srt,
+                on_progress=_progress_cb,
+            )
+            if result.get("ok"):
+                pipeline_status["message"] = f"Re-render concluido: {output_name}"
+                pipeline_status["progress"] = 100
+                _push_log(f"Re-render OK: {output_name}", "phase")
+                _push_log(f"Stats: {result.get('stats', {})}", "info")
+            else:
+                pipeline_status["error"] = result.get("error", "Falhou")
+                pipeline_status["message"] = f"Re-render falhou: {result.get('error', '')}"
+        except Exception as e:
+            pipeline_status["error"] = str(e)
+            pipeline_status["message"] = f"Erro no re-render: {e}"
+        finally:
+            pipeline_status["running"] = False
+            active_pipelines = 0
+            _pipeline_thread = None
+            # Limpa arquivo temporario de decisions se criado inline
+            if inline_decisions and os.path.isfile(decisions_path):
+                try:
+                    os.remove(decisions_path)
+                except Exception:
+                    pass
+
+    t = threading.Thread(target=run, daemon=False)
+    _pipeline_thread = t
+    t.start()
+    return jsonify({"started": True, "output": output_path, "output_name": output_name})
+
+
+@app.route("/api/pipeline/auditor/analyze", methods=["POST"])
+def api_auditor_analyze():
+    """
+    Pre-visualiza o impacto das decisoes SEM re-renderizar.
+
+    Body: {"timeline_path": "...", "decisions_path": "..."} ou inline decisions.
+    """
+    data = request.json or {}
+    timeline_path = data.get("timeline_path", "").strip()
+    decisions_path = data.get("decisions_path", "").strip()
+    inline_decisions = data.get("decisions")
+    inline_replacements = data.get("replacements", {})
+
+    if not timeline_path or not os.path.isfile(timeline_path):
+        return jsonify({"error": f"timeline_path invalido: {timeline_path}"}), 400
+
+    if inline_decisions and isinstance(inline_decisions, dict):
+        decisions = {str(k): v for k, v in inline_decisions.items()}
+        replacements = {str(k): v for k, v in inline_replacements.items()}
+    elif decisions_path and os.path.isfile(decisions_path):
+        from core.broll_auditor import load_decisions
+        decisions, replacements = load_decisions(decisions_path)
+    else:
+        return jsonify({"error": "Forneca decisions_path ou decisions inline"}), 400
+
+    try:
+        from core.broll_auditor import load_timeline, analyze_decisions
+        timeline = load_timeline(timeline_path)
+        analysis = analyze_decisions(timeline, decisions, replacements)
+        return jsonify({
+            "ok": True,
+            "total_broll": analysis["total_broll"],
+            "approved": len(analysis["approved"]),
+            "rejected": len(analysis["rejected"]),
+            "replace_manual": len(analysis["replace_manual"]),
+            "replace_auto": len(analysis["replace_auto"]),
+            "unchanged": len(analysis["unchanged"]),
+            "invalid_files": len(analysis["invalid_files"]),
+            "beat_ids": {
+                "approved": analysis["approved"],
+                "rejected": analysis["rejected"],
+                "replace_manual": list(analysis["replace_manual"].keys()),
+                "replace_auto": analysis["replace_auto"],
+                "unchanged": analysis["unchanged"],
+            }
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/pipeline/auditor/load_timeline", methods=["POST"])
+def api_auditor_load_timeline():
+    """Retorna o beat_timeline.json de um output existente."""
+    data = request.json or {}
+    path = data.get("timeline_path", "").strip()
+    if not path or not os.path.isfile(path):
+        # Tenta inferir pelo output_name
+        output_name = data.get("output_name", "").strip()
+        if output_name:
+            inferred = os.path.join(OUTPUT_DIR, output_name.replace(".mp4", "_beat_timeline.json"))
+            if os.path.isfile(inferred):
+                path = inferred
+    if not path or not os.path.isfile(path):
+        return jsonify({"error": "timeline_path nao encontrado"}), 404
+    try:
+        from core.beat_timeline import load_beat_timeline
+        tl = load_beat_timeline(path)
+        return jsonify({"ok": True, "timeline": tl, "path": path})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/clean", methods=["POST"])
 def api_clean():
     try:
