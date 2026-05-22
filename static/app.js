@@ -133,7 +133,98 @@ async function getStrategy(){
   if(!type){alert('Enter channel type');return}
   loading(true,'Building channel strategy...');
   const r=await post('/api/channel_strategy',{channel_type:type,target_audience:audience,language:lang,titles});
-  document.getElementById('strat-result').innerHTML=`<div class="ai-text">${escHtml(r.strategy||'')}</div>`;
+  
+  if(r.error) {
+    document.getElementById('strat-result').innerHTML=`<div class="score-card" style="border-left:3px solid #e94560"><h3 style="color:#e94560">⚠️ Error</h3><p style="font-size:13px;color:#aaa">${escHtml(r.error)}</p></div>`;
+    return;
+  }
+  
+  const d = r.strategy_data || {};
+  let html = `<div class="score-card" style="margin-bottom:16px;border-left:4px solid #FFD700">
+    <h2 style="color:#FFD700;margin-bottom:8px">🧠 Audience Insight</h2>
+    <div style="font-size:14px;color:#ddd;line-height:1.5">${escHtml(d.audience_insight || '')}</div>
+  </div>`;
+  
+  // 1. BEST TITLE STRUCTURES
+  if(d.best_structures && d.best_structures.length) {
+    html += `<div class="niche-card" style="border-left:3px solid #4ecca3"><h3 style="color:#4ecca3;margin-bottom:12px">📐 Best Title Structures</h3>`;
+    d.best_structures.forEach(s => {
+      let ex = (s.example_titles||[]).map(t=>`<li>"${escHtml(t)}"</li>`).join('');
+      html += `<div style="background:#0d1117;padding:12px;border-radius:8px;margin-bottom:8px;border:1px solid #30363d">
+        <div style="font-size:14px;font-weight:bold;color:#fff">${escHtml(s.name)}</div>
+        <div style="font-size:13px;color:#4ecca3;margin:4px 0">${escHtml(s.template)}</div>
+        <div style="font-size:12px;color:#aaa;margin-bottom:6px"><i>Why it works:</i> ${escHtml(s.why_it_works)}</div>
+        <ul style="font-size:12px;color:#ddd;margin-left:16px">${ex}</ul>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  // 2. RECOMMENDED SUBTHEMES
+  if(d.recommended_subthemes && d.recommended_subthemes.length) {
+    html += `<div class="niche-card" style="border-left:3px solid #8b5cf6"><h3 style="color:#8b5cf6;margin-bottom:12px">🔥 Recommended Subthemes</h3>`;
+    d.recommended_subthemes.forEach(s => {
+      let ex = (s.example_titles||[]).map(t=>`<li>"${escHtml(t)}"</li>`).join('');
+      html += `<div style="background:#0d1117;padding:12px;border-radius:8px;margin-bottom:8px;border:1px solid #30363d">
+        <div style="display:flex;justify-content:space-between;align-items:start">
+          <div style="font-size:15px;font-weight:bold;color:#fff">${escHtml(s.name)}</div>
+          <button class="btn-primary" style="font-size:11px;padding:4px 8px" onclick="useInRemix('${escHtml(s.name).replace(/'/g, "\\'")}')">🔀 Use in Remix</button>
+        </div>
+        <div style="font-size:12px;color:#aaa;margin:6px 0"><i>Why it works:</i> ${escHtml(s.why_it_works)}</div>
+        <ul style="font-size:12px;color:#ddd;margin-left:16px">${ex}</ul>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+  
+  // 3. NEW PERSPECTIVES
+  if(d.new_perspectives && d.new_perspectives.length) {
+    html += `<div class="niche-card" style="border-left:3px solid #f59e0b"><h3 style="color:#f59e0b;margin-bottom:12px">💡 Disruptive Perspectives</h3>`;
+    d.new_perspectives.forEach(s => {
+      let ex = (s.example_titles||[]).map(t=>`<li>"${escHtml(t)}"</li>`).join('');
+      html += `<div style="background:#0d1117;padding:12px;border-radius:8px;margin-bottom:8px;border:1px solid #30363d">
+        <div style="font-size:14px;font-weight:bold;color:#fff">${escHtml(s.concept)}</div>
+        <div style="font-size:12px;color:#aaa;margin:4px 0"><i>Why it works:</i> ${escHtml(s.why_it_works)}</div>
+        <ul style="font-size:12px;color:#ddd;margin-left:16px">${ex}</ul>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+  
+  // 4. ADJACENT SUBNICHES
+  if(d.adjacent_subniches && d.adjacent_subniches.length) {
+    html += `<div class="niche-card" style="border-left:3px solid #e94560"><h3 style="color:#e94560;margin-bottom:12px">🔄 Adjacent Pivot Subniches</h3>`;
+    d.adjacent_subniches.forEach(s => {
+      let ex = (s.example_titles||[]).map(t=>`<li>"${escHtml(t)}"</li>`).join('');
+      html += `<div style="background:#0d1117;padding:12px;border-radius:8px;margin-bottom:8px;border:1px solid #30363d">
+        <div style="display:flex;justify-content:space-between;align-items:start">
+          <div style="font-size:15px;font-weight:bold;color:#fff">${escHtml(s.niche_name)}</div>
+          <button class="btn-primary" style="font-size:11px;padding:4px 8px" onclick="useInRemix('${escHtml(s.niche_name).replace(/'/g, "\\'")}')">🔀 Use in Remix</button>
+        </div>
+        <div style="font-size:12px;color:#aaa;margin:6px 0"><i>Crossover reason:</i> ${escHtml(s.crossover_reason)}</div>
+        <ul style="font-size:12px;color:#ddd;margin-left:16px">${ex}</ul>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+  
+  document.getElementById('strat-result').innerHTML = html;
+}
+
+function useInRemix(subniche) {
+  const type = document.getElementById('strat-type').value.trim();
+  const lang = document.getElementById('strat-lang').value;
+  
+  // Pre-fill Remix
+  document.getElementById('remix-niche').value = type;
+  document.getElementById('remix-subniches').value = subniche;
+  document.getElementById('remix-lang').value = lang;
+  
+  // Navigate to Remix
+  showPage('remix');
+  
+  // Auto-trigger scan
+  scanViralStructures();
 }
 
 // BATCH

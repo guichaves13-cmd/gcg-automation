@@ -586,53 +586,58 @@ def api_channel_strategy():
     
     titles_text = "\n".join(f"- {t}" for t in current_titles[:20]) if current_titles else "No titles provided"
     
-    prompt = f"""You are a YouTube growth strategist who has scaled channels from 0 to 1M subscribers.
+    prompt = f"""You are an elite YouTube growth strategist who has scaled channels from 0 to 1M subscribers.
 
-CHANNEL TYPE: {channel_type}
+MAIN THEME/CHANNEL TYPE: {channel_type}
 TARGET AUDIENCE: {target_audience}
 LANGUAGE: {language}
 
 CURRENT TITLES (if any):
 {titles_text}
 
-Provide a COMPLETE channel strategy:
+Provide a COMPLETE, highly specific strategy in JSON format. Do not use generic advice. Be extremely actionable.
+You must provide recommendations in these exact 4 categories:
 
-1. NICHE POSITIONING
-   - What exact micro-niche should this channel own?
-   - What's the unique value proposition?
-   - Name 3 successful reference channels and what they do right
+1. recommended_subthemes: Subthemes within the main theme that are trending and profitable.
+2. new_perspectives: Completely new angles or ways to look at the main theme that disrupt the current market.
+3. adjacent_subniches: Entirely different subniches that have strong audience crossover and high opportunity.
+4. best_structures: The exact viral title formulas that work best for this specific theme.
 
-2. CONTENT PILLARS (4 types of videos to make)
-   For each pillar:
-   - Pillar name
-   - Why it works
-   - 2 example titles (60-100 chars, viral structures)
-   - Expected performance
+Return ONLY a valid JSON object in this format:
+{{
+  "recommended_subthemes": [
+    {{"name": "Subtheme name", "why_it_works": "Psychological reason", "example_titles": ["Title 1", "Title 2"]}}
+  ],
+  "new_perspectives": [
+    {{"concept": "Perspective name", "why_it_works": "Why it stands out", "example_titles": ["Title 1", "Title 2"]}}
+  ],
+  "adjacent_subniches": [
+    {{"niche_name": "Niche name", "crossover_reason": "Why the audience will watch it", "example_titles": ["Title 1", "Title 2"]}}
+  ],
+  "best_structures": [
+    {{"name": "Structure name (e.g. Curiosity Gap)", "template": "The [Adjective] [Topic] That [Action]", "why_it_works": "Reason", "example_titles": ["Title 1", "Title 2"]}}
+  ],
+  "audience_insight": "One powerful paragraph about what this audience secretly wants."
+}}
 
-3. TITLE FORMULA
-   - The 3 best title structures for this niche
-   - 5 power words that work best in this niche
-   - Ideal title length
-
-4. AUDIENCE ANALYSIS
-   - Demographics (age, gender, interests)
-   - Primary pain point / curiosity
-   - What makes them subscribe
-   - Best posting schedule
-
-5. GROWTH ROADMAP
-   - First 10 videos: what to publish
-   - Months 1-3: strategy
-   - Months 3-6: scaling approach
-
-6. TOP 10 VIDEO IDEAS
-   - Full titles (60-100 chars each)
-   - Why each would perform
-
-Be extremely specific. No generic advice. Real actionable strategy."""
+Return ONLY valid JSON. No markdown formatting outside the JSON."""
 
     result = ask_gemini(prompt)
-    return jsonify({"strategy": result, "channel_type": channel_type})
+    
+    if result.startswith("[AI Error"):
+        return jsonify({"error": result})
+        
+    try:
+        cleaned = result.strip()
+        cleaned = re.sub(r'^```json\s*', '', cleaned)
+        cleaned = re.sub(r'^```\s*', '', cleaned)
+        cleaned = re.sub(r'\s*```$', '', cleaned)
+        match = re.search(r'\{.*\}', cleaned, re.DOTALL)
+        strategy_json = json.loads(match.group()) if match else json.loads(cleaned)
+        
+        return jsonify({"strategy_data": strategy_json, "channel_type": channel_type})
+    except Exception as e:
+        return jsonify({"error": f"JSON parse error: {str(e)[:80]}", "raw": result})
 
 # =============================================
 # STRATEGY REMIX ENGINE — Dual Path System
