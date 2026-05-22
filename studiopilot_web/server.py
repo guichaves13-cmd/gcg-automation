@@ -76,6 +76,18 @@ def handle_global_error(error):
 def handle_404(e):
     return jsonify({"error": "Route not found"}), 404
 
+@app.errorhandler(405)
+def handle_405(e):
+    return jsonify({"error": "Method not allowed"}), 405
+
+@app.errorhandler(415)
+def handle_415(e):
+    return jsonify({"error": "Unsupported media type. Send Content-Type: application/json"}), 415
+
+@app.errorhandler(400)
+def handle_400(e):
+    return jsonify({"error": str(e) or "Bad request"}), 400
+
 # ─── Health & Diagnostics API ────────────────────────────────────────────
 
 @app.route("/api/system/health")
@@ -328,8 +340,10 @@ def api_narrate():
     from core.glm_agent import analyze_script
     from core.ai_engine import ask_ai
     from studiopilot_web.script_engine import build_prompt
-    data = request.json
-    topic = data.get("topic","")
+    data = request.json or {}
+    topic = (data.get("topic") or "").strip()
+    if not topic:
+        return jsonify({"error": "Topic is required"}), 400
     lang = data.get("language","English")
     duration = data.get("duration","5 min")
     tone = data.get("tone","Documentary serious")
@@ -513,7 +527,9 @@ def api_pipeline_status():
         active_pipelines = 0
         pipeline_status["running"] = False
         _pipeline_thread = None
-    return jsonify(pipeline_status)
+    resp = dict(pipeline_status)
+    resp["status"] = "running" if pipeline_status.get("running") else "idle"
+    return jsonify(resp)
 
 @app.route("/api/pipeline/stream")
 def api_pipeline_stream():
@@ -1112,11 +1128,13 @@ def api_timeline_save():
 def api_research():
     """Search stock footage from multiple sources."""
     from core.api_keys import load_api_key
-    data = request.json
-    query = data.get("query","")
+    data = request.json or {}
+    query = (data.get("query") or data.get("topic") or "").strip()
+    if not query:
+        return jsonify({"error": "Query is required"}), 400
     sources = data.get("sources",[])
     results = []
-    
+
     if "youtube" in sources:
         try:
             key = load_api_key("youtube")
@@ -1183,12 +1201,14 @@ def api_radar():
     try:
         from core.youtube_api import search_trending
         from datetime import timedelta
-        # Search last 30 days for fresh trends
         month_ago = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
         vids = search_trending(query, key, max_results=20, published_after=month_ago, region=region)
         return jsonify({"results": vids, "total": len(vids)})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        err = str(e)
+        if "API key" in err or "keyInvalid" in err or "400 Client" in err or "403" in err:
+            return jsonify({"error": "YouTube API key inválida."}), 400
+        return jsonify({"error": err}), 500
 
 @app.route("/api/veo3/generate", methods=["POST"])
 def api_veo3_generate():
@@ -1448,9 +1468,12 @@ Generate {count} prompts, one per line."""
         from core.ai_engine import ask_ai
         result = ask_ai(prompt, use_cache=False)
         if result.startswith("["):
-            raise Exception(result)
+            return jsonify({"error": "AI temporarily unavailable. Try again in a moment."}), 503
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        err = str(e)
+        if "unavailable" in err.lower() or "exhausted" in err.lower() or "rate" in err.lower():
+            return jsonify({"error": "AI temporarily unavailable. Try again in a moment."}), 503
+        return jsonify({"error": err}), 500
     
     prompts = [l.strip().lstrip("0123456789.-) ") for l in result.strip().split("\n") if l.strip() and len(l.strip()) > 10]
     
@@ -1567,8 +1590,10 @@ def api_thumbnail_generate():
 @app.route("/api/thumbnail/concepts", methods=["POST"])
 def api_thumbnail_concepts():
     from core.thumbnail_generator import generate_thumbnail_ai
-    data = request.json
-    topic = data.get("topic", "")
+    data = request.json or {}
+    topic = (data.get("topic") or "").strip()
+    if not topic:
+        return jsonify({"error": "Topic is required"}), 400
     count = min(5, int(data.get("count", 3)))
     concepts = generate_thumbnail_ai(topic, count)
     return jsonify({"concepts": concepts})
@@ -1593,7 +1618,8 @@ def api_schedule_add():
         config=data.get("config", {}),
         active=data.get("active", True),
     )
-    return jsonify({"ok": True, "item": item})
+    item_id = item.get("id") if isinstance(item, dict) else None
+    return jsonify({"ok": True, "item": item, "id": item_id})
 
 @app.route("/api/schedule/<int:sid>", methods=["DELETE"])
 def api_schedule_delete(sid):
@@ -1792,7 +1818,9 @@ def api_channels_remove():
 def api_channels_scan():
     from core.api_keys import load_api_key
     data = request.json
-    channel_id = data.get("id", "")
+    channel_id = (data.get("id") or data.get("channel_id") or "").strip()
+    if not channel_id:
+        return jsonify({"error": "Channel ID is required"}), 400
     yt_key = load_api_key("youtube")
     if not yt_key:
         return jsonify({"error": "YouTube API key not configured"}), 400
@@ -2691,28 +2719,43 @@ def _ask_gemini_gcg(prompt, user_api_key=None, max_retries=None, image_b64=None)
 
 # ── Viral structures & emotional words database ───────────────────────────
 _VIRAL_STRUCTURES = {
-    "curiosity_gap":       {"pattern": r"(?:why|how|what|the real reason|the truth|nobody|secret|hidden|no one)", "name": "Curiosity Gap",         "ctr_boost": 1.40},
-    "superlative":         {"pattern": r"(?:most|largest|biggest|deadliest|worst|best|extreme|impossible|insane|craziest)", "name": "Superlative", "ctr_boost": 1.35},
-    "specific_number":     {"pattern": r"(?:\$[\d,.]+|\b\d+\b).*(?:that|which|reason|way|thing|fact|place)",    "name": "Specific Number",         "ctr_boost": 1.30},
-    "permanence":          {"pattern": r"(?:never|forever|always|still|remains|eternal|no longer|ended)",        "name": "Permanence Claim",        "ctr_boost": 1.25},
-    "authority_emotion":   {"pattern": r"(?:scientist|government|nasa|expert|doctor|military|fbi|cia).*(?:hid|warn|afraid|shock|terrif|speechless|panic)", "name": "Authority + Emotion", "ctr_boost": 1.45},
-    "contrast":            {"pattern": r"(?:but|however|yet|despite|instead|actually|turns out|thought.*wrong)",  "name": "Contrast Hook",           "ctr_boost": 1.30},
-    "forbidden":           {"pattern": r"(?:forbidden|banned|illegal|restricted|classified|censored|deleted)",    "name": "Forbidden Content",       "ctr_boost": 1.40},
-    "absolute_negative":   {"pattern": r"(?:never|stop|don't|quit|avoid|ruin|destroy|fail|fake|lie)",            "name": "Absolute Negative",       "ctr_boost": 1.35},
-    "timeline_urgency":    {"pattern": r"(?:in the last|just|finally|minutes|seconds|imminent|too late|now|before it's too late)", "name": "Timeline Urgency", "ctr_boost": 1.30},
-    "antagonist":          {"pattern": r"(?:vs|versus|against|enemy|villain|monster|predator|killer|scam|fraud)", "name": "Antagonist / Conflict",   "ctr_boost": 1.35},
-    "scientific_breakthrough": {"pattern": r"(?:discovered|solved|proved|breakthrough|unlocked|found|revealed)", "name": "Scientific Breakthrough", "ctr_boost": 1.25},
+    "curiosity_gap":       {"pattern": r"\b(?:why|how|what happens|the real reason|the truth about|nobody|no one|nobody knows|secret|hidden|they don't want|they don't tell|what they|you won't believe)\b", "name": "Curiosity Gap",         "ctr_boost": 1.40},
+    "superlative":         {"pattern": r"\b(?:most|largest|biggest|deadliest|worst|best|extreme|impossible|insane|craziest|rarest|greatest|highest|lowest|richest|poorest)\b", "name": "Superlative",        "ctr_boost": 1.35},
+    "specific_number":     {"pattern": r"\b\d+\b",                                                                                                                            "name": "Specific Number",     "ctr_boost": 1.30},
+    "money_number":        {"pattern": r"\$[\d,.]+",                                                                                                                          "name": "Money Hook",          "ctr_boost": 1.32},
+    "permanence":          {"pattern": r"\b(?:never|forever|always|still|remains|eternal|no longer|ended|disappeared|vanished|erased|gone forever)\b",                        "name": "Permanence Claim",    "ctr_boost": 1.25},
+    "authority_emotion":   {"pattern": r"\b(?:scientist|government|nasa|expert|doctor|military|fbi|cia|professor|study|research)\b",                                           "name": "Authority Signal",    "ctr_boost": 1.35},
+    "contrast":            {"pattern": r"\b(?:but|however|yet|despite|instead|actually|turns out|thought|wrong|until|suddenly)\b",                                            "name": "Contrast Hook",       "ctr_boost": 1.28},
+    "forbidden":           {"pattern": r"\b(?:forbidden|banned|illegal|restricted|classified|censored|deleted|suppressed|covered up)\b",                                      "name": "Forbidden Content",   "ctr_boost": 1.42},
+    "absolute_negative":   {"pattern": r"\b(?:never|stop|don't|avoid|ruin|destroy|fail|fake|lie|scam|wrong|disaster|mistake)\b",                                             "name": "Absolute Negative",   "ctr_boost": 1.35},
+    "timeline_urgency":    {"pattern": r"\b(?:just|finally|last|too late|now|before|after|suddenly|overnight|in \d+ days|in \d+ hours|in \d+ minutes)\b",                    "name": "Timeline Urgency",    "ctr_boost": 1.28},
+    "antagonist":          {"pattern": r"\b(?:vs|versus|against|enemy|villain|monster|predator|killer|scam|fraud|trap|threat|danger)\b",                                      "name": "Antagonist/Conflict", "ctr_boost": 1.33},
+    "discovery":           {"pattern": r"\b(?:discovered|solved|proved|breakthrough|unlocked|found|revealed|exposed|uncovered|finally|confirmed)\b",                          "name": "Discovery/Revelation","ctr_boost": 1.27},
+    "nobody_lives_in":     {"pattern": r"\b(?:nobody lives|no one lives|nobody can|no one can|nobody talks|nobody knows|nobody told)\b",                                      "name": "Absolute Exclusion",  "ctr_boost": 1.45},
+    "dark_truth":          {"pattern": r"\b(?:dark truth|dark secret|dark side|dark history|disturbing truth|shocking truth|ugly truth|real truth|terrifying truth)\b",       "name": "Dark Truth",          "ctr_boost": 1.42},
+    "personal_story":      {"pattern": r"\b(?:i tried|i spent|i tested|i found|i discovered|i lost|i survived|i lived|we tried|they tried)\b",                              "name": "Personal Story",      "ctr_boost": 1.30},
+    "place_mystery":       {"pattern": r"\b(?:country|town|city|place|island|mountain|ocean|desert|village|region|state|nation)\b",                                           "name": "Place Hook",          "ctr_boost": 1.20},
 }
 
 _EMOTIONAL_WORDS = {
+    # Score 10 — maximum impact
     "terrifying": 10, "deadly": 10, "forbidden": 10, "brutal": 10, "horrifying": 10,
-    "terrified": 10, "fatal": 10, "doomed": 9, "banned": 10, "chilling": 9, "illegal": 9,
-    "shocking": 8, "insane": 8, "dangerous": 8, "secret": 8, "impossible": 8,
-    "cursed": 8, "savage": 8, "catastrophic": 8, "nightmare": 8, "destroyed": 8,
-    "unstoppable": 8, "speechless": 8, "unbelievable": 7, "hidden": 7, "extreme": 7,
-    "mysterious": 7, "haunted": 7, "abandoned": 7, "genius": 7, "bizarre": 7, "creepy": 7,
+    "terrified": 10, "fatal": 10, "banned": 10, "illegal": 9, "doomed": 9,
+    # Score 8-9 — high impact
+    "chilling": 9, "shocking": 8, "insane": 8, "dangerous": 8, "secret": 8,
+    "impossible": 8, "cursed": 8, "savage": 8, "catastrophic": 8, "nightmare": 8,
+    "destroyed": 8, "unstoppable": 8, "speechless": 8, "exposed": 8, "trapped": 8,
+    # Score 7 — medium-high
+    "unbelievable": 7, "hidden": 7, "extreme": 7, "mysterious": 7, "haunted": 7,
+    "abandoned": 7, "genius": 7, "bizarre": 7, "creepy": 7, "terrifying": 7,
+    "disturbing": 7, "sinister": 7, "shocking": 7, "vanished": 7, "erased": 7,
+    # Score 6 — medium
     "incredible": 6, "ancient": 6, "legendary": 6, "massive": 6, "epic": 6,
-    "weird": 5, "strange": 5, "lost": 6, "unsolved": 6, "dark": 5, "wild": 5,
+    "lost": 6, "unsolved": 6, "dark": 6, "nobody": 6, "no one": 6,
+    "truth": 5, "revealed": 6, "exposed": 6, "classified": 6, "conspiracy": 6,
+    # Score 5 — baseline
+    "weird": 5, "strange": 5, "wild": 5, "real": 4, "actual": 4, "true": 4,
+    "mountain": 4, "ocean": 4, "discovered": 5, "found": 4, "secret": 5,
 }
 
 def _analyze_title_viral(title):
@@ -2723,46 +2766,74 @@ def _analyze_title_viral(title):
     }
     t_lower = title.lower()
     tlen = len(title)
-    if tlen < 40:
-        result["issues"].append("Too short — aim for 70-100 characters for maximum CTR")
-        result["score"] -= 10
+
+    # ── Length scoring (separate bucket, max 15 pts) ──────────────────────
+    if tlen < 35:
+        result["issues"].append("Too short — aim for 60-100 characters for maximum CTR")
+        result["score"] -= 8
     elif tlen < 55:
-        result["issues"].append("Short title — 70-100 chars performs 40% better")
-        result["score"] -= 3
-    elif tlen > 100:
-        result["issues"].append("Too long — YouTube truncates after ~100 chars")
-        result["score"] -= 5
+        result["issues"].append("Short — 60-100 chars performs 40% better")
+        result["score"] -= 2
     elif 75 <= tlen <= 95:
         result["score"] += 15
-    elif 65 <= tlen <= 100:
-        result["score"] += 12
-    elif 55 <= tlen <= 64:
-        result["score"] += 5
-    caps = _re.findall(r'\b[A-Z]{3,}\b', title)
+    elif 60 <= tlen <= 100:
+        result["score"] += 10
+    elif 55 <= tlen <= 59:
+        result["score"] += 4
+    elif tlen > 110:
+        result["issues"].append("Too long — YouTube truncates after ~100 chars on mobile")
+        result["score"] -= 4
+
+    # ── ALL CAPS power words (max 18 pts) ─────────────────────────────────
+    caps = _re.findall(r'\b[A-Z]{2,}\b', title)
+    caps = [c for c in caps if c not in {"IN","OF","THE","AND","TO","A","IS","IT","OR","BY","ON","AT","AS"}]
     if caps:
         result["power_words"] = caps
-        result["score"] += min(len(caps) * 6, 18)
-    elif not _re.search(r'[A-Z]{3,}', title):
-        result["suggestions"].append("Add 1-2 CAPS words for emphasis (e.g., TERRIFYING, NEVER)")
+        result["score"] += min(len(caps) * 7, 18)
+    else:
+        result["suggestions"].append("Add 1-2 CAPS words for emphasis (SHOCKING, NEVER, DARK, etc.)")
+
+    # ── Emotional words (max 25 pts) ──────────────────────────────────────
+    emo_score = 0
     for word, val in _EMOTIONAL_WORDS.items():
         if word in t_lower:
-            result["emotional_words"].append(word)
-            result["score"] += val
+            if word not in result["emotional_words"]:
+                result["emotional_words"].append(word)
+                emo_score += val
+    result["score"] += min(emo_score, 25)
     if not result["emotional_words"]:
-        result["suggestions"].append("Add emotional trigger words (terrifying, deadly, forbidden, etc.)")
+        result["suggestions"].append("Add emotional trigger words (secret, forbidden, deadly, dark, etc.)")
+
+    # ── Viral structures (max 42 pts total) ───────────────────────────────
+    struct_score = 0
     for sid, sdata in _VIRAL_STRUCTURES.items():
         if _re.search(sdata["pattern"], t_lower):
-            result["structures"].append({"id": sid, "name": sdata["name"], "ctr_boost": sdata["ctr_boost"], "desc": ""})
-            result["score"] += int(sdata["ctr_boost"] * 10)
+            result["structures"].append({
+                "id": sid, "name": sdata["name"],
+                "ctr_boost": sdata["ctr_boost"], "desc": ""
+            })
+            struct_score += int((sdata["ctr_boost"] - 1) * 100)   # e.g. 1.40 → 40 pts raw
+    # Cap and normalize: max 42 pts
+    result["score"] += min(struct_score, 42)
     if not result["structures"]:
-        result["suggestions"].append("Use a viral structure: Curiosity Gap, Superlative, or Authority + Emotion")
+        result["suggestions"].append("Use a viral structure: Curiosity Gap, Superlative, or Nobody Lives In")
+
+    # ── Numbers & specifics (+8) ──────────────────────────────────────────
     if _re.search(r'\$?[\d,.]+', title):
         result["score"] += 8
     else:
-        result["suggestions"].append("Consider adding specific numbers ($2.5 Billion, 15 Places, etc.)")
+        result["suggestions"].append("Add specific numbers ($2.5B, 15 Places, 40 Days, etc.)")
+
+    # ── Question mark engagement (+5) ────────────────────────────────────
     if "?" in title:
         result["score"] += 5
-    result["score"] = min(result["score"], 100)
+
+    # ── Parentheses/brackets context boost (+3) ──────────────────────────
+    if _re.search(r'[\(\[\{]', title):
+        result["score"] += 3
+
+    # ── Clamp & grade ────────────────────────────────────────────────────
+    result["score"] = max(0, min(result["score"], 100))
     if result["score"] >= 80:   result["grade"] = "S"
     elif result["score"] >= 65: result["grade"] = "A"
     elif result["score"] >= 50: result["grade"] = "B"
@@ -2811,13 +2882,41 @@ EVERY title MUST be 70-100 characters. Titles under 65 chars = FAILURE.
 Return each line as: [Title] | Thumbnail Concept: [Brief visual idea]
 No explanations. Verify each title is 70+ characters."""
     result = _ask_gemini_gcg(prompt, data.get("ai_api_key"))
+
+    # Detect AI fallback/error text (not actual titles)
+    _fallback_markers = ("temporarily unavailable", "rate limit", "quota", "error", "sorry", "cannot", "unable to", "try again", "api key")
+    result_lower = result.lower()
+    is_fallback = any(m in result_lower for m in _fallback_markers) and len(result.strip().split("\n")) < 5
+
     raw_titles = []
-    for line in result.strip().split("\n"):
-        line = line.strip()
-        if not line: continue
-        line = _re.sub(r'^\d+[\.\)\-\s]+', '', line).strip().strip('"\'')
-        if line and len(line) > 20:
-            raw_titles.append(line)
+    if not is_fallback:
+        for line in result.strip().split("\n"):
+            line = line.strip()
+            if not line: continue
+            line = _re.sub(r'^\d+[\.\)\-\s]+', '', line).strip().strip('"\'')
+            # Skip lines that look like headers or error messages (no pipe separator and very long single line)
+            if line and len(line) > 20 and not any(m in line.lower() for m in ("temporarily", "rate limit", "quota exceeded", "error occurred")):
+                raw_titles.append(line)
+
+    if len(raw_titles) < 5:
+        # Retry with a simpler, more explicit prompt to get numbered list
+        retry_prompt = f"""Generate exactly 15 viral YouTube titles about: {topic}
+Language: {language}
+
+Rules: 70-100 characters each, ALL CAPS 1-2 words, emotional triggers, numbers where natural.
+Format strictly as:
+1. [Title] | Thumbnail Concept: [Brief idea]
+2. [Title] | Thumbnail Concept: [Brief idea]
+...continue to 15"""
+        result2 = _ask_gemini_gcg(retry_prompt, data.get("ai_api_key"))
+        raw_titles = []
+        for line in result2.strip().split("\n"):
+            line = line.strip()
+            if not line: continue
+            line = _re.sub(r'^\d+[\.\)\-\s]+', '', line).strip().strip('"\'')
+            if line and len(line) > 20 and not any(m in line.lower() for m in ("temporarily", "rate limit", "quota exceeded")):
+                raw_titles.append(line)
+
     titles = []
     for line in raw_titles:
         if len(line) < 30: continue
@@ -2832,6 +2931,8 @@ No explanations. Verify each title is 70+ characters."""
             "thumbnail_concept": thumb_concept
         })
     titles.sort(key=lambda x: x["score"], reverse=True)
+    if not titles:
+        return jsonify({"error": "AI unavailable, try again in a moment"}), 503
     return jsonify({"titles": titles, "topic": topic})
 
 @app.route("/api/ti/batch", methods=["POST"])
@@ -3250,7 +3351,10 @@ def ti_newborn_virals():
         newborns.sort(key=lambda x: x["vph"],reverse=True)
         return jsonify({"virals":newborns,"query":query})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        err = str(e)
+        if "API key" in err or "keyInvalid" in err or "400 Client" in err or "403" in err:
+            return jsonify({"error": "YouTube API key inválida."}), 400
+        return jsonify({"error": err}), 500
 
 @app.route("/api/ti/youtube/sync_channels", methods=["POST"])
 def ti_sync_channels():
@@ -3289,7 +3393,10 @@ def ti_sync_channels():
         results.sort(key=lambda x: x["vph"],reverse=True)
         return jsonify({"sync_results": results})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        err = str(e)
+        if "API key" in err or "keyInvalid" in err or "400 Client" in err or "403" in err:
+            return jsonify({"error": "YouTube API key inválida."}), 400
+        return jsonify({"error": err}), 500
 
 @app.route("/api/ti/youtube/save_key", methods=["POST"])
 def ti_save_yt_key():
@@ -3312,7 +3419,13 @@ def ti_yt_channel():
     key = data.get("yt_api_key") or load_api_key("youtube")
     if not key:
         return jsonify({"error": "YouTube API key não configurado. Salve a chave na aba YouTube Scanner."}), 400
-    info = get_channel_info(channel_input, key)
+    try:
+        info = get_channel_info(channel_input, key)
+    except Exception as e:
+        err = str(e)
+        if "API key" in err or "keyInvalid" in err or "400" in err or "403" in err:
+            return jsonify({"error": "YouTube API key inválida. Verifique a chave na aba YouTube Scanner."}), 400
+        return jsonify({"error": err}), 500
     if not info:
         return jsonify({"error": f"Canal não encontrado: {channel_input}"}), 404
     videos = get_channel_videos(info["id"], key, max_videos=int(data.get("max_videos", 30)))
@@ -3357,7 +3470,13 @@ def ti_yt_niche():
         return jsonify({"error": "YouTube API key não configurado"}), 400
     if not query:
         return jsonify({"error": "Nenhuma query fornecida"}), 400
-    result = analyze_niche(query, key, region=region)
+    try:
+        result = analyze_niche(query, key, region=region)
+    except Exception as e:
+        err = str(e)
+        if "API key" in err or "keyInvalid" in err or "400" in err or "403" in err:
+            return jsonify({"error": "YouTube API key inválida."}), 400
+        return jsonify({"error": err}), 500
     return jsonify(result)
 
 @app.route("/api/ti/youtube/trending", methods=["POST"])
@@ -3372,14 +3491,20 @@ def ti_yt_trending():
     key = data.get("yt_api_key") or load_api_key("youtube")
     if not key:
         return jsonify({"error": "YouTube API key não configurado"}), 400
-    if query:
-        week_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ")
-        videos = search_trending(query, key, max_results=25,
-                                 published_after=week_ago, region=region,
-                                 category_id=category or None)
-    else:
-        videos = get_most_popular(key, region=region,
-                                  category_id=category or None, max_results=25)
+    try:
+        if query:
+            week_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            videos = search_trending(query, key, max_results=25,
+                                     published_after=week_ago, region=region,
+                                     category_id=category or None)
+        else:
+            videos = get_most_popular(key, region=region,
+                                      category_id=category or None, max_results=25)
+    except Exception as e:
+        err = str(e)
+        if "API key" in err or "keyInvalid" in err or "400" in err or "403" in err:
+            return jsonify({"error": "YouTube API key inválida."}), 400
+        return jsonify({"error": err}), 500
     return jsonify({"videos": videos, "query": query, "region": region})
 
 @app.route("/api/ti/youtube/compare", methods=["POST"])
@@ -3392,7 +3517,15 @@ def ti_yt_compare():
     key = data.get("yt_api_key") or load_api_key("youtube")
     if not key:
         return jsonify({"error": "YouTube API key não configurado"}), 400
-    results = compare_channels(channels, key)
+    if not channels:
+        return jsonify({"error": "Nenhum canal fornecido"}), 400
+    try:
+        results = compare_channels(channels, key)
+    except Exception as e:
+        err = str(e)
+        if "API key" in err or "keyInvalid" in err or "400" in err or "403" in err:
+            return jsonify({"error": "YouTube API key inválida."}), 400
+        return jsonify({"error": err}), 500
     return jsonify({"comparisons": results})
 
 @app.route("/api/ti/channels/update", methods=["POST"])
