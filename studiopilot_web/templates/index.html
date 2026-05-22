@@ -53,6 +53,15 @@
     <button class="nav-btn" onclick="showPage('ppt-to-video')"><span class="icon">&#x1F4C4;</span>PPT p/ Video<span class="version new">NOVO</span></button>
     <button class="nav-btn" onclick="showPage('auto-mode')"><span class="icon">&#x1F916;</span>Modo Auto<span class="version new">NOVO</span></button>
   </div>
+  <div class="sidebar-section"><div class="sidebar-section-title">TITLE INTELLIGENCE</div>
+    <button class="nav-btn" onclick="showPage('title-intel');tiInitPage('analyzer')"><span class="icon">&#x1F3AF;</span>Viral Analyzer<span class="version new">PRO</span></button>
+    <button class="nav-btn" onclick="showPage('title-intel');tiInitPage('generator')"><span class="icon">&#x26A1;</span>AI Generator<span class="version new">PRO</span></button>
+    <button class="nav-btn" onclick="showPage('title-intel');tiInitPage('subniche')"><span class="icon">&#x1F525;</span>Subniche Finder<span class="version new">PRO</span></button>
+    <button class="nav-btn" onclick="showPage('title-intel');tiInitPage('trends')"><span class="icon">&#x1F4C8;</span>Trend Scanner<span class="version new">PRO</span></button>
+    <button class="nav-btn" onclick="showPage('title-intel');tiInitPage('strategy')"><span class="icon">&#x1F3C6;</span>Channel Strategy<span class="version new">PRO</span></button>
+    <button class="nav-btn" onclick="showPage('title-intel');tiInitPage('vision')"><span class="icon">&#x1F441;</span>Vision Auditor<span class="version new">PRO</span></button>
+    <button class="nav-btn" onclick="showPage('title-intel');tiInitPage('ai-monitor')"><span class="icon">&#x1F9E0;</span>AI Monitor<span class="version new">PRO</span></button>
+  </div>
   <div class="sidebar-footer"><div class="lang">PT-BR</div></div>
 </nav>
 
@@ -1087,6 +1096,325 @@
     <div id="yt-upload-result" style="margin-top:12px"></div>
   </div>
 </div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     TITLE INTELLIGENCE — Full Suite (ported + enhanced from TitlePilot Pro)
+     ═══════════════════════════════════════════════════════════ -->
+<div id="page-title-intel" class="page">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+    <div>
+      <h2 style="display:flex;align-items:center;gap:10px;background:linear-gradient(135deg,var(--accent),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text"><span style="-webkit-text-fill-color:initial">&#x1F3AF;</span> Title Intelligence Pro</h2>
+      <p style="color:var(--dim);margin-top:4px">Engine viral completo — analyse, gere, otimize, audite thumbnails com Gemini Vision</p>
+    </div>
+    <div id="ti-ai-badge" style="padding:6px 14px;border-radius:20px;border:1px solid var(--accent);font-size:11px;cursor:pointer;color:var(--accent)" onclick="tiCheckAiStatus()">&#x1F916; Multi-AI Engine</div>
+  </div>
+
+  <!-- TAB BAR -->
+  <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:16px" id="ti-tabs">
+    <button class="tab-btn ti-tab active" data-titab="analyzer" onclick="tiInitPage('analyzer')">&#x1F4CA; Analyzer</button>
+    <button class="tab-btn ti-tab" data-titab="generator" onclick="tiInitPage('generator')">&#x26A1; Generator</button>
+    <button class="tab-btn ti-tab" data-titab="hook" onclick="tiInitPage('hook')">&#x1FA9D; Hook</button>
+    <button class="tab-btn ti-tab" data-titab="seo" onclick="tiInitPage('seo')">&#x1F50E; SEO</button>
+    <button class="tab-btn ti-tab" data-titab="ab-battle" onclick="tiInitPage('ab-battle')">&#x2694; A/B Battle</button>
+    <button class="tab-btn ti-tab" data-titab="batch" onclick="tiInitPage('batch')">&#x1F4CB; Batch</button>
+    <button class="tab-btn ti-tab" data-titab="subniche" onclick="tiInitPage('subniche')">&#x1F525; Subniche</button>
+    <button class="tab-btn ti-tab" data-titab="trends" onclick="tiInitPage('trends')">&#x1F4C8; Trends</button>
+    <button class="tab-btn ti-tab" data-titab="strategy" onclick="tiInitPage('strategy')">&#x1F3C6; Strategy</button>
+    <button class="tab-btn ti-tab" data-titab="remix" onclick="tiInitPage('remix')">&#x1F500; Remix A/B</button>
+    <button class="tab-btn ti-tab" data-titab="thumb-prompt" onclick="tiInitPage('thumb-prompt')">&#x1F5BC; Thumb Prompts</button>
+    <button class="tab-btn ti-tab" data-titab="vision" onclick="tiInitPage('vision')">&#x1F441; Vision Audit</button>
+    <button class="tab-btn ti-tab" data-titab="youtube" onclick="tiInitPage('youtube')">&#x1F4FA; YT Scanner</button>
+    <button class="tab-btn ti-tab" data-titab="channels" onclick="tiInitPage('channels')">&#x1F4FA; My Channels</button>
+    <button class="tab-btn ti-tab" data-titab="ai-monitor" onclick="tiInitPage('ai-monitor');tiLoadAiMonitor()">&#x1F9E0; AI Monitor</button>
+  </div>
+
+  <!-- ANALYZER -->
+  <div class="ti-panel active" id="ti-analyzer">
+    <div class="section-card">
+      <h3>&#x1F4CA; Viral Title Analyzer</h3>
+      <p style="color:var(--dim);font-size:12px;margin-bottom:12px">Analisa qualquer titulo do YouTube para potencial viral — score, estruturas, palavras emocionais</p>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="ti-analyze-input" class="input" placeholder="Cole um titulo do YouTube aqui..." maxlength="150" style="flex:1" onkeydown="if(event.key==='Enter')tiAnalyzeTitle()">
+        <button class="btn btn-primary" onclick="tiAnalyzeTitle()">&#x1F50D; Analisar</button>
+        <button class="btn btn-purple" onclick="tiDeepAnalyze()">&#x1F9E0; Deep AI</button>
+      </div>
+    </div>
+    <div id="ti-analyze-result" style="margin-top:12px"></div>
+  </div>
+
+  <!-- GENERATOR -->
+  <div class="ti-panel" id="ti-generator">
+    <div class="section-card">
+      <h3>&#x26A1; AI Title Generator — 15 titulos virais</h3>
+      <div class="form-row-2" style="margin-bottom:8px">
+        <div><label>TOPICO</label><input type="text" id="ti-gen-topic" class="input" placeholder="Ex: Dangerous Volcanoes" onkeydown="if(event.key==='Enter')tiGenerateTitles()"></div>
+        <div><label>IDIOMA</label><select id="ti-gen-lang" class="input"><option>English</option><option>Portuguese</option><option>Spanish</option></select></div>
+      </div>
+      <input type="text" id="ti-gen-niche" class="input" placeholder="(Opcional) Contexto do nicho..." style="width:100%;margin-bottom:12px">
+      <button class="btn btn-primary" style="width:100%" onclick="tiGenerateTitles()">&#x26A1; GERAR 15 TITULOS VIRAIS</button>
+    </div>
+    <div id="ti-gen-result" style="margin-top:12px"></div>
+  </div>
+
+  <!-- HOOK ANALYZER -->
+  <div class="ti-panel" id="ti-hook">
+    <div class="section-card">
+      <h3>&#x1FA9D; Hook Analyzer — Predicao de Retencao 30s</h3>
+      <p style="color:var(--dim);font-size:12px;margin-bottom:12px">Cole os primeiros 50-100 palavras do script. Titulos geram cliques, hooks geram views.</p>
+      <textarea id="ti-hook-input" class="input" placeholder="Cole o intro do seu script aqui..." rows="5" style="width:100%;margin-bottom:8px"></textarea>
+      <div class="form-row-2" style="margin-bottom:12px">
+        <div><label>TITULO DO VIDEO</label><input type="text" id="ti-hook-title" class="input" placeholder="Titulo do video (contexto crucial)"></div>
+        <div><label>IDIOMA</label><select id="ti-hook-lang" class="input"><option>English</option><option>Portuguese</option><option>Spanish</option></select></div>
+      </div>
+      <button class="btn btn-primary" style="width:100%" onclick="tiAnalyzeHook()">&#x1FA9D; ANALISAR RETENCAO 30s</button>
+    </div>
+    <div id="ti-hook-result" style="margin-top:12px"></div>
+  </div>
+
+  <!-- SEO OPTIMIZER -->
+  <div class="ti-panel" id="ti-seo">
+    <div class="section-card">
+      <h3>&#x1F50E; SEO & Description Optimizer</h3>
+      <div class="form-row-2" style="margin-bottom:8px">
+        <div><label>TITULO DO VIDEO</label><input type="text" id="ti-seo-title" class="input" placeholder="Titulo final do seu video"></div>
+        <div><label>IDIOMA</label><select id="ti-seo-lang" class="input"><option>English</option><option>Portuguese</option><option>Spanish</option></select></div>
+      </div>
+      <textarea id="ti-seo-context" class="input" placeholder="Descreva sobre o que e o video ou cole o hook/intro..." rows="4" style="width:100%;margin-bottom:12px"></textarea>
+      <button class="btn btn-primary" style="width:100%" onclick="tiGenerateSEO()">&#x1F50E; GERAR PACOTE SEO COMPLETO</button>
+    </div>
+    <div id="ti-seo-result" style="margin-top:12px"></div>
+  </div>
+
+  <!-- A/B BATTLE -->
+  <div class="ti-panel" id="ti-ab-battle">
+    <div class="section-card">
+      <h3>&#x2694; A/B Battle Simulator — Algoritmo 2026</h3>
+      <p style="color:var(--dim);font-size:12px;margin-bottom:12px">Dois titulos entram. O simulador declara o vencedor + diferenca de CTR baseada em psicologia.</p>
+      <div class="form-row-2" style="margin-bottom:8px">
+        <div><label>TITULO A</label><input type="text" id="ti-battle-a" class="input" placeholder="Ex: Why 90% of channels fail"></div>
+        <div><label>TITULO B</label><input type="text" id="ti-battle-b" class="input" placeholder="Ex: The dark truth about YouTube"></div>
+      </div>
+      <select id="ti-battle-lang" class="input" style="width:100%;margin-bottom:12px"><option>English</option><option>Portuguese</option><option>Spanish</option></select>
+      <button class="btn btn-primary" style="width:100%" onclick="tiRunBattle()">&#x2694; SIMULAR BATALHA</button>
+    </div>
+    <div id="ti-battle-result" style="margin-top:12px"></div>
+  </div>
+
+  <!-- BATCH ANALYSIS -->
+  <div class="ti-panel" id="ti-batch">
+    <div class="section-card">
+      <h3>&#x1F4CB; Batch Title Analysis — Analise em massa</h3>
+      <textarea id="ti-batch-input" class="input" placeholder="Cole titulos aqui (um por linha)..." rows="8" style="width:100%;margin-bottom:12px"></textarea>
+      <button class="btn btn-primary" style="width:100%" onclick="tiBatchAnalyze()">&#x1F4CA; ANALISAR TODOS</button>
+    </div>
+    <div id="ti-batch-result" style="margin-top:12px"></div>
+  </div>
+
+  <!-- SUBNICHE FINDER -->
+  <div class="ti-panel" id="ti-subniche">
+    <div class="section-card">
+      <h3>&#x1F525; Subniche Finder — Blue Ocean Strategy</h3>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+        <select id="ti-sub-theme" class="input" style="flex:2">
+          <option value="">Todos os Temas (Auto-Discover)</option>
+          <option value="History">History &amp; Ancient Civilizations</option>
+          <option value="Ocean">Ocean &amp; Deep Sea</option>
+          <option value="Space">Space &amp; Universe</option>
+          <option value="True Crime">True Crime &amp; Mysteries</option>
+          <option value="Construction">Megaprojects &amp; Construction</option>
+          <option value="Health">Health &amp; Psychology</option>
+          <option value="Finance">Finance &amp; Wealth</option>
+        </select>
+        <input type="text" id="ti-sub-custom" class="input" placeholder="Ou digite um tema customizado..." style="flex:2">
+        <select id="ti-sub-lang" class="input" style="flex:1"><option>English</option><option>Portuguese</option><option>Spanish</option></select>
+        <button class="btn btn-primary" onclick="tiFindSubniches()">&#x1F50D; Buscar</button>
+      </div>
+    </div>
+    <div id="ti-sub-result" style="margin-top:12px"></div>
+  </div>
+
+  <!-- TREND SCANNER -->
+  <div class="ti-panel" id="ti-trends">
+    <div class="section-card">
+      <h3>&#x1F4C8; Trend Scanner — Tendencias do YouTube</h3>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <select id="ti-trend-cat" class="input">
+          <option value="all">Todas as Categorias</option>
+          <option value="documentary">Documentarios</option>
+          <option value="science">Ciencia</option>
+          <option value="history">Historia</option>
+          <option value="nature">Natureza</option>
+          <option value="health">Saude</option>
+          <option value="technology">Tecnologia</option>
+          <option value="true crime">True Crime</option>
+        </select>
+        <select id="ti-trend-lang" class="input"><option>English</option><option>Portuguese</option><option>Spanish</option></select>
+        <button class="btn btn-primary" onclick="tiScanTrends()">&#x1F4C8; Escanear</button>
+      </div>
+    </div>
+    <div id="ti-trend-result" style="margin-top:12px"></div>
+  </div>
+
+  <!-- CHANNEL STRATEGY -->
+  <div class="ti-panel" id="ti-strategy">
+    <div class="section-card">
+      <h3>&#x1F3C6; Channel Strategy — Masterclass Completa</h3>
+      <input type="text" id="ti-strat-type" class="input" placeholder="Tipo de canal (ex: Ocean Documentary, Health Tips)" style="width:100%;margin-bottom:8px">
+      <input type="text" id="ti-strat-audience" class="input" placeholder="Publico alvo (ex: 25-45 anos interessados em natureza)" style="width:100%;margin-bottom:8px">
+      <select id="ti-strat-lang" class="input" style="width:100%;margin-bottom:8px"><option>English</option><option>Portuguese</option><option>Spanish</option></select>
+      <textarea id="ti-strat-titles" class="input" placeholder="Cole seus titulos atuais (um por linha) para analise de DNA..." rows="4" style="width:100%;margin-bottom:12px"></textarea>
+      <button class="btn btn-primary" style="width:100%" onclick="tiGetStrategy()">&#x1F3C6; GERAR ESTRATEGIA MASTERCLASS</button>
+    </div>
+    <div id="ti-strat-result" style="margin-top:12px"></div>
+  </div>
+
+  <!-- STRATEGY REMIX -->
+  <div class="ti-panel" id="ti-remix">
+    <div class="section-card">
+      <h3>&#x1F500; Strategy Remix — Caminho A/B Psicologico</h3>
+      <p style="color:var(--dim);font-size:12px;margin-bottom:12px">Gera dois angulos emocionais completamente diferentes para o mesmo topico.</p>
+      <div class="form-row-2" style="margin-bottom:8px">
+        <div><label>TOPICO</label><input type="text" id="ti-remix-topic" class="input" placeholder="Ex: The deepest hole on earth"></div>
+        <div><label>IDIOMA</label><select id="ti-remix-lang" class="input"><option>English</option><option>Portuguese</option><option>Spanish</option></select></div>
+      </div>
+      <div class="form-row-2" style="margin-bottom:12px">
+        <div><label>CAMINHO A</label><input type="text" id="ti-remix-a" class="input" placeholder="Ex: Fear &amp; Danger" value="Fear &amp; Danger"></div>
+        <div><label>CAMINHO B</label><input type="text" id="ti-remix-b" class="input" placeholder="Ex: Money &amp; Corruption" value="Money &amp; Corruption"></div>
+      </div>
+      <button class="btn btn-primary" style="width:100%" onclick="tiGenerateRemix()">&#x1F500; GERAR ESTRATEGIA A/B</button>
+    </div>
+    <div id="ti-remix-result" style="margin-top:12px"></div>
+  </div>
+
+  <!-- THUMBNAIL PROMPT GENERATOR -->
+  <div class="ti-panel" id="ti-thumb-prompt">
+    <div class="section-card">
+      <h3>&#x1F5BC; Thumbnail Prompt Generator — Midjourney/Ideogram v6</h3>
+      <input type="text" id="ti-thumb-title" class="input" placeholder="Qual e o titulo final do seu video?" style="width:100%;margin-bottom:12px">
+      <button class="btn btn-primary" style="width:100%" onclick="tiGenerateThumbs()">&#x1F3A8; GERAR 3 CONCEITOS DE THUMBNAIL</button>
+    </div>
+    <div id="ti-thumb-result" style="margin-top:12px"></div>
+  </div>
+
+  <!-- VISION AUDITOR -->
+  <div class="ti-panel" id="ti-vision">
+    <div class="section-card">
+      <h3>&#x1F441; AI Vision Thumbnail Auditor — Gemini Pro Vision</h3>
+      <p style="color:var(--dim);font-size:12px;margin-bottom:12px">Envie sua thumbnail e deixe o Gemini analisar brutalmente para falhas de CTR.</p>
+      <div style="border:2px dashed var(--border);border-radius:var(--radius);text-align:center;padding:32px;margin-bottom:12px" id="ti-vision-dropzone">
+        <input type="file" id="ti-vision-upload" accept="image/*" style="display:none" onchange="tiPreviewVisionImage(event)">
+        <label for="ti-vision-upload" style="cursor:pointer;display:block">
+          <div style="font-size:40px;margin-bottom:12px">&#x1F4E5;</div>
+          <h3 style="margin-bottom:8px">Clique para enviar Thumbnail</h3>
+          <p style="color:var(--dim);font-size:12px">JPG, PNG (Max 5MB)</p>
+        </label>
+        <img id="ti-vision-preview" style="max-width:100%;max-height:300px;border-radius:var(--radius);margin-top:16px;display:none">
+      </div>
+      <input type="text" id="ti-vision-title" class="input" placeholder="Contexto: Qual e o titulo exato deste video?" style="width:100%;margin-bottom:12px">
+      <button class="btn btn-purple" style="width:100%" onclick="tiAuditThumbnail()">&#x1F441; EXECUTAR VISION AUDIT</button>
+    </div>
+    <div id="ti-vision-result" style="margin-top:12px"></div>
+  </div>
+
+  <!-- YOUTUBE SCANNER -->
+  <div class="ti-panel" id="ti-youtube">
+    <div class="section-card" style="margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:11px;color:var(--dim)">&#x1F511; YouTube API Key:</span>
+        <input type="password" id="ti-yt-key" class="input" placeholder="Cole YouTube Data API key..." style="flex:1;font-size:12px">
+        <button class="btn btn-primary" onclick="tiSaveYtKey()" style="padding:6px 14px">&#x1F4BE; Salvar</button>
+        <span id="ti-yt-key-status" style="font-size:11px;color:var(--green)"></span>
+      </div>
+    </div>
+    <div style="display:flex;gap:4px;margin-bottom:16px;flex-wrap:wrap">
+      <button class="tab-btn ti-yt-tab active" data-tiyttab="ti-yt-channel" onclick="tiShowYtTab('ti-yt-channel')">&#x1F4CA; Channel Analyzer</button>
+      <button class="tab-btn ti-yt-tab" data-tiyttab="ti-yt-niche" onclick="tiShowYtTab('ti-yt-niche')">&#x1F3AF; Niche Deep Dive</button>
+      <button class="tab-btn ti-yt-tab" data-tiyttab="ti-yt-trending" onclick="tiShowYtTab('ti-yt-trending')">&#x1F525; Trending Now</button>
+      <button class="tab-btn ti-yt-tab" data-tiyttab="ti-yt-newborn" onclick="tiShowYtTab('ti-yt-newborn')">&#x1F680; Newborn Virals</button>
+      <button class="tab-btn ti-yt-tab" data-tiyttab="ti-yt-compare" onclick="tiShowYtTab('ti-yt-compare')">&#x2694; Compare</button>
+      <button class="tab-btn ti-yt-tab" data-tiyttab="ti-yt-saved" onclick="tiShowYtTab('ti-yt-saved');tiLoadSavedChannels()">&#x1F4BE; Radar</button>
+    </div>
+    <div class="ti-yt-panel active" id="ti-yt-channel">
+      <div style="display:flex;gap:8px"><input type="text" id="ti-yt-ch-input" class="input" placeholder="@handle, URL ou ID do canal" style="flex:1" onkeydown="if(event.key==='Enter')tiScanChannel()"><button class="btn btn-primary" onclick="tiScanChannel()">&#x1F50D; Scan</button></div>
+      <div id="ti-yt-ch-result" style="margin-top:12px"></div>
+    </div>
+    <div class="ti-yt-panel" id="ti-yt-niche">
+      <div style="display:flex;gap:8px">
+        <input type="text" id="ti-yt-niche-q" class="input" placeholder="Query do nicho (ex: dangerous roads documentary)" style="flex:2" onkeydown="if(event.key==='Enter')tiScanNiche()">
+        <select id="ti-yt-niche-region" class="input"><option value="US">&#x1F1FA;&#x1F1F8; US</option><option value="BR">&#x1F1E7;&#x1F1F7; BR</option><option value="GB">&#x1F1EC;&#x1F1E7; UK</option><option value="ES">&#x1F1EA;&#x1F1F8; ES</option><option value="MX">&#x1F1F2;&#x1F1FD; MX</option></select>
+        <button class="btn btn-primary" onclick="tiScanNiche()">&#x1F3AF; Analisar</button>
+      </div>
+      <div id="ti-yt-niche-result" style="margin-top:12px"></div>
+    </div>
+    <div class="ti-yt-panel" id="ti-yt-trending">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <input type="text" id="ti-yt-trend-q" class="input" placeholder="Query (vazio = trending geral)" style="flex:2">
+        <select id="ti-yt-trend-region" class="input"><option value="US">&#x1F1FA;&#x1F1F8; US</option><option value="BR">&#x1F1E7;&#x1F1F7; BR</option><option value="GB">&#x1F1EC;&#x1F1E7; UK</option></select>
+        <select id="ti-yt-trend-cat" class="input"><option value="">Todas</option><option value="24">Entertainment</option><option value="27">Education</option><option value="28">Science</option><option value="25">News</option></select>
+        <button class="btn btn-primary" onclick="tiScanTrending()">&#x1F525; Scan</button>
+      </div>
+      <div id="ti-yt-trend-result" style="margin-top:12px"></div>
+    </div>
+    <div class="ti-yt-panel" id="ti-yt-newborn">
+      <div style="display:flex;gap:8px">
+        <input type="text" id="ti-yt-newborn-q" class="input" placeholder="Tema ou nicho (ex: ocean, construcao, espaco)" style="flex:1">
+        <button class="btn btn-primary" onclick="tiScanNewbornVirals()">&#x1F680; Scan Newborn Virals</button>
+      </div>
+      <div id="ti-yt-newborn-result" style="margin-top:12px"></div>
+    </div>
+    <div class="ti-yt-panel" id="ti-yt-compare">
+      <textarea id="ti-yt-compare-input" class="input" placeholder="@handles ou IDs (um por linha, max 5)" rows="4" style="width:100%;margin-bottom:8px"></textarea>
+      <button class="btn btn-primary" style="width:100%" onclick="tiCompareChannels()">&#x2694; COMPARAR CANAIS</button>
+      <div id="ti-yt-compare-result" style="margin-top:12px"></div>
+    </div>
+    <div class="ti-yt-panel" id="ti-yt-saved">
+      <div id="ti-yt-radar-result" style="margin-bottom:16px"></div>
+      <div id="ti-yt-saved-list"></div>
+    </div>
+  </div>
+
+  <!-- MY CHANNELS (Title Intelligence) -->
+  <div class="ti-panel" id="ti-channels">
+    <div class="section-card" style="margin-bottom:16px">
+      <h3>&#x2795; Adicionar / Atualizar Canal</h3>
+      <div class="form-row-2" style="margin-bottom:8px">
+        <div><label>NOME</label><input type="text" id="ti-ch-name" class="input" placeholder="Nome do canal"></div>
+        <div><label>URL</label><input type="text" id="ti-ch-url" class="input" placeholder="YouTube URL ou @handle"></div>
+      </div>
+      <div class="form-row-2" style="margin-bottom:8px">
+        <div><label>NICHO</label><input type="text" id="ti-ch-niche" class="input" placeholder="Ex: Ocean Documentary"></div>
+        <div><label>MICRO-NICHO</label><input type="text" id="ti-ch-micro" class="input" placeholder="Ex: Impossible Bridges"></div>
+      </div>
+      <div class="form-row-2" style="margin-bottom:8px">
+        <div><label>SUBNICHOS</label><input type="text" id="ti-ch-subniches" class="input" placeholder="Separados por virgula"></div>
+        <div><label>KEYWORDS</label><input type="text" id="ti-ch-keywords" class="input" placeholder="Separadas por virgula"></div>
+      </div>
+      <textarea id="ti-ch-titles" class="input" placeholder="Seus titulos de video (um por linha) — para analise de DNA" rows="3" style="width:100%;margin:4px 0"></textarea>
+      <textarea id="ti-ch-structures" class="input" placeholder="Estruturas de titulos de referencia (um por linha)&#10;Ex: Why Nobody Lives In [place]" rows="3" style="width:100%;margin:4px 0"></textarea>
+      <textarea id="ti-ch-trends" class="input" placeholder="Temas trending identificados (um por linha)&#10;Ex: Construction, Underground bunkers" rows="2" style="width:100%;margin:4px 0 12px"></textarea>
+      <button class="btn btn-primary" onclick="tiAddChannel()">&#x2795; Salvar Canal</button>
+    </div>
+    <div id="ti-channels-list"></div>
+    <div id="ti-channel-analysis" style="margin-top:12px"></div>
+  </div>
+
+  <!-- AI MONITOR -->
+  <div class="ti-panel" id="ti-ai-monitor">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:16px">
+      <div class="section-card" style="text-align:center"><div style="font-size:28px;font-weight:800" id="ti-mon-health">---</div><div style="font-size:11px;color:var(--dim)">System Health</div></div>
+      <div class="section-card" style="text-align:center"><div style="font-size:28px;font-weight:800;color:var(--green)" id="ti-mon-avail">-/-</div><div style="font-size:11px;color:var(--dim)">Providers Online</div></div>
+      <div class="section-card" style="text-align:center"><div style="font-size:28px;font-weight:800;color:var(--yellow)" id="ti-mon-calls">0</div><div style="font-size:11px;color:var(--dim)">Total AI Calls</div></div>
+      <div class="section-card" style="text-align:center"><div style="font-size:28px;font-weight:800;color:var(--purple)" id="ti-mon-cache">0</div><div style="font-size:11px;color:var(--dim)">Cache Hits</div></div>
+    </div>
+    <div class="section-card" style="margin-bottom:12px"><h3>&#x1F4E1; Provider Status</h3><div id="ti-mon-providers" style="display:grid;gap:8px;margin-top:12px"></div></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" onclick="tiLoadAiMonitor()">&#x1F504; Refresh</button>
+      <button class="btn" style="background:var(--red)" onclick="tiResetAiEngine()">&#x26A0; Reset Cooldowns</button>
+    </div>
+    <div id="ti-mon-log" style="margin-top:12px;font-size:12px;color:var(--dim)"></div>
+  </div>
+</div>
+<!-- END TITLE INTELLIGENCE -->
 
 <!-- TOAST -->
 <div id="toast" class="toast"></div>

@@ -2662,6 +2662,745 @@ def api_screen_recorder_convert():
         return jsonify({"error": str(e)}), 500
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+#  TITLE INTELLIGENCE ENGINE — Viral Analysis + AI Tools (ported from TitlePilot Pro)
+# ═══════════════════════════════════════════════════════════════════════════
+import re as _re
+import math as _math
+from collections import Counter as _Counter
+
+# ── AI helper (wraps core.ai_engine with image support) ──────────────────
+def _ask_gemini_gcg(prompt, user_api_key=None, max_retries=None, image_b64=None):
+    """Unified Gemini call with multi-model failover and optional Vision."""
+    try:
+        from core.ai_engine import ask_ai as _ask_ai, get_model_status, clear_cooldowns
+        from core.api_keys import load_api_key
+        key = user_api_key if (user_api_key and len(str(user_api_key)) > 10) else load_api_key("google_ai")
+        return _ask_ai(prompt, api_key=key or None, max_retries=max_retries, image_b64=image_b64)
+    except Exception as e:
+        # Fallback: direct google-genai
+        try:
+            from core.api_keys import load_api_key
+            from google import genai
+            k = load_api_key("google_ai")
+            c = genai.Client(api_key=k)
+            r = c.models.generate_content(model="gemini-2.0-flash", contents=prompt)
+            return r.text
+        except Exception as e2:
+            raise RuntimeError(f"AI unavailable: {e} | {e2}")
+
+# ── Viral structures & emotional words database ───────────────────────────
+_VIRAL_STRUCTURES = {
+    "curiosity_gap":       {"pattern": r"(?:why|how|what|the real reason|the truth|nobody|secret|hidden|no one)", "name": "Curiosity Gap",         "ctr_boost": 1.40},
+    "superlative":         {"pattern": r"(?:most|largest|biggest|deadliest|worst|best|extreme|impossible|insane|craziest)", "name": "Superlative", "ctr_boost": 1.35},
+    "specific_number":     {"pattern": r"(?:\$[\d,.]+|\b\d+\b).*(?:that|which|reason|way|thing|fact|place)",    "name": "Specific Number",         "ctr_boost": 1.30},
+    "permanence":          {"pattern": r"(?:never|forever|always|still|remains|eternal|no longer|ended)",        "name": "Permanence Claim",        "ctr_boost": 1.25},
+    "authority_emotion":   {"pattern": r"(?:scientist|government|nasa|expert|doctor|military|fbi|cia).*(?:hid|warn|afraid|shock|terrif|speechless|panic)", "name": "Authority + Emotion", "ctr_boost": 1.45},
+    "contrast":            {"pattern": r"(?:but|however|yet|despite|instead|actually|turns out|thought.*wrong)",  "name": "Contrast Hook",           "ctr_boost": 1.30},
+    "forbidden":           {"pattern": r"(?:forbidden|banned|illegal|restricted|classified|censored|deleted)",    "name": "Forbidden Content",       "ctr_boost": 1.40},
+    "absolute_negative":   {"pattern": r"(?:never|stop|don't|quit|avoid|ruin|destroy|fail|fake|lie)",            "name": "Absolute Negative",       "ctr_boost": 1.35},
+    "timeline_urgency":    {"pattern": r"(?:in the last|just|finally|minutes|seconds|imminent|too late|now|before it's too late)", "name": "Timeline Urgency", "ctr_boost": 1.30},
+    "antagonist":          {"pattern": r"(?:vs|versus|against|enemy|villain|monster|predator|killer|scam|fraud)", "name": "Antagonist / Conflict",   "ctr_boost": 1.35},
+    "scientific_breakthrough": {"pattern": r"(?:discovered|solved|proved|breakthrough|unlocked|found|revealed)", "name": "Scientific Breakthrough", "ctr_boost": 1.25},
+}
+
+_EMOTIONAL_WORDS = {
+    "terrifying": 10, "deadly": 10, "forbidden": 10, "brutal": 10, "horrifying": 10,
+    "terrified": 10, "fatal": 10, "doomed": 9, "banned": 10, "chilling": 9, "illegal": 9,
+    "shocking": 8, "insane": 8, "dangerous": 8, "secret": 8, "impossible": 8,
+    "cursed": 8, "savage": 8, "catastrophic": 8, "nightmare": 8, "destroyed": 8,
+    "unstoppable": 8, "speechless": 8, "unbelievable": 7, "hidden": 7, "extreme": 7,
+    "mysterious": 7, "haunted": 7, "abandoned": 7, "genius": 7, "bizarre": 7, "creepy": 7,
+    "incredible": 6, "ancient": 6, "legendary": 6, "massive": 6, "epic": 6,
+    "weird": 5, "strange": 5, "lost": 6, "unsolved": 6, "dark": 5, "wild": 5,
+}
+
+def _analyze_title_viral(title):
+    result = {
+        "title": title, "length": len(title), "words": len(title.split()),
+        "score": 0, "structures": [], "emotional_words": [], "power_words": [],
+        "issues": [], "suggestions": [],
+    }
+    t_lower = title.lower()
+    tlen = len(title)
+    if tlen < 40:
+        result["issues"].append("Too short — aim for 70-100 characters for maximum CTR")
+        result["score"] -= 10
+    elif tlen < 55:
+        result["issues"].append("Short title — 70-100 chars performs 40% better")
+        result["score"] -= 3
+    elif tlen > 100:
+        result["issues"].append("Too long — YouTube truncates after ~100 chars")
+        result["score"] -= 5
+    elif 75 <= tlen <= 95:
+        result["score"] += 15
+    elif 65 <= tlen <= 100:
+        result["score"] += 12
+    elif 55 <= tlen <= 64:
+        result["score"] += 5
+    caps = _re.findall(r'\b[A-Z]{3,}\b', title)
+    if caps:
+        result["power_words"] = caps
+        result["score"] += min(len(caps) * 6, 18)
+    elif not _re.search(r'[A-Z]{3,}', title):
+        result["suggestions"].append("Add 1-2 CAPS words for emphasis (e.g., TERRIFYING, NEVER)")
+    for word, val in _EMOTIONAL_WORDS.items():
+        if word in t_lower:
+            result["emotional_words"].append(word)
+            result["score"] += val
+    if not result["emotional_words"]:
+        result["suggestions"].append("Add emotional trigger words (terrifying, deadly, forbidden, etc.)")
+    for sid, sdata in _VIRAL_STRUCTURES.items():
+        if _re.search(sdata["pattern"], t_lower):
+            result["structures"].append({"id": sid, "name": sdata["name"], "ctr_boost": sdata["ctr_boost"], "desc": ""})
+            result["score"] += int(sdata["ctr_boost"] * 10)
+    if not result["structures"]:
+        result["suggestions"].append("Use a viral structure: Curiosity Gap, Superlative, or Authority + Emotion")
+    if _re.search(r'\$?[\d,.]+', title):
+        result["score"] += 8
+    else:
+        result["suggestions"].append("Consider adding specific numbers ($2.5 Billion, 15 Places, etc.)")
+    if "?" in title:
+        result["score"] += 5
+    result["score"] = min(result["score"], 100)
+    if result["score"] >= 80:   result["grade"] = "S"
+    elif result["score"] >= 65: result["grade"] = "A"
+    elif result["score"] >= 50: result["grade"] = "B"
+    elif result["score"] >= 35: result["grade"] = "C"
+    elif result["score"] >= 20: result["grade"] = "D"
+    else:                        result["grade"] = "F"
+    return result
+
+# ── TITLE INTELLIGENCE ROUTES ─────────────────────────────────────────────
+
+@app.route("/api/ti/analyze", methods=["POST"])
+def ti_analyze():
+    data = request.json or {}
+    title = data.get("title", "")
+    if not title:
+        return jsonify({"error": "No title provided"}), 400
+    return jsonify(_analyze_title_viral(title))
+
+@app.route("/api/ti/deep_analysis", methods=["POST"])
+def ti_deep_analysis():
+    data = request.json or {}
+    title = data.get("title", "")
+    basic = _analyze_title_viral(title)
+    prompt = f"""You are the world's #1 YouTube title optimization expert.
+TITLE: "{title}"
+Provide a COMPREHENSIVE analysis covering: First Impression, Mental Image Test, Click Trigger, Emotional Hook (score 1-10), Specificity Score (1-10), Competition Check, Thumbnail Compatibility, 3 Improved Versions (60-100 chars), Main Weakness, and Viral Verdict.
+Be brutally honest and specific. No generic advice."""
+    basic["ai_deep_analysis"] = _ask_gemini_gcg(prompt, data.get("ai_api_key"))
+    return jsonify(basic)
+
+@app.route("/api/ti/generate", methods=["POST"])
+def ti_generate():
+    data = request.json or {}
+    topic = data.get("topic", "")[:500]
+    language = data.get("language", "English")[:50]
+    niche = data.get("niche", "")[:300]
+    prompt = f"""You are the #1 YouTube title engineer. You've studied every 100M+ view viral video.
+TOPIC: {topic}
+LANGUAGE: {language}
+{"NICHE CONTEXT: " + niche if niche else ""}
+Generate exactly 15 EXTREMELY viral YouTube titles (70-95 characters each).
+MANDATORY: 1-2 ALL CAPS words per title. Emotional triggers. Specific numbers.
+EVERY title MUST be 70-100 characters. Titles under 65 chars = FAILURE.
+Return each line as: [Title] | Thumbnail Concept: [Brief visual idea]
+No explanations. Verify each title is 70+ characters."""
+    result = _ask_gemini_gcg(prompt, data.get("ai_api_key"))
+    raw_titles = []
+    for line in result.strip().split("\n"):
+        line = line.strip()
+        if not line: continue
+        line = _re.sub(r'^\d+[\.\)\-\s]+', '', line).strip().strip('"\'')
+        if line and len(line) > 20:
+            raw_titles.append(line)
+    titles = []
+    for line in raw_titles:
+        if len(line) < 30: continue
+        parts = line.split("| Thumbnail Concept:")
+        actual_title = parts[0].strip()
+        thumb_concept = parts[1].strip() if len(parts) > 1 else ""
+        analysis = _analyze_title_viral(actual_title)
+        titles.append({
+            "title": actual_title, "length": len(actual_title),
+            "score": analysis["score"], "grade": analysis["grade"],
+            "structures": [s["name"] for s in analysis["structures"]],
+            "thumbnail_concept": thumb_concept
+        })
+    titles.sort(key=lambda x: x["score"], reverse=True)
+    return jsonify({"titles": titles, "topic": topic})
+
+@app.route("/api/ti/batch", methods=["POST"])
+def ti_batch():
+    data = request.json or {}
+    titles = data.get("titles", [])
+    results = [_analyze_title_viral(t) for t in titles if t.strip()]
+    if not results:
+        return jsonify({"error": "No titles"}), 400
+    scores = [r["score"] for r in results]
+    struct_count = _Counter()
+    word_freq = _Counter()
+    skip = {"the","a","an","is","in","on","of","and","to","that","this","for","with","are","was"}
+    for r in results:
+        for s in r["structures"]: struct_count[s["name"]] += 1
+        for w in r["title"].lower().split():
+            w = w.strip(".,!?;:'\"()-[]|")
+            if w and len(w) > 2 and w not in skip: word_freq[w] += 1
+    return jsonify({
+        "count": len(results), "avg_score": round(sum(scores)/len(scores), 1),
+        "best": max(results, key=lambda r: r["score"]),
+        "worst": min(results, key=lambda r: r["score"]),
+        "structures": dict(struct_count.most_common(10)),
+        "top_words": dict(word_freq.most_common(25)),
+        "results": sorted(results, key=lambda r: r["score"], reverse=True),
+    })
+
+@app.route("/api/ti/ab_battle", methods=["POST"])
+def ti_ab_battle():
+    data = request.json or {}
+    title_a = data.get("title_a", "")[:300]
+    title_b = data.get("title_b", "")[:300]
+    language = data.get("language", "English")[:50]
+    if not title_a or not title_b:
+        return jsonify({"error": "Both titles required"}), 400
+    prompt = f"""You are the ultimate 2026 YouTube Algorithm Simulator.
+Two titles are fighting for impressions. Evaluate head-to-head based on CTR psychological triggers (Curiosity Gap, Negative Framing, FOMO, Authority, Specific Data).
+Title A: "{title_a}"
+Title B: "{title_b}"
+Language: {language}
+Output MUST be valid JSON (no markdown):
+{{"winner":"A or B","ctr_delta":"+X% CTR difference","reasoning":"Why winner commands more clicks","breakdown_a":"Strengths/weaknesses of A","breakdown_b":"Strengths/weaknesses of B"}}"""
+    try:
+        result = _ask_gemini_gcg(prompt, data.get("ai_api_key"))
+        clean = result.replace("```json","").replace("```","").strip()
+        m = _re.search(r'\{.*\}', clean, _re.DOTALL)
+        if m: return jsonify({"battle": json.loads(m.group())})
+        return jsonify({"battle": json.loads(clean)})
+    except Exception as e:
+        return jsonify({"error": f"AI Battle Failed: {e}"}), 500
+
+@app.route("/api/ti/hook_analyze", methods=["POST"])
+def ti_hook_analyze():
+    data = request.json or {}
+    hook = data.get("hook", "")[:2500]
+    title = data.get("title", "")[:300]
+    language = data.get("language", "English")[:50]
+    if not hook or len(hook) < 20:
+        return jsonify({"error": "Script too short to analyze"}), 400
+    prompt = f"""You are an elite YouTube Retention Architect who has studied thousands of videos with >70% AVD.
+Your goal: tear apart the FIRST 30 SECONDS (the hook) and rebuild it for maximum psychological grip.
+VIDEO TITLE: "{title}"
+TARGET LANGUAGE: {language}
+SCRIPT HOOK: "{hook}"
+Provide EXACTLY this structure (Markdown):
+### 📊 Predicted 30s Retention: [XX]%
+### 🧠 Psychological Grip Analysis
+- **Curiosity Loop:** [Is core question established immediately?]
+- **Pacing & Rhythm:** [Too slow? Too fast?]
+- **The "So What" Factor:** [Why should viewer care right now?]
+### ⚠️ Retention Killers (Drop-off Points)
+- [Exact sentence where viewers click away and why]
+### ✍️ The "Viral" Re-Write (Script + B-Roll)
+[Rewrite punch, visceral, fast-paced. AUDIO | VISUAL format]
+### 💡 Secret Sauce
+[1 advanced psychological tip to hold attention from second 30-60]"""
+    result = _ask_gemini_gcg(prompt, data.get("ai_api_key"))
+    return jsonify({"analysis": result})
+
+@app.route("/api/ti/seo_optimize", methods=["POST"])
+def ti_seo_optimize():
+    data = request.json or {}
+    title = data.get("title", "")[:300]
+    context = data.get("context", "")[:1500]
+    language = data.get("language", "English")[:50]
+    if not title:
+        return jsonify({"error": "Title required"}), 400
+    prompt = f"""You are an elite YouTube SEO & Algorithm Expert. Generate ultimate YouTube metadata to trigger algorithmic recommendations.
+VIDEO TITLE: "{title}"
+VIDEO CONTEXT: "{context}"
+TARGET LANGUAGE: {language}
+Provide Markdown-formatted:
+### 📝 Optimized Description (Above The Fold — 3 Lines)
+### 📌 Pinned Comment Strategy
+### 🏷️ 15 Keyword Tags (comma-separated, primary keyword first)
+### 📅 Best Upload Time & Day (based on niche)
+### 📣 Thumbnail A/B Test Suggestion (color psychology)
+### 🔗 End Screen CTA Script (15 seconds)"""
+    result = _ask_gemini_gcg(prompt, data.get("ai_api_key"))
+    return jsonify({"seo": result})
+
+@app.route("/api/ti/channel_strategy", methods=["POST"])
+def ti_channel_strategy():
+    data = request.json or {}
+    channel_type = data.get("channel_type", "")[:200]
+    current_titles = data.get("titles", [])
+    target_audience = data.get("target_audience", "")[:300]
+    language = data.get("language", "English")[:50]
+    titles_text = "\n".join(f"- {t}" for t in current_titles[:20]) if current_titles else "No titles provided"
+    prompt = f"""You are a master YouTube Channel Architect who has scaled channels from 0 to 1M+ subscribers.
+CHANNEL TYPE: {channel_type}
+TARGET AUDIENCE: {target_audience}
+LANGUAGE: {language}
+CURRENT TITLES:\n{titles_text}
+Provide a MASTERCLASS strategy (Markdown, extreme specificity):
+### 🎯 1. THE BLUE OCEAN POSITIONING (Core Identity, Competitor Gap, Unfair Advantage)
+### 🏛️ 2. THE 4 CONTENT PILLARS (each with psychological hook + 2 example titles + thumbnail synergy)
+### 💡 3. THE VIRAL PACKAGING FORMULA (best structures, power words, pacing)
+### 🧠 4. AUDIENCE PSYCHOGRAPHICS (demographics, burning pain point, retention anchors)
+### 📈 5. THE 6-MONTH EXPLOSION ROADMAP (Phase 1/2/3)
+### 🏆 6. TOP 10 IMMEDIATE VIDEO IDEAS (70-100 char titles)
+Be brutal, highly specific, zero generic advice."""
+    result = _ask_gemini_gcg(prompt, data.get("ai_api_key"))
+    return jsonify({"strategy": result, "channel_type": channel_type})
+
+@app.route("/api/ti/strategy_remix", methods=["POST"])
+def ti_strategy_remix():
+    data = request.json or {}
+    topic = data.get("topic", "")[:300]
+    language = data.get("language", "English")[:50]
+    path_a = data.get("path_a", "Curiosity & Mystery")[:100]
+    path_b = data.get("path_b", "Fear & Consequence")[:100]
+    prompt = f"""You are the world's #1 YouTube A/B Testing Strategist and Behavioral Psychologist.
+TOPIC: {topic}
+LANGUAGE: {language}
+Create a "Strategy Remix" comparing two psychological paths:
+PATH A: {path_a}
+PATH B: {path_b}
+For EACH PATH provide (Markdown):
+### 🧠 1. THE PSYCHOLOGICAL ANGLE (click trigger + why it works)
+### 🖼️ 2. THUMBNAIL SYNERGY RULES (visual subject, lighting/color, text max 3 words)
+### ✍️ 3. 5 VIRAL TITLES (70-100 chars, 1-2 ALL CAPS words)
+### 🏆 4. THE WINNING SCENARIO (use Path A if... / use Path B if...)"""
+    result = _ask_gemini_gcg(prompt, data.get("ai_api_key"))
+    return jsonify({"remix": result, "topic": topic, "path_a": path_a, "path_b": path_b})
+
+@app.route("/api/ti/trend_scanner", methods=["POST"])
+def ti_trend_scanner():
+    data = request.json or {}
+    category = data.get("category", "all")[:200]
+    language = data.get("language", "English")[:50]
+    prompt = f"""You are a YouTube trend analyst with real-time market awareness.
+CATEGORY: {category if category != 'all' else 'All categories'}
+LANGUAGE: {language}
+Analyze current YouTube trends and provide:
+1. TOP 10 TRENDING THEMES RIGHT NOW (name, why trending, demand 1-10, competition 1-10, best sub-angle, viral title example ≤100 chars)
+2. EMERGING MICRO-NICHES (5 untapped niches with opportunity score, target audience, 2 title examples each)
+3. DYING NICHES TO AVOID (3 niches losing traction and why)
+4. CROSS-NICHE OPPORTUNITIES (3 combinations of trending themes)
+5. VIRAL MECHANICS THAT WORK NOW (top 3 title structures, top 5 emotional triggers, optimal title length)
+Be specific with real examples. Actionable insights only."""
+    result = _ask_gemini_gcg(prompt, data.get("ai_api_key"))
+    return jsonify({"trends": result, "category": category, "date": datetime.now().isoformat()})
+
+@app.route("/api/ti/subniche", methods=["POST"])
+def ti_subniche():
+    data = request.json or {}
+    theme = data.get("theme", "")[:300]
+    language = data.get("language", "English")[:50]
+    prompt = f"""You are a master YouTube Niche Strategist using the Blue Ocean Strategy.
+{"MAIN THEME: " + theme if theme else "Analyze ALL trending YouTube themes."}
+TARGET LANGUAGE: {language}
+Find 8 most PROFITABLE and EXPLOSIVE subniches with MASSIVE demand, ZERO supply, HIGH RPM, CROSS-NICHE appeal.
+For each provide: name, demand(1-10), supply(1-10), opportunity(demand-supply), target_audience, audience_pain, content_angle, example_titles(3×70-100chars), keywords(3), estimated_views_per_video.
+Return ONLY valid JSON array. No markdown. No explanation."""
+    result = _ask_gemini_gcg(prompt, data.get("ai_api_key"))
+    try:
+        m = _re.search(r'\[.*\]', result, _re.DOTALL)
+        niches = json.loads(m.group() if m else result)
+        niches.sort(key=lambda x: x.get("opportunity", 0), reverse=True)
+        return jsonify({"niches": niches, "theme": theme})
+    except:
+        return jsonify({"niches": [], "raw": result, "theme": theme})
+
+@app.route("/api/ti/subniche_validate", methods=["POST"])
+def ti_subniche_validate():
+    """Validate subniche with real YouTube Data API metrics."""
+    import requests as _req
+    data = request.json or {}
+    subniche_name = data.get("name", "")
+    keywords = data.get("keywords", [])
+    if not subniche_name:
+        return jsonify({"error": "No subniche name"}), 400
+    from core.api_keys import load_api_key
+    yt_key = load_api_key("youtube")
+    if not yt_key:
+        return jsonify({"error": "YouTube API key not configured. Go to Settings."}), 400
+    search_q = subniche_name + " " + " ".join(keywords[:3])
+    published_after = (datetime.utcnow() - timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    try:
+        sr = _req.get("https://www.googleapis.com/youtube/v3/search", params={
+            "part":"snippet","q":search_q,"type":"video","order":"viewCount",
+            "maxResults":15,"publishedAfter":published_after,"key":yt_key}, timeout=10)
+        search_data = sr.json()
+        if "error" in search_data:
+            return jsonify({"error": search_data["error"].get("message","API error")}), 400
+        video_ids = [i["id"]["videoId"] for i in search_data.get("items",[]) if "videoId" in i.get("id",{})]
+        if not video_ids:
+            return jsonify({"channels":[],"videos":[],"subniche":subniche_name})
+        stats_r = _req.get("https://www.googleapis.com/youtube/v3/videos", params={
+            "part":"snippet,statistics,contentDetails","id":",".join(video_ids),"key":yt_key}, timeout=10)
+        stats_data = stats_r.json()
+        videos = []
+        channel_map = {}
+        for item in stats_data.get("items",[]):
+            snip = item.get("snippet",{})
+            stats = item.get("statistics",{})
+            cid = snip.get("channelId","")
+            views = int(stats.get("viewCount",0))
+            pub = snip.get("publishedAt","")
+            hours_ago = 1
+            try:
+                pub_dt = datetime.strptime(pub[:19],"%Y-%m-%dT%H:%M:%S")
+                hours_ago = max(1,(datetime.utcnow()-pub_dt).total_seconds()/3600)
+            except: pass
+            vph = round(views/hours_ago,1)
+            videos.append({"id":item["id"],"title":snip.get("title",""),"channel_name":snip.get("channelTitle",""),
+                           "channel_id":cid,"views":views,"vph":vph,"published":pub[:10],
+                           "thumbnail":snip.get("thumbnails",{}).get("medium",{}).get("url","")})
+            if cid not in channel_map:
+                channel_map[cid] = {"id":cid,"name":snip.get("channelTitle",""),"videos_found":0,"total_views":0,"avg_vph":0}
+            channel_map[cid]["videos_found"] += 1
+            channel_map[cid]["total_views"] += views
+        if channel_map:
+            ch_r = _req.get("https://www.googleapis.com/youtube/v3/channels", params={
+                "part":"statistics,snippet","id":",".join(list(channel_map.keys())[:10]),"key":yt_key}, timeout=10)
+            for ch in ch_r.json().get("items",[]):
+                cid = ch["id"]
+                if cid in channel_map:
+                    cs = ch.get("statistics",{})
+                    channel_map[cid].update({"subscribers":int(cs.get("subscriberCount",0)),
+                        "total_channel_views":int(cs.get("viewCount",0)),"video_count":int(cs.get("videoCount",0)),
+                        "thumbnail":ch.get("snippet",{}).get("thumbnails",{}).get("default",{}).get("url","")})
+        videos.sort(key=lambda v: v["vph"],reverse=True)
+        channels = sorted(channel_map.values(),key=lambda c:c.get("avg_vph",0),reverse=True)
+        avg_vph = round(sum(v["vph"] for v in videos)/max(1,len(videos)),1)
+        return jsonify({"subniche":subniche_name,"videos":videos,"channels":channels,
+                        "total_videos":len(videos),"total_channels":len(channels),"avg_vph":avg_vph})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/ti/niche_list", methods=["GET"])
+def ti_niche_list():
+    try:
+        import core.niche_database as ndb
+        return jsonify({"niches": ndb.NICHE_DATABASE})
+    except:
+        default = {
+            "Documentary": ["History & Ancient Civilizations","Ocean & Deep Sea","Space & Universe","Megaprojects & Construction"],
+            "Education": ["Health & Psychology","Science Mysteries","True Crime","Finance & Wealth"],
+            "Lifestyle": ["Abandoned Places","Extreme Survival","Underground Architecture","Lost Civilizations"],
+        }
+        return jsonify({"niches": default})
+
+@app.route("/api/ti/thumb_prompt", methods=["POST"])
+def ti_thumb_prompt():
+    data = request.json or {}
+    title = data.get("title", "")[:300]
+    if not title:
+        return jsonify({"error": "Title required"}), 400
+    prompt = f"""You are an elite YouTube Thumbnail Director in 2026.
+Design the perfect high-CTR thumbnail for: "{title}"
+Generate 3 distinct Midjourney/Ideogram v2 prompts following these rules:
+1. Low visual clutter (max 3 elements)
+2. High contrast, cinematic lighting, dramatic mood
+3. Leave a "Curiosity Gap" (show mystery/danger, not the answer)
+Output MUST be valid JSON (no markdown):
+{{"prompts":[{{"style":"e.g., Hyper-realistic Documentary","visuals":"Describe exactly what is shown","text_overlay":"Optional 1-3 words","midjourney_prompt":"Exact English prompt --ar 16:9 --v 6.0"}},{{}},{{"..."}}]}}"""
+    try:
+        result = _ask_gemini_gcg(prompt, data.get("ai_api_key"))
+        clean = result.replace("```json","").replace("```","").strip()
+        m = _re.search(r'\{.*\}', clean, _re.DOTALL)
+        if m: return jsonify({"thumbs": json.loads(m.group())})
+        return jsonify({"thumbs": json.loads(clean)})
+    except Exception as e:
+        return jsonify({"error": f"Thumb Gen Failed: {e}"}), 500
+
+@app.route("/api/ti/vision_audit", methods=["POST"])
+def ti_vision_audit():
+    """Gemini Pro Vision — brutally analyzes a thumbnail image for CTR flaws."""
+    data = request.json or {}
+    image_b64 = data.get("image", "")
+    title = data.get("title", "")[:200]
+    if not image_b64:
+        return jsonify({"error": "No image provided"}), 400
+    if "," in image_b64:
+        image_b64 = image_b64.split(",")[1]
+    prompt = f"""You are the world's most brutal YouTube Thumbnail Designer and CTR Expert.
+I am providing a YouTube thumbnail image.
+Title Context: "{title}"
+Analyze rigorously:
+### 🖼️ Instant Visual Impression (0.5s Rule)
+### 🎯 Composition & Focal Point
+### 🎨 Color Psychology & Contrast
+### 🔤 Typography & Readability (if applicable)
+### 💡 The "Curiosity Gap" Verdict
+### 🛠️ 3 Brutal Suggestions to Improve CTR
+1. [Suggestion 1]
+2. [Suggestion 2]
+3. [Suggestion 3]
+Be highly critical. If it looks amateur, say exactly why."""
+    try:
+        result = _ask_gemini_gcg(prompt, data.get("ai_api_key"), image_b64=image_b64)
+        return jsonify({"audit": result})
+    except Exception as e:
+        return jsonify({"error": f"Vision Audit failed: {e}"}), 500
+
+# ── YouTube Intelligence (Newborn Virals + Sync Channels) ─────────────────
+
+@app.route("/api/ti/youtube/newborn_virals", methods=["POST"])
+def ti_newborn_virals():
+    """Scans for extremely viral videos from NEW or SMALL channels."""
+    import requests as _req
+    data = request.json or {}
+    query = data.get("query", "")
+    from core.api_keys import load_api_key
+    key = data.get("yt_api_key") or load_api_key("youtube")
+    if not key:
+        return jsonify({"error": "YouTube API key not set. Go to Settings."}), 400
+    published_after = (datetime.utcnow() - timedelta(days=40)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    try:
+        sr = _req.get("https://www.googleapis.com/youtube/v3/search", params={
+            "part":"snippet","q":query,"type":"video","order":"viewCount",
+            "maxResults":30,"publishedAfter":published_after,"key":key}, timeout=15)
+        video_ids = [i["id"]["videoId"] for i in sr.json().get("items",[]) if "videoId" in i.get("id",{})]
+        if not video_ids:
+            return jsonify({"virals":[],"query":query})
+        stats_r = _req.get("https://www.googleapis.com/youtube/v3/videos", params={
+            "part":"snippet,statistics","id":",".join(video_ids),"key":key}, timeout=15)
+        videos_data = []
+        channel_ids = []
+        for item in stats_r.json().get("items",[]):
+            snip = item.get("snippet",{}); stat = item.get("statistics",{})
+            cid = snip.get("channelId","")
+            pub = snip.get("publishedAt","")
+            views = int(stat.get("viewCount",0))
+            hours_ago = 1
+            try:
+                pub_dt = datetime.strptime(pub[:19],"%Y-%m-%dT%H:%M:%S")
+                hours_ago = max(1,(datetime.utcnow()-pub_dt).total_seconds()/3600)
+            except: pass
+            videos_data.append({"video_id":item["id"],"title":snip.get("title",""),
+                "channel_id":cid,"channel_name":snip.get("channelTitle",""),
+                "views":views,"vph":round(views/hours_ago,1),"published":pub[:10],
+                "thumbnail":snip.get("thumbnails",{}).get("medium",{}).get("url","")})
+            if cid and cid not in channel_ids: channel_ids.append(cid)
+        channels_info = {}
+        for i in range(0, len(channel_ids), 50):
+            batch = channel_ids[i:i+50]
+            ch_r = _req.get("https://www.googleapis.com/youtube/v3/channels", params={
+                "part":"snippet,statistics","id":",".join(batch),"key":key}, timeout=15)
+            for ch in ch_r.json().get("items",[]):
+                stat = ch.get("statistics",{}); snip = ch.get("snippet",{})
+                channels_info[ch["id"]] = {
+                    "subscribers":int(stat.get("subscriberCount",0)),
+                    "video_count":int(stat.get("videoCount",0)),
+                    "published_at":snip.get("publishedAt","")[:10],
+                    "thumbnail":snip.get("thumbnails",{}).get("default",{}).get("url","")}
+        newborns = []
+        for v in videos_data:
+            c = channels_info.get(v["channel_id"])
+            if not c: continue
+            if c["video_count"] <= 35 and v["vph"] >= 50:
+                v["channel_stats"] = c
+                newborns.append(v)
+        newborns.sort(key=lambda x: x["vph"],reverse=True)
+        return jsonify({"virals":newborns,"query":query})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/ti/youtube/sync_channels", methods=["POST"])
+def ti_sync_channels():
+    """Auto-Sync: checks tracked channels for explosive new videos (High VPH)."""
+    import requests as _req
+    data = request.json or {}
+    channel_ids = data.get("channels", [])
+    from core.api_keys import load_api_key
+    key = data.get("yt_api_key") or load_api_key("youtube")
+    if not key:
+        return jsonify({"error": "YouTube API key not set"}), 400
+    if not channel_ids:
+        return jsonify({"sync_results": []})
+    try:
+        results = []
+        for cid in channel_ids[:20]:
+            sr = _req.get("https://www.googleapis.com/youtube/v3/search", params={
+                "part":"snippet","channelId":cid,"type":"video","order":"date","maxResults":2,"key":key}, timeout=10)
+            video_ids = [i["id"]["videoId"] for i in sr.json().get("items",[]) if "videoId" in i.get("id",{})]
+            if not video_ids: continue
+            stats_r = _req.get("https://www.googleapis.com/youtube/v3/videos", params={
+                "part":"snippet,statistics","id":",".join(video_ids),"key":key}, timeout=10)
+            for item in stats_r.json().get("items",[]):
+                snip = item.get("snippet",{}); stat = item.get("statistics",{})
+                pub = snip.get("publishedAt",""); views = int(stat.get("viewCount",0))
+                hours_ago = 1
+                try:
+                    pub_dt = datetime.strptime(pub[:19],"%Y-%m-%dT%H:%M:%S")
+                    hours_ago = max(1,(datetime.utcnow()-pub_dt).total_seconds()/3600)
+                except: pass
+                vph = round(views/hours_ago,1)
+                if hours_ago <= 48 and vph > 10:
+                    results.append({"channel_id":cid,"channel_name":snip.get("channelTitle",""),
+                        "video_id":item["id"],"title":snip.get("title",""),
+                        "vph":vph,"views":views,"hours_ago":int(hours_ago)})
+        results.sort(key=lambda x: x["vph"],reverse=True)
+        return jsonify({"sync_results": results})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/ti/strategy_from_viral", methods=["POST"])
+def ti_strategy_from_viral():
+    data = request.json or {}
+    video_title = data.get("title", "")
+    niche = data.get("niche", "")
+    language = data.get("language", "English")
+    prompt = f"""You are a master YouTube Viral Architect. The user discovered a "Newborn Viral" video (exploded on a small new channel).
+VIRAL TITLE: "{video_title}"
+NICHE CONTEXT: "{niche}"
+TARGET LANGUAGE: {language}
+Extract the exact structural and psychological DNA of this title and CLONE IT into 3 different sub-niches.
+Provide (Markdown):
+### 🧬 The Viral DNA Extracted
+- **Psychological Trigger:** Why exactly did people click this?
+- **The Structural Syntax:** (e.g., "[Negative Word] + [Subject] + [Consequence]")
+- **Thumbnail Hypothesis:** What visual likely accompanied this to make it viral?
+### 🔄 The Cloning Process (3 New Subniches)
+**1. [Subniche Name 1]** - Why this works here: [1 sentence]
+- ⚡ Title 1/2/3: [Cloned 70-100 chars titles]
+[same for 2 and 3]
+Be brutal, aggressive, highly strategic. Use ALL CAPS power words."""
+    result = _ask_gemini_gcg(prompt, data.get("ai_api_key"))
+    return jsonify({"strategy": result, "original_title": video_title})
+
+# ── My Channels (Title Intelligence) ──────────────────────────────────────
+_TI_CHANNELS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ti_channels.json")
+
+def _ti_load_channels():
+    if os.path.exists(_TI_CHANNELS_FILE):
+        with open(_TI_CHANNELS_FILE,"r",encoding="utf-8") as f: return json.load(f)
+    return []
+
+def _ti_save_channels(channels):
+    with open(_TI_CHANNELS_FILE,"w",encoding="utf-8") as f: json.dump(channels,f,indent=2,ensure_ascii=False)
+
+@app.route("/api/ti/channels", methods=["GET"])
+def ti_get_channels():
+    return jsonify({"channels": _ti_load_channels()})
+
+@app.route("/api/ti/channels/add", methods=["POST"])
+def ti_add_channel():
+    data = request.json or {}
+    channels = _ti_load_channels()
+    ch = {"id":len(channels)+1,"name":data.get("name",""),"url":data.get("url",""),
+          "niche":data.get("niche",""),"micro_niche":data.get("micro_niche",""),
+          "subniches":data.get("subniches",[]),"keywords":data.get("keywords",[]),
+          "language":data.get("language","English"),"titles":data.get("titles",[]),
+          "reference_structures":data.get("reference_structures",[]),
+          "trending_themes":data.get("trending_themes",[]),"metrics":[],
+          "created":datetime.now().isoformat()}
+    channels.append(ch)
+    _ti_save_channels(channels)
+    return jsonify({"status":"ok","channel":ch})
+
+@app.route("/api/ti/channels/delete", methods=["POST"])
+def ti_delete_channel():
+    data = request.json or {}
+    channels = [c for c in _ti_load_channels() if c.get("id") != data.get("id")]
+    _ti_save_channels(channels)
+    return jsonify({"status":"ok"})
+
+@app.route("/api/ti/channels/analyze", methods=["POST"])
+def ti_analyze_channel():
+    data = request.json or {}
+    channel = data.get("channel", {})
+    ref_text = "\n".join(f"- {s}" for s in data.get("reference_structures",[])[:15]) or "None"
+    trend_text = "\n".join(f"- {t}" for t in data.get("trending_themes",[])[:10]) or "Use current YouTube trends"
+    titles_text = "\n".join(f"- {t}" for t in channel.get("titles",[])[:20]) or "None"
+    prompt = f"""You are the ultimate YouTube Trend Hacker and Blue Ocean Strategist.
+NAME: {channel.get('name','')}
+CURRENT NICHE: {channel.get('niche','')}
+LANGUAGE: {channel.get('language','English')}
+REFERENCE TITLE STRUCTURES:\n{ref_text}
+TRENDING THEMES:\n{trend_text}
+YOUR TITLES:\n{titles_text}
+STEP 1: Reverse-engineer trending structures — identify the 3 most lethal, high-CTR structures.
+STEP 2: Blue Ocean Discovery — find 5 NEW unsaturated subthemes (High Demand/Low Supply logic).
+STEP 3: For each of the 5 subniches:
+### 🌊 Subniche #[X]: [Name]
+- Market Viability, Audience Hunger, Cloned Strategy
+- 3 Viral Titles (70-100 chars, exact syntax from trending structures)
+STEP 4: Which subniche has highest Opportunity Score? 3-step execution plan.
+Be aggressive, data-driven, Markdown formatted."""
+    result = _ask_gemini_gcg(prompt, data.get("ai_api_key"))
+    return jsonify({"analysis": result, "channel": channel})
+
+@app.route("/api/ti/channels/update_metrics", methods=["POST"])
+def ti_update_metrics():
+    data = request.json or {}
+    cid = data.get("id"); metrics = data.get("metrics", {})
+    channels = _ti_load_channels()
+    for c in channels:
+        if c.get("id") == cid:
+            if "metrics" not in c: c["metrics"] = []
+            c["metrics"].append({**metrics,"date":datetime.now().isoformat()})
+            c["metrics"] = c["metrics"][-50:]
+            break
+    _ti_save_channels(channels)
+    return jsonify({"status":"ok"})
+
+# ── Saved Trend Channels (browser-based, but also persisted server-side) ──
+_SAVED_TREND_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "saved_trend_channels.json")
+
+@app.route("/api/ti/saved_channels", methods=["GET"])
+def ti_get_saved_channels():
+    try:
+        with open(_SAVED_TREND_PATH,"r",encoding="utf-8") as f: return jsonify(json.load(f))
+    except:
+        return jsonify({"channels":[]})
+
+@app.route("/api/ti/saved_channels", methods=["POST"])
+def ti_save_channel():
+    data = request.json or {}
+    try:
+        try:
+            with open(_SAVED_TREND_PATH,"r",encoding="utf-8") as f: saved = json.load(f)
+        except:
+            saved = {"channels":[]}
+        existing_ids = {c.get("id") for c in saved["channels"]}
+        if data.get("id") not in existing_ids:
+            saved["channels"].append({"id":data.get("id",""),"name":data.get("name",""),
+                "subscribers":data.get("subscribers",0),"avg_vph":data.get("avg_vph",0),
+                "subniche":data.get("subniche",""),"saved_at":datetime.now().isoformat(),
+                "thumbnail":data.get("thumbnail","")})
+            with open(_SAVED_TREND_PATH,"w",encoding="utf-8") as f: json.dump(saved,f,indent=2)
+        return jsonify({"ok":True,"total":len(saved["channels"])})
+    except Exception as e:
+        return jsonify({"error":str(e)}),500
+
+# ── AI Engine Status ──────────────────────────────────────────────────────
+@app.route("/api/ti/ai/status")
+def ti_ai_status():
+    try:
+        from core.ai_engine import get_model_status
+        return jsonify(get_model_status())
+    except Exception as e:
+        return jsonify({"health":"unknown","error":str(e),"providers":[]})
+
+@app.route("/api/ti/ai/reset", methods=["POST"])
+def ti_ai_reset():
+    try:
+        from core.ai_engine import clear_cooldowns
+        clear_cooldowns()
+        try:
+            from core.ai_engine import clear_cache
+            clear_cache()
+        except: pass
+        return jsonify({"status":"ok","message":"All cooldowns and cache cleared"})
+    except Exception as e:
+        return jsonify({"error":str(e)}),500
+
+
 if __name__ == "__main__":
     print("\n  StudioPilot Pro - Web Edition")
     print("  AI Engine v3: 5 providers, auto-failover")
