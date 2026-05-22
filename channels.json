@@ -1,0 +1,61 @@
+[
+  {
+    "id": 1,
+    "name": "Construction Empire",
+    "url": "@constructionempire",
+    "niche": "Construction",
+    "micro_niche": "Mega Projects",
+    "subniches": [
+      "skyscrapers",
+      "bridges",
+      "tunnels"
+    ],
+    "keywords": [
+      "construction",
+      "engineering",
+      "impossible",
+      "mega"
+    ],
+    "language": "English",
+    "titles": [
+      "Why Nobody Can Build This $50 Billion Bridge",
+      "The Most IMPOSSIBLE Construction Project On Earth"
+    ],
+    "created": "2026-05-07T10:43:56.719897"
+  },
+  {
+    "id": 2,
+    "name": "Golden Years Health",
+    "url": "@goldenyearshealth",
+    "niche": "Health",
+    "micro_niche": "Senior Cardiovascular Health",
+    "subniches": [
+      "leg arteries",
+      "potassium",
+      "circulation"
+    ],
+    "keywords": [
+      "seniors",
+      "arteries",
+      "mineral",
+      "health",
+      "heart"
+    ],
+    "language": "English",
+    "titles": [
+      "SENIORS: The ONE Mineral That Unclogs Leg Arteries Overnight",
+      "The HIDDEN Cause of Leg Pain After 60 - Doctors Never Say This",
+      "97% of Seniors Are DEFICIENT in This ONE Mineral"
+    ],
+    "reference_structures": [
+      "SENIORS: The ONE [noun] That [verb] [problem] Overnight",
+      "The HIDDEN [noun] of [condition] After 60"
+    ],
+    "trending_themes": [
+      "Cardiovascular supplements",
+      "Natural remedies for seniors"
+    ],
+    "metrics": [],
+    "created": "2026-05-07T10:55:55.687230"
+  }
+]
