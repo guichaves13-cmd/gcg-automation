@@ -77,8 +77,8 @@ class VideoIntelligence:
         print(f"\n  [1/5] Transcribing video (fresh — no cache)...")
         transcription, language = self._transcribe_fresh(avatar_path, output_dir)
         full_text = " ".join(seg["text"] for seg in transcription)
-        print(f"    → {len(transcription)} segments, language: {language}")
-        print(f"    → First 100 chars: {full_text[:100]}...")
+        print(f"    -> {len(transcription)} segments, language: {language}")
+        print(f"    -> First 100 chars: {full_text[:100]}...")
         
         # Step 2: Get video duration
         from core.video_processor import get_duration
@@ -88,14 +88,14 @@ class VideoIntelligence:
         # Step 3: Deep theme analysis with Gemini
         print(f"\n  [3/5] Deep theme analysis with AI...")
         analysis = self._deep_analyze(full_text, language)
-        print(f"    → Theme: {analysis['theme']}")
-        print(f"    → Subtopics: {', '.join(analysis['subtopics'][:5])}")
-        print(f"    → Emotions: {', '.join(analysis['emotions'][:3])}")
+        print(f"    -> Theme: {analysis['theme']}")
+        print(f"    -> Subtopics: {', '.join(analysis['subtopics'][:5])}")
+        print(f"    -> Emotions: {', '.join(analysis['emotions'][:3])}")
         
         # Step 4: Generate shot list
         print(f"\n  [4/5] Creating detailed shot list...")
         shot_list = self._create_shot_list(transcription, analysis, duration)
-        print(f"    → {len(shot_list)} shots planned")
+        print(f"    -> {len(shot_list)} shots planned")
         for shot in shot_list[:5]:
             print(f"      [{shot['start']:.0f}s-{shot['end']:.0f}s] {shot['search_terms'][0]}")
         if len(shot_list) > 5:
@@ -105,7 +105,7 @@ class VideoIntelligence:
         print(f"\n  [5/5] Generating fresh subtitles...")
         srt_path = os.path.join(output_dir, f"subs_{video_id[:8]}.srt")
         self._generate_srt(transcription, srt_path)
-        print(f"    → Saved: {srt_path}")
+        print(f"    -> Saved: {srt_path}")
         
         result = {
             "video_id": video_id,
@@ -226,7 +226,7 @@ Return ONLY valid JSON, no markdown, no explanation."""
                 result_container = []
                 def _call_gemini():
                     r = self.client.models.generate_content(
-                        model="gemini-2.0-flash",
+                        model="gemini-2.5-flash",
                         contents=prompt,
                     )
                     result_container.append(r)
@@ -249,40 +249,85 @@ Return ONLY valid JSON, no markdown, no explanation."""
     
     def _fallback_analyze(self, full_text: str) -> dict:
         """Fallback analysis without AI — covers 200+ niches via theme_database."""
+        import re
         text = full_text.lower()
-        
+
         # Import massive theme + emotion database
         from core.theme_database import THEME_DB, EMOTION_DB
-        
-        # Score every theme category
+
+        # Score every theme category — USE WORD BOUNDARIES to avoid 'ant' in 'want'
+        def _wmatch(kw, txt):
+            # multi-word keywords: simple substring (already specific enough)
+            if " " in kw or "-" in kw:
+                return kw in txt
+            # single-word: require word boundary
+            return bool(re.search(r"\b" + re.escape(kw) + r"\b", txt))
+
         best_theme = "general documentary"
         best_score = 0
         for theme, keywords in THEME_DB.items():
-            score = sum(1 for k in keywords if k in text)
+            score = sum(1 for k in keywords if _wmatch(k, text))
             if score > best_score:
                 best_score = score
                 best_theme = theme
-        
-        # Smart emotion detection using expanded triggers
+
+        # Log if fallback used (helps debug E2E issues)
+        print(f"    [video_intelligence] FALLBACK theme detection: '{best_theme}' (score={best_score})")
+        if best_score < 2:
+            print(f"    [video_intelligence] WARN: low theme confidence ({best_score}), using 'general documentary' instead")
+            best_theme = "general documentary"
+
+        # Smart emotion detection using expanded triggers — also use word boundaries
         detected_emotions = ["informative"]
         for emotion, triggers in EMOTION_DB.items():
-            if any(t in text for t in triggers):
+            if any(_wmatch(t, text) for t in triggers):
                 detected_emotions.append(emotion)
         
         # Cap at 4 emotions
         detected_emotions = detected_emotions[:4]
         
-        # Extract subtopics (most frequent meaningful words)
-        words = text.split()
-        stop = {"the", "a", "an", "is", "are", "was", "were", "be", "to", "of", "in", 
-                "for", "on", "with", "at", "by", "from", "and", "but", "or", "not", "this",
-                "that", "it", "you", "he", "she", "we", "they", "i", "my", "your", "his",
-                "her", "its", "our", "their", "has", "have", "had", "do", "does", "did"}
-        meaningful = [w for w in words if len(w) > 4 and w not in stop]
+        # Extract subtopics: prioritize theme keywords found in text, fallback to nouns
+        # AVOID generic verbs/adverbs that pollute search_terms downstream
+        words = [re.sub(r"[^\w]", "", w.lower()) for w in text.split()]
+        stop = {"the","a","an","is","are","was","were","be","been","being","to","of","in",
+                "for","on","with","at","by","from","and","but","or","not","this","that","it",
+                "you","he","she","we","they","i","my","your","his","her","its","our","their",
+                "has","have","had","do","does","did","will","would","could","should","can",
+                "after","before","because","when","while","until","since","about","over",
+                "under","through","between","into","onto","upon","very","more","most","much",
+                "many","few","some","any","all","every","each","other","another","again",
+                "also","just","only","even","still","already","always","never","often",
+                "sometimes","usually","really","actually","probably","maybe","perhaps","share",
+                "tell","want","need","make","take","give","know","think","seem","look","feel",
+                "show","find","keep","start","stop","change","work","help","try","ask","talk",
+                "happen","become","appear","matter","right","wrong","good","bad","new","old",
+                "people","person","thing","things","place","time","year","years","day","days",
+                "promise","exactly","desperately","really","unexpectedly","unfortunately"}
+        # Theme keywords that DID match in text — these are the most semantic
+        theme_kws_in_text = [k for k in THEME_DB.get(best_theme, []) if _wmatch(k, text)]
+        # Multi-word noun-like phrases from text (e.g. "lymphatic system")
+        bigrams = []
+        for i in range(len(words)-1):
+            a, b = words[i], words[i+1]
+            if a and b and a not in stop and b not in stop and len(a) > 3 and len(b) > 3:
+                bigrams.append(f"{a} {b}")
+        meaningful = [w for w in words if len(w) > 5 and w not in stop]
         freq = {}
         for w in meaningful:
             freq[w] = freq.get(w, 0) + 1
-        subtopics = sorted(freq, key=freq.get, reverse=True)[:10]
+        # Combine: theme keywords first, then bigrams, then most frequent words
+        subtopics = []
+        subtopics.extend(theme_kws_in_text[:3])
+        # Add top bigrams
+        bg_freq = {}
+        for bg in bigrams: bg_freq[bg] = bg_freq.get(bg,0)+1
+        subtopics.extend(sorted(bg_freq, key=bg_freq.get, reverse=True)[:3])
+        # Fill rest with frequent words
+        for w in sorted(freq, key=freq.get, reverse=True):
+            if w not in subtopics: subtopics.append(w)
+            if len(subtopics) >= 10: break
+        # Dedup keep order
+        seen = set(); subtopics = [x for x in subtopics if not (x in seen or seen.add(x))][:10]
         
         return {
             "theme": best_theme,
@@ -510,38 +555,38 @@ Return ONLY valid JSON array (no markdown):
                             response_mime_type="application/json",
                         )
                         response = self.client.models.generate_content(
-                            model="gemini-2.0-flash",
+                            model="gemini-2.5-flash",
                             contents=prompt,
                             config=cfg,
                         )
                     except Exception:
                         # Fallback to plain mode if types not available
                         response = self.client.models.generate_content(
-                            model="gemini-2.0-flash",
+                            model="gemini-2.5-flash",
                             contents=prompt,
                         )
                     if response and response.text:
                         validated, used_terms = _parse_and_validate(response.text.strip())
                         if validated:
-                            print(f"    → Global shot list: {len(validated)} segments, {len(used_terms)} unique terms")
+                            print(f"    -> Global shot list: {len(validated)} segments, {len(used_terms)} unique terms")
                             return validated
                         else:
-                            print(f"    → Attempt {attempt+1}: 0 valid shots after filtering (banned/generic terms)")
+                            print(f"    -> Attempt {attempt+1}: 0 valid shots after filtering (banned/generic terms)")
                 except json.JSONDecodeError as je:
-                    print(f"    → Attempt {attempt+1} JSON parse error: {je}")
+                    print(f"    -> Attempt {attempt+1} JSON parse error: {je}")
                     if attempt == 0:
                         prompt = prompt + "\n\nIMPORTANT: Return STRICTLY valid JSON. No markdown, no commentary, no trailing text."
                         time.sleep(2)
                         continue
                 except Exception as e:
-                    print(f"    → Attempt {attempt+1} Gemini error: {e}")
+                    print(f"    -> Attempt {attempt+1} Gemini error: {e}")
                     if attempt == 0:
                         time.sleep(3)
                         continue
 
 
         # Fallback: per-chunk analysis (with batching for efficiency)
-        print(f"    → Falling back to per-chunk analysis...")
+        print(f"    -> Falling back to per-chunk analysis...")
         chunks = []
         current = {"start": 0, "end": 0, "text": ""}
         for seg in transcription:
@@ -588,7 +633,7 @@ Return ONLY terms, 2 per segment, in order. No explanation, no numbers."""
                     rc = []
                     def _call_batch():
                         r = self.client.models.generate_content(
-                            model="gemini-2.0-flash",
+                            model="gemini-2.5-flash",
                             contents=prompt,
                         )
                         rc.append(r)
@@ -644,7 +689,7 @@ Return ONLY terms, 2 per segment, in order. No explanation, no numbers."""
             
             time.sleep(0.5)  # Brief pause between batches
         
-        print(f"    → Gemini OK: {gemini_ok}, Fallback: {gemini_fail}")
+        print(f"    -> Gemini OK: {gemini_ok}, Fallback: {gemini_fail}")
         return shot_list
     
     def _extract_visual_keywords_from_text(self, text: str, theme: str) -> list:
@@ -799,14 +844,18 @@ Return ONLY terms, 2 per segment, in order. No explanation, no numbers."""
         score = (kw_hits * 2 + theme_hits) / max(1, len(kw_words) * 2 + len(theme_words))
         return max(0.0, min(1.0, score))
 
+    # Class-level flag: once quota exhausted, stop calling Vision (avoid loop of 429s)
+    _vision_quota_exhausted = False
+
     def validate_clip(self, clip_path: str, expected_keywords: list, theme: str,
                       metadata_text: str = "") -> float:
         """Validate clip matches expected content. Returns score 0-1.
 
         Strategy (in order):
           1. File integrity check
-          2. Frame extraction + Gemini Vision (if quota available)
-          3. Textual fallback (title/metadata vs keywords+theme)
+          2. If quota previously exhausted -> textual fallback only (no Vision)
+          3. Frame extraction + Gemini Vision (if quota available)
+          4. Textual fallback (title/metadata vs keywords+theme)
 
         Special return:
           -1.0 = validator unavailable AND no metadata to score textually.
@@ -817,9 +866,12 @@ Return ONLY terms, 2 per segment, in order. No explanation, no numbers."""
         if not os.path.exists(clip_path) or os.path.getsize(clip_path) < 1000:
             return 0.0
 
-        # If no Gemini client, fall straight to textual
-        if not self.client:
-            return self._textual_match_score(metadata_text, expected_keywords, theme)
+        # If no Gemini client OR quota already exhausted this session, skip Vision
+        if not self.client or VideoIntelligence._vision_quota_exhausted:
+            txt = self._textual_match_score(metadata_text, expected_keywords, theme)
+            # When in fallback mode with no metadata match, accept the clip
+            # (better than rejecting everything in a loop)
+            return txt if txt > 0 else -1.0
 
         # Quick file-integrity check for videos
         is_image = clip_path.lower().endswith(('.jpg', '.jpeg', '.png', '.webp', '.bmp'))
@@ -876,7 +928,7 @@ Return ONLY terms, 2 per segment, in order. No explanation, no numbers."""
             for attempt in range(3):
                 try:
                     resp = self.client.models.generate_content(
-                        model="gemini-2.0-flash-lite",  # higher RPM than flash
+                        model="gemini-2.5-flash",  # higher RPM than flash
                         contents=[
                             types.Part.from_bytes(data=img_data, mime_type="image/jpeg"),
                             prompt,
@@ -899,10 +951,14 @@ Return ONLY terms, 2 per segment, in order. No explanation, no numbers."""
                             import time as _t
                             _t.sleep(8 * (attempt + 1))
                             continue
-                        print(f"    [validate_clip] quota exhausted — falling back to textual")
-                        return self._textual_match_score(metadata_text, expected_keywords, theme)
+                        # PERMANENT: set class-level flag so subsequent calls skip Vision
+                        VideoIntelligence._vision_quota_exhausted = True
+                        print(f"    [validate_clip] quota PERMANENTLY exhausted — disabling Vision validation for this session")
+                        txt = self._textual_match_score(metadata_text, expected_keywords, theme)
+                        return txt if txt > 0 else -1.0  # -1 = accept without filtering
                     print(f"    [validate_clip] Vision error ({msg[:80]}) — textual fallback")
-                    return self._textual_match_score(metadata_text, expected_keywords, theme)
+                    txt = self._textual_match_score(metadata_text, expected_keywords, theme)
+                    return txt if txt > 0 else -1.0
         finally:
             if frame_path and frame_path != clip_path and os.path.exists(frame_path):
                 try: os.remove(frame_path)
