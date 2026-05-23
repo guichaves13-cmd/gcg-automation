@@ -11,13 +11,53 @@ import subprocess
 def _find_ffmpeg():
     return shutil.which("ffmpeg") or "ffmpeg"
 
+
+def _find_font():
+    """Find a font file path that FFmpeg can use without fontconfig.
+    Returns absolute path or empty string if no font found."""
+    candidates = []
+    if os.name == "nt":
+        candidates += [
+            r"C:\Windows\Fonts\arial.ttf",
+            r"C:\Windows\Fonts\Arial.ttf",
+            r"C:\Windows\Fonts\calibri.ttf",
+            r"C:\Windows\Fonts\segoeui.ttf",
+            r"C:\Windows\Fonts\verdana.ttf",
+        ]
+    else:
+        candidates += [
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/Library/Fonts/Arial.ttf",
+            "/System/Library/Fonts/Helvetica.ttc",
+            "/usr/share/fonts/TTF/DejaVuSans.ttf",
+        ]
+    for p in candidates:
+        if os.path.isfile(p):
+            return p
+    return ""
+
+
+# Cache font path on first lookup
+_FONT_PATH = None
+def _font_arg():
+    """Return ffmpeg drawtext font argument: fontfile=... or font=Arial fallback."""
+    global _FONT_PATH
+    if _FONT_PATH is None:
+        _FONT_PATH = _find_font()
+    if _FONT_PATH:
+        # Escape backslashes and colons for ffmpeg filter
+        esc_path = _FONT_PATH.replace("\\", "/").replace(":", "\\:")
+        return f"fontfile='{esc_path}'"
+    return "font=Arial"
+
+
 def _get_encoder():
-    """Detect best available encoder. Reuses logic from video_processor."""
-    try:
-        from core.video_processor import _get_encoder as _gp
-        return _gp()
-    except Exception:
-        return ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "23"]
+    """For motion_graphics filters (drawbox/drawtext) we MUST use CPU encoder.
+    NVENC + drawbox causes 'Error reinitializing filters' because the encoder
+    expects CUDA frames but drawbox produces software frames. Hardware accel
+    gives no speedup on these simple 2D filters anyway."""
+    return ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "23"]
 
 
 def add_lower_third(video_path, output_path, text, subtitle="",
@@ -37,7 +77,8 @@ def add_lower_third(video_path, output_path, text, subtitle="",
             "sub_size": 18,
             "bar_h": 70 if subtitle else 50,
             "bar_color": "0x1E90FF@0.8",
-            "y_pos": "H-140",
+            # Note: use 'ih-N' (drawbox-compatible). 'H-N' only works in drawtext.
+            "y_pos": "ih-140",
             "x_pos": "30",
         },
         "minimal": {
@@ -46,7 +87,7 @@ def add_lower_third(video_path, output_path, text, subtitle="",
             "sub_size": 16,
             "bar_h": 60 if subtitle else 40,
             "bar_color": "white@0.1",
-            "y_pos": "H-120",
+            "y_pos": "ih-120",
             "x_pos": "30",
         },
         "bold": {
@@ -55,7 +96,7 @@ def add_lower_third(video_path, output_path, text, subtitle="",
             "sub_size": 20,
             "bar_h": 80 if subtitle else 55,
             "bar_color": "0xFF4444@0.85",
-            "y_pos": "H-150",
+            "y_pos": "ih-150",
             "x_pos": "0",
         },
     }
@@ -63,20 +104,23 @@ def add_lower_third(video_path, output_path, text, subtitle="",
     end_time = start_time + duration
     fade_dur = 0.5
 
+    # drawbox y-axis var is 'ih', drawtext y-axis var is 'H' (different!)
+    y_box = s['y_pos']  # uses ih-N for drawbox
+    y_txt = s['y_pos'].replace("ih", "H")  # H-N for drawtext
+
     # Build filter: background bar + title text + optional subtitle
-    # Animate: fade in, hold, fade out
     bar_filter = (
-        f"drawbox=x={s['x_pos']}:y={s['y_pos']}:w=600:h={s['bar_h']}:"
+        f"drawbox=x={s['x_pos']}:y={y_box}:w=600:h={s['bar_h']}:"
         f"color={s['bar_color']}:t=fill:"
         f"enable='between(t,{start_time},{end_time})'"
     )
 
-    title_y = f"{s['y_pos']}+10" if not subtitle else f"{s['y_pos']}+8"
+    title_y = f"{y_txt}+10" if not subtitle else f"{y_txt}+8"
     title_filter = (
         f"drawtext=text='{_esc(text)}':"
         f"fontsize={s['title_size']}:fontcolor=white:"
         f"x=40:y={title_y}:"
-        f"font=Arial:borderw=1:bordercolor=black@0.5:"
+        f"{_font_arg()}:borderw=1:bordercolor=black@0.5:"
         f"enable='between(t,{start_time},{end_time})'"
     )
 
@@ -86,8 +130,8 @@ def add_lower_third(video_path, output_path, text, subtitle="",
         sub_filter = (
             f"drawtext=text='{_esc(subtitle)}':"
             f"fontsize={s['sub_size']}:fontcolor=white@0.8:"
-            f"x=40:y={s['y_pos']}+{s['title_size']+14}:"
-            f"font=Arial:"
+            f"x=40:y={y_txt}+{s['title_size']+14}:"
+            f"{_font_arg()}:"
             f"enable='between(t,{start_time},{end_time})'"
         )
         filters.append(sub_filter)
@@ -97,7 +141,6 @@ def add_lower_third(video_path, output_path, text, subtitle="",
     enc = _get_encoder()
     cmd = [
         ffmpeg, "-y",
-        "-hwaccel", "auto",
         "-i", video_path,
         "-vf", vf,
     ] + enc + ["-c:a", "copy", "-pix_fmt", "yuv420p", output_path]
@@ -124,7 +167,7 @@ def add_title_card(video_path, output_path, title, subtitle="",
         f"drawtext=text='{_esc(title)}':"
         f"fontsize=48:fontcolor=white:"
         f"x=(w-tw)/2:y=(h-th)/2-20:"
-        f"font=Arial:borderw=2:bordercolor=black:"
+        f"{_font_arg()}:borderw=2:bordercolor=black:"
         f"enable='between(t,{fade_in},{fade_out})'",
     ]
 
@@ -133,7 +176,7 @@ def add_title_card(video_path, output_path, title, subtitle="",
             f"drawtext=text='{_esc(subtitle)}':"
             f"fontsize=24:fontcolor=white@0.8:"
             f"x=(w-tw)/2:y=(h/2)+30:"
-            f"font=Arial:"
+            f"{_font_arg()}:"
             f"enable='between(t,{fade_in},{fade_out})'"
         )
 
@@ -162,13 +205,12 @@ def add_chapter_marker(video_path, output_path, chapter_text,
         f"drawtext=text='{_esc(chapter_text)}':"
         f"fontsize=22:fontcolor=white:"
         f"x=20:y=15:"
-        f"font=Arial:borderw=2:bordercolor=black@0.7:"
+        f"{_font_arg()}:borderw=2:bordercolor=black@0.7:"
         f"enable='between(t,{start_time},{end_time})'",
     ]
 
     cmd = [
         ffmpeg, "-y",
-        "-hwaccel", "auto",
         "-i", video_path,
         "-vf", ",".join(filters),
     ] + enc + ["-c:a", "copy", "-pix_fmt", "yuv420p", output_path]
@@ -181,7 +223,7 @@ def add_progress_bar(video_path, output_path, total_duration,
                       color="0x1E90FF", height=4, position="bottom"):
     """Add an animated progress bar to the video."""
     ffmpeg = _find_ffmpeg()
-    y = "H-6" if position == "bottom" else "2"
+    y = "ih-6" if position == "bottom" else "2"
 
     vf = (
         f"drawbox=x=0:y={y}:w=trunc(iw*t/{total_duration}):h={height}:"
@@ -191,7 +233,6 @@ def add_progress_bar(video_path, output_path, total_duration,
     enc = _get_encoder()
     cmd = [
         ffmpeg, "-y",
-        "-hwaccel", "auto",
         "-i", video_path,
         "-vf", vf,
     ] + enc + ["-c:a", "copy", "-pix_fmt", "yuv420p", output_path]
