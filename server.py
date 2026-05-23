@@ -412,14 +412,28 @@ def api_generate():
     topic = data.get("topic", "")
     language = data.get("language", "English")
     niche = data.get("niche", "")
+    persona = data.get("persona", "The Strategist")
     
-    prompt = f"""You are the world's best YouTube title strategist. You have analyzed millions of viral videos.
+    persona_rules = {
+        "The Strategist": "Use balanced, data-driven structures with high curiosity gaps. Professional but extremely clickable.",
+        "The Showman": "Use extreme MrBeast-style energy! High stakes, crazy numbers, exaggerated reactions, money, time limits.",
+        "The Detective": "Use True Crime style. Missing details, unsolved mysteries, 'interrogation' tactics, cold cases, psychological angles.",
+        "The Professor": "Educational but authoritative. Use 'Why Scientists are...', 'The Unknown History of...', complex topics made urgent.",
+        "The Doomer": "Survivalist style. Impending doom, economic collapse, forbidden locations, urgent warnings, terrifying truths."
+    }
+    
+    style_rule = persona_rules.get(persona, persona_rules["The Strategist"])
+    
+    prompt = f"""You are an elite AI Persona for YouTube Strategy. Your current active persona is: {persona}.
 
 TOPIC: {topic}
 LANGUAGE: {language}
 {"NICHE CONTEXT: " + niche if niche else ""}
 
 Generate exactly 15 viral YouTube title variants for this topic.
+
+PERSONA DIRECTIVE:
+{style_rule}
 
 MANDATORY RULES:
 1. Every title MUST be between 60-100 characters (STRICT LIMIT)

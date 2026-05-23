@@ -109,8 +109,8 @@
     <!-- GENERATOR PAGE -->
     <div class="page" id="page-generator">
       <div class="page-header">
-        <h1>⚡ AI Title Generator</h1>
-        <p>Generate 15 viral title variants using Gemini AI</p>
+        <h1>🧠 AI Title Generator</h1>
+        <p>Generate 15 viral title variants using Advanced AI Personas</p>
       </div>
       <div class="input-row">
         <input type="text" id="gen-topic" placeholder="Topic (e.g., Dangerous Volcanoes)">
@@ -118,8 +118,17 @@
           <option>English</option><option>Portuguese</option><option>Spanish</option>
         </select>
       </div>
-      <input type="text" id="gen-niche" placeholder="(Optional) Niche context..." style="width:100%;margin-bottom:12px">
-      <button class="btn-primary btn-full" onclick="generateTitles()">⚡ GENERATE VIRAL TITLES</button>
+      <div class="input-row" style="margin-top:12px;margin-bottom:12px">
+        <input type="text" id="gen-niche" placeholder="(Optional) Niche context..." style="width:50%">
+        <select id="gen-persona" style="width:50%">
+          <option value="The Strategist">The Strategist (Data-driven, Balanced)</option>
+          <option value="The Showman">The Showman (MrBeast Style, Extreme Hooks)</option>
+          <option value="The Detective">The Detective (True Crime, Curiosity Gaps)</option>
+          <option value="The Professor">The Professor (Educational, Documentary)</option>
+          <option value="The Doomer">The Doomer (Urgency, Fear, Survival)</option>
+        </select>
+      </div>
+      <button class="btn-primary btn-full" onclick="generateTitles()">🤖 GENERATE VIRAL TITLES</button>
       <div id="gen-result" class="result-area"></div>
     </div>
 

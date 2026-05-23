@@ -1,61 +1,311 @@
 [
   {
     "id": 1,
-    "name": "Construction Empire",
-    "url": "@constructionempire",
-    "niche": "Construction",
-    "micro_niche": "Mega Projects",
+    "name": "Cosmic Intelligence",
+    "url": "https://youtube.com/@cosmicintel",
+    "niche": "Space & Science",
+    "micro_niche": "Breaking Space Discoveries",
     "subniches": [
-      "skyscrapers",
-      "bridges",
-      "tunnels"
+      "Black Holes",
+      "Asteroids",
+      "James Webb Telescope"
     ],
     "keywords": [
-      "construction",
-      "engineering",
-      "impossible",
-      "mega"
+      "NASA",
+      "James Webb",
+      "Asteroid",
+      "Universe"
     ],
     "language": "English",
     "titles": [
-      "Why Nobody Can Build This $50 Billion Bridge",
-      "The Most IMPOSSIBLE Construction Project On Earth"
+      "NASA Just Detected Something Massive",
+      "James Webb Telescope Found This"
     ],
-    "created": "2026-05-07T10:43:56.719897"
+    "reference_structures": [
+      "The [Adjective] [Topic] That Scientists Cant Explain",
+      "Why [Normal Thing] Is Actually [Terrifying Thing]"
+    ],
+    "trending_themes": [
+      "Oumuamua Return",
+      "Mars Colonization"
+    ],
+    "metrics": []
   },
   {
     "id": 2,
-    "name": "Golden Years Health",
-    "url": "@goldenyearshealth",
-    "niche": "Health",
-    "micro_niche": "Senior Cardiovascular Health",
+    "name": "Ancestral Origins",
+    "url": "https://youtube.com/@ancestralorigins",
+    "niche": "History",
+    "micro_niche": "Forbidden History",
     "subniches": [
-      "leg arteries",
-      "potassium",
-      "circulation"
+      "Lost Civilizations",
+      "Uncontacted Tribes"
     ],
     "keywords": [
-      "seniors",
-      "arteries",
-      "mineral",
-      "health",
-      "heart"
+      "Forbidden",
+      "Isolated",
+      "Tribe"
+    ],
+    "language": "Portuguese",
+    "titles": [
+      "A Tribo Isolada Que Vive Como Há 10.000 Anos"
+    ],
+    "reference_structures": [
+      "O [Adjetivo] Segredo De [Lugar]"
+    ],
+    "trending_themes": [
+      "Amazon Jungle Lost Cities"
+    ],
+    "metrics": []
+  },
+  {
+    "id": 3,
+    "name": "Stoic Mastery",
+    "url": "https://youtube.com/@stoicmastery",
+    "niche": "Psychology",
+    "micro_niche": "Dark Psychology",
+    "subniches": [
+      "Manipulation Tactics",
+      "Stoicism"
+    ],
+    "keywords": [
+      "Stoicism",
+      "Manipulation"
     ],
     "language": "English",
     "titles": [
-      "SENIORS: The ONE Mineral That Unclogs Leg Arteries Overnight",
-      "The HIDDEN Cause of Leg Pain After 60 - Doctors Never Say This",
-      "97% of Seniors Are DEFICIENT in This ONE Mineral"
+      "7 Psychological Tricks To Make Anyone Respect You"
     ],
     "reference_structures": [
-      "SENIORS: The ONE [noun] That [verb] [problem] Overnight",
-      "The HIDDEN [noun] of [condition] After 60"
+      "[Number] Psychological Tricks To [Desired Outcome]"
     ],
     "trending_themes": [
-      "Cardiovascular supplements",
-      "Natural remedies for seniors"
+      "Reading People"
     ],
-    "metrics": [],
-    "created": "2026-05-07T10:55:55.687230"
+    "metrics": []
+  },
+  {
+    "id": 4,
+    "name": "Crypto Insiders",
+    "url": "https://youtube.com/@cryptoins",
+    "niche": "Finance",
+    "micro_niche": "Altcoin Gems & Macro Economics",
+    "subniches": [
+      "Bitcoin Halving",
+      "Meme Coins",
+      "Fed Rates"
+    ],
+    "keywords": [
+      "Crypto",
+      "Bitcoin",
+      "Crash",
+      "Millions"
+    ],
+    "language": "English",
+    "titles": [
+      "Why Bitcoin Will Crash Next Week (Urgent)",
+      "I Found The Next 100x Crypto Gem"
+    ],
+    "reference_structures": [
+      "Why [Asset] Will [Crash/Pump] Next Week",
+      "I Found The Next 100x [Asset]"
+    ],
+    "trending_themes": [
+      "BlackRock ETF",
+      "AI Coins"
+    ],
+    "metrics": []
+  },
+  {
+    "id": 5,
+    "name": "Code Breakers",
+    "url": "https://youtube.com/@codebrks",
+    "niche": "Tech & AI",
+    "micro_niche": "AI Automation & Coding",
+    "subniches": [
+      "ChatGPT Prompts",
+      "Python Automation",
+      "AGI"
+    ],
+    "keywords": [
+      "AI",
+      "ChatGPT",
+      "Automation",
+      "Python"
+    ],
+    "language": "English",
+    "titles": [
+      "ChatGPT Can Now Write Full Apps In Seconds",
+      "I Automated My Job With Python"
+    ],
+    "reference_structures": [
+      "[Tool] Can Now [Incredible Feat] In Seconds",
+      "I Automated [Task] With [Tool]"
+    ],
+    "trending_themes": [
+      "GPT-4o",
+      "AutoGPT"
+    ],
+    "metrics": []
+  },
+  {
+    "id": 6,
+    "name": "True Crime Archives",
+    "url": "https://youtube.com/@tca",
+    "niche": "True Crime",
+    "micro_niche": "Unsolved Mysteries & Interrogations",
+    "subniches": [
+      "Body Language",
+      "Cold Cases",
+      "Missing Persons"
+    ],
+    "keywords": [
+      "Interrogation",
+      "Missing",
+      "Unsolved",
+      "Mystery"
+    ],
+    "language": "English",
+    "titles": [
+      "The Interrogation That Broke A Psychopath",
+      "The Most Bizarre Cold Case Of 1999"
+    ],
+    "reference_structures": [
+      "The Interrogation That Broke A [Type of Person]",
+      "The Most Bizarre [Event] Of [Year]"
+    ],
+    "trending_themes": [
+      "Body Cam Footage",
+      "JCS Inspired"
+    ],
+    "metrics": []
+  },
+  {
+    "id": 7,
+    "name": "Survival Secrets",
+    "url": "https://youtube.com/@survivalsec",
+    "niche": "Survival",
+    "micro_niche": "Off-Grid Living & Prepping",
+    "subniches": [
+      "Bunker Tours",
+      "Bushcraft",
+      "Economic Collapse"
+    ],
+    "keywords": [
+      "Off-Grid",
+      "Bunker",
+      "Survival",
+      "Collapse"
+    ],
+    "language": "English",
+    "titles": [
+      "Inside A \\ Doomsday Bunker",
+      "How To Survive The Coming Economic Collapse"
+    ],
+    "reference_structures": [
+      "Inside A \\$[Amount] [Type] Bunker",
+      "How To Survive The Coming [Disaster]"
+    ],
+    "trending_themes": [
+      "EMP Preparation",
+      "Off-Grid Cabins"
+    ],
+    "metrics": []
+  },
+  {
+    "id": 8,
+    "name": "Health Optimization",
+    "url": "https://youtube.com/@healthopt",
+    "niche": "Health & Biohacking",
+    "micro_niche": "Longevity & Sleep",
+    "subniches": [
+      "Andrew Huberman",
+      "Supplements",
+      "Dopamine Detox"
+    ],
+    "keywords": [
+      "Biohacking",
+      "Dopamine",
+      "Sleep",
+      "Longevity"
+    ],
+    "language": "English",
+    "titles": [
+      "What Happens To Your Body During A Dopamine Detox",
+      "The Only 3 Supplements You Actually Need"
+    ],
+    "reference_structures": [
+      "What Happens To Your [Body Part] During A [Process]",
+      "The Only [Number] [Items] You Actually Need"
+    ],
+    "trending_themes": [
+      "Cold Plunges",
+      "Intermittent Fasting"
+    ],
+    "metrics": []
+  },
+  {
+    "id": 9,
+    "name": "Luxury Lifestyles",
+    "url": "https://youtube.com/@luxlife",
+    "niche": "Luxury",
+    "micro_niche": "Billionaire Habits & Mansions",
+    "subniches": [
+      "Megamansions",
+      "Superyachts",
+      "Watches"
+    ],
+    "keywords": [
+      "Billionaire",
+      "Luxury",
+      "Mansion",
+      "Yacht"
+    ],
+    "language": "English",
+    "titles": [
+      "Inside The Most Expensive House In Dubai",
+      "Why Billionaires Are Buying This Weird Watch"
+    ],
+    "reference_structures": [
+      "Inside The Most Expensive [Item] In [Location]",
+      "Why Billionaires Are Buying This Weird [Item]"
+    ],
+    "trending_themes": [
+      "Dubai Real Estate",
+      "Quiet Luxury"
+    ],
+    "metrics": []
+  },
+  {
+    "id": 10,
+    "name": "Mentes Empreendedoras",
+    "url": "https://youtube.com/@mentesemp",
+    "niche": "Business",
+    "micro_niche": "Marketing Digital & PLR",
+    "subniches": [
+      "Tráfego Pago",
+      "Copywriting",
+      "Vendas Sem Aparecer"
+    ],
+    "keywords": [
+      "Dinheiro",
+      "Marketing",
+      "Vendas",
+      "PLR"
+    ],
+    "language": "Portuguese",
+    "titles": [
+      "Como Fazer R\\.000 Em 30 Dias (Sem Aparecer)",
+      "O Segredo Obscuro Do Marketing Digital"
+    ],
+    "reference_structures": [
+      "Como Fazer R\\$[Valor] Em [Tempo] (Sem Aparecer)",
+      "O Segredo Obscuro Do [Nicho]"
+    ],
+    "trending_themes": [
+      "Cortes No TikTok",
+      "Automação YouTube"
+    ],
+    "metrics": []
   }
 ]
