@@ -680,6 +680,75 @@ Make the connection logical but shocking. Return ONLY valid JSON. No markdown ou
     except Exception as e:
         return jsonify({"error": f"JSON parse error: {str(e)[:80]}", "raw": result})
 
+@app.route("/api/trend_hijacker", methods=["POST"])
+def api_trend_hijacker():
+    """Converts a breaking news event into evergreen documentary-style video concepts."""
+    data = request.json
+    breaking_news = data.get("news_event", "")
+    target_niche = data.get("target_niche", "Psychology")
+    language = data.get("language", "English")
+
+    if not breaking_news:
+        return jsonify({"error": "News event is required."}), 400
+
+    prompt = f"""You are an elite YouTube growth hacker. Your specialty is "Newsjacking" - taking temporary trending news and turning it into timeless, high-retention evergreen concepts.
+
+BREAKING NEWS: {breaking_news}
+TARGET NICHE FOR ADAPTATION: {target_niche}
+LANGUAGE: {language}
+
+Extract the core psychological or systemic truth behind this news, and create an evergreen video concept for the Target Niche.
+
+Return ONLY a valid JSON object:
+{{
+  "evergreen_concept": "The timeless, highly searchable topic extracted from the news (1-2 paragraphs)",
+  "psychological_trigger": "What deep human emotion does this tap into?",
+  "titles": [
+    {{ "title": "Title 1 (60-100 chars)", "structure": "The structure used" }},
+    {{ "title": "Title 2 (60-100 chars)", "structure": "The structure used" }},
+    {{ "title": "Title 3 (60-100 chars)", "structure": "The structure used" }}
+  ]
+}}
+Return ONLY valid JSON."""
+    result = ask_gemini(prompt)
+    if result.startswith("[AI Error"): return jsonify({"error": result})
+    try:
+        cleaned = re.sub(r'^```json\s*|^```\s*|\s*```$', '', result.strip())
+        match = re.search(r'\{.*\}', cleaned, re.DOTALL)
+        return jsonify({"hijack_data": json.loads(match.group()) if match else json.loads(cleaned)})
+    except Exception as e:
+        return jsonify({"error": f"JSON parse error: {str(e)[:80]}"})
+
+@app.route("/api/hook_blueprint", methods=["POST"])
+def api_hook_blueprint():
+    """Generates a highly-retentive 60-second hook pacing script."""
+    data = request.json
+    title = data.get("title", "")
+    if not title: return jsonify({"error": "Title required."}), 400
+
+    prompt = f"""You are the world's highest-paid YouTube scriptwriter and retention architect.
+Generate a 60-second "Hook Blueprint" for this title: "{title}"
+
+Return ONLY a valid JSON object:
+{{
+  "hook_analysis": "Why this specific hook works to trap the viewer",
+  "script_blocks": [
+    {{ "timestamp": "0:00 - 0:05", "visual": "What we see", "audio": "What is said", "retention_tactic": "Curiosity, Stakes, etc." }},
+    {{ "timestamp": "0:05 - 0:15", "visual": "What we see", "audio": "What is said", "retention_tactic": "Pattern interrupt" }},
+    {{ "timestamp": "0:15 - 0:30", "visual": "What we see", "audio": "What is said", "retention_tactic": "Establishing the villain/problem" }},
+    {{ "timestamp": "0:30 - 0:60", "visual": "What we see", "audio": "What is said", "retention_tactic": "The payoff promise" }}
+  ]
+}}
+Return ONLY valid JSON."""
+    result = ask_gemini(prompt)
+    if result.startswith("[AI Error"): return jsonify({"error": result})
+    try:
+        cleaned = re.sub(r'^```json\s*|^```\s*|\s*```$', '', result.strip())
+        match = re.search(r'\{.*\}', cleaned, re.DOTALL)
+        return jsonify({"blueprint_data": json.loads(match.group()) if match else json.loads(cleaned)})
+    except Exception as e:
+        return jsonify({"error": f"JSON parse error: {str(e)[:80]}"})
+
 @app.route("/api/channel_strategy", methods=["POST"])
 def api_channel_strategy():
     """AI-powered channel strategy analysis."""

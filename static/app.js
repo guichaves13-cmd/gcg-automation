@@ -74,6 +74,41 @@ async function deepAnalyze(){
   document.getElementById('analyze-result').innerHTML=html;
 }
 
+// HOOK BLUEPRINT
+async function generateHookBlueprint() {
+  const title=document.getElementById('analyze-input').value.trim();
+  if(!title)return;
+  loading(true,'Architecting 60-second Hook Blueprint...');
+  const r=await post('/api/hook_blueprint',{title});
+  
+  if(r.error) {
+    document.getElementById('analyze-result').innerHTML=`<div class="score-card" style="border-left:3px solid #e94560"><h3 style="color:#e94560">⚠️ Error</h3><p>${escHtml(r.error)}</p></div>`;
+    return;
+  }
+  
+  const d = r.blueprint_data || {};
+  let html = `<div class="score-card" style="margin-top:16px;border-left:4px solid #f59e0b">
+    <h3 style="color:#f59e0b;margin-bottom:8px">🎬 60-Second Hook Blueprint</h3>
+    <div style="font-size:13px;color:#ddd;line-height:1.5;margin-bottom:16px;background:#0d1117;padding:12px;border-radius:8px;border:1px solid #30363d">
+      <b>🧠 Hook Analysis:</b> ${escHtml(d.hook_analysis)}
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px">`;
+    
+  (d.script_blocks||[]).forEach(b => {
+    html += `<div style="background:#1f2937;padding:12px;border-radius:8px;border-left:2px solid #f59e0b">
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+        <span style="font-size:12px;font-weight:bold;color:#f59e0b">⏱️ ${escHtml(b.timestamp)}</span>
+        <span class="tag tag-gold">${escHtml(b.retention_tactic)}</span>
+      </div>
+      <div style="font-size:12px;color:#aaa;margin-bottom:4px"><b>🎥 Visual:</b> ${escHtml(b.visual)}</div>
+      <div style="font-size:13px;color:#fff;font-style:italic"><b>🔊 Audio:</b> "${escHtml(b.audio)}"</div>
+    </div>`;
+  });
+  
+  html += `</div></div>`;
+  document.getElementById('analyze-result').innerHTML=html;
+}
+
 // AB SIMULATOR
 async function simulateABTest() {
   const title_a = document.getElementById('ab-title-a').value.trim();
@@ -267,6 +302,50 @@ async function generateCrossover() {
   }
   
   document.getElementById('crossover-result').innerHTML = html;
+}
+
+// TREND HIJACKER
+async function generateHijack() {
+  const news = document.getElementById('hijack-news').value.trim();
+  const niche = document.getElementById('hijack-niche').value.trim();
+  const lang = document.getElementById('hijack-lang').value;
+  
+  if(!news || !niche) {
+    alert("Please enter both Breaking News and Target Niche.");
+    return;
+  }
+  
+  loading(true, 'Hijacking Trend... Extracting psychology from news...');
+  const r = await post('/api/trend_hijacker', { news_event: news, target_niche: niche, language: lang });
+  
+  if(r.error) {
+    document.getElementById('hijacker-result').innerHTML=`<div class="score-card" style="border-left:3px solid #e94560"><h3 style="color:#e94560">⚠️ Error</h3><p style="font-size:13px;color:#aaa">${escHtml(r.error)}</p></div>`;
+    return;
+  }
+  
+  const d = r.hijack_data || {};
+  let html = `<div class="score-card" style="margin-bottom:16px;border-left:4px solid #e94560">
+    <h2 style="color:#e94560;margin-bottom:12px">🚀 Evergreen Adaptation</h2>
+    <div style="font-size:14px;color:#ddd;line-height:1.5;margin-bottom:16px">${escHtml(d.evergreen_concept)}</div>
+    
+    <div style="font-size:12px;color:#f59e0b;margin-bottom:16px"><b>🧠 Psychological Trigger:</b> ${escHtml(d.psychological_trigger)}</div>
+  </div>`;
+  
+  if(d.titles && d.titles.length) {
+    html += `<div class="niche-card" style="border-left:3px solid #4ecca3"><h3 style="color:#4ecca3;margin-bottom:12px">📐 Evergreen Titles</h3>`;
+    d.titles.forEach(t => {
+      html += `<div style="background:#0d1117;padding:12px;border-radius:8px;margin-bottom:8px;border:1px solid #30363d">
+        <div style="display:flex;justify-content:space-between;align-items:start">
+          <div style="font-size:15px;font-weight:bold;color:#fff">${escHtml(t.title)}</div>
+          <button class="btn-primary" style="font-size:11px;padding:4px 8px" onclick="document.getElementById('ab-title-a').value='${escHtml(t.title).replace(/'/g, "\\'") }';showPage('abtest')">⚖️ A/B Test</button>
+        </div>
+        <div style="font-size:12px;color:#aaa;margin-top:6px"><i>Structure:</i> ${escHtml(t.structure)}</div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+  
+  document.getElementById('hijacker-result').innerHTML = html;
 }
 
 function renderScoreCard(r){

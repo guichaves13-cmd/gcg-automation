@@ -466,5 +466,324 @@
       "WEF Agenda"
     ],
     "metrics": []
+  },
+  {
+    "id": 16,
+    "name": "Iceberg Explorations",
+    "url": "https://youtube.com/@icebergexp",
+    "niche": "Internet Mysteries",
+    "micro_niche": "Iceberg Tier Explanations",
+    "subniches": [
+      "Lost Media",
+      "Reddit Mysteries",
+      "Liminal Spaces"
+    ],
+    "keywords": [
+      "Iceberg",
+      "Mystery",
+      "Lost Media",
+      "Disturbing"
+    ],
+    "language": "English",
+    "titles": [
+      "The Disturbing Iceberg of Lost Internet Media",
+      "Level 8 of the Deep Web Iceberg Explained"
+    ],
+    "reference_structures": [
+      "The Disturbing Iceberg Of [Topic]",
+      "Level [Number] Of The [Topic] Iceberg"
+    ],
+    "trending_themes": [
+      "Backrooms",
+      "Analog Horror"
+    ],
+    "metrics": []
+  },
+  {
+    "id": 17,
+    "name": "Bodycam Archives",
+    "url": "https://youtube.com/@bodycamarch",
+    "niche": "True Crime",
+    "micro_niche": "Police Encounters & Legal Breakdown",
+    "subniches": [
+      "Sovereign Citizens",
+      "Arrests",
+      "Courtroom Meltdowns"
+    ],
+    "keywords": [
+      "Bodycam",
+      "Arrest",
+      "Court",
+      "Cops"
+    ],
+    "language": "English",
+    "titles": [
+      "When Sovereign Citizens Mess With The Wrong Cop",
+      "The Most Bizarre Traffic Stop of 2026"
+    ],
+    "reference_structures": [
+      "When [Group] Mess With The Wrong [Authority]",
+      "The Most Bizarre [Event] Of [Year]"
+    ],
+    "trending_themes": [
+      "Entitled Karens",
+      "Instant Karma"
+    ],
+    "metrics": []
+  },
+  {
+    "id": 18,
+    "name": "Animais Extremos",
+    "url": "https://youtube.com/@animaisex",
+    "niche": "Nature",
+    "micro_niche": "Deadly Encounters & Prehistoric Beasts",
+    "subniches": [
+      "Megalodon",
+      "Apex Predators",
+      "Ocean Monsters"
+    ],
+    "keywords": [
+      "Predador",
+      "Mortal",
+      "Ataque",
+      "Monstro"
+    ],
+    "language": "Portuguese",
+    "titles": [
+      "O Monstro Marinho Que Faz O Megalodon Parecer Pequeno",
+      "Por Que Os Ursos Polares Estão Caçando Humanos"
+    ],
+    "reference_structures": [
+      "O Monstro Que Faz [Assustador] Parecer Pequeno",
+      "Por Que [Animal] Estão [Ação Perigosa]"
+    ],
+    "trending_themes": [
+      "Extinct Species Cloning"
+    ],
+    "metrics": []
+  },
+  {
+    "id": 19,
+    "name": "GeoPolitics Now",
+    "url": "https://youtube.com/@geopolitics",
+    "niche": "Politics & Geography",
+    "micro_niche": "Global Conflicts & Resources",
+    "subniches": [
+      "Water Wars",
+      "Semiconductors",
+      "Border Disputes"
+    ],
+    "keywords": [
+      "War",
+      "Collapse",
+      "China",
+      "USA"
+    ],
+    "language": "English",
+    "titles": [
+      "Why The Next World War Will Be Fought Over Sand",
+      "The  Billion Canal That Could Break America"
+    ],
+    "reference_structures": [
+      "Why The Next War Will Be Fought Over [Bizarre Item]",
+      "The $[Amount] Project That Could Break [Country]"
+    ],
+    "trending_themes": [
+      "Taiwan Chips",
+      "Arctic Trade Routes"
+    ],
+    "metrics": []
+  },
+  {
+    "id": 20,
+    "name": "Filosofia Prática",
+    "url": "https://youtube.com/@filosofiaprat",
+    "niche": "Self-Improvement",
+    "micro_niche": "Miyamoto Musashi & Samurai Wisdom",
+    "subniches": [
+      "Discipline",
+      "Ronin",
+      "Zen"
+    ],
+    "keywords": [
+      "Samurai",
+      "Musashi",
+      "Foco",
+      "Disciplina"
+    ],
+    "language": "Portuguese",
+    "titles": [
+      "O Segredo Samurai Para Destruir A Procrastinação",
+      "Por Que Musashi Vivia Isolado Da Sociedade"
+    ],
+    "reference_structures": [
+      "O Segredo [Arquétipo] Para Destruir [Problema]",
+      "Por Que [Lendário] Vivia [Estado Extremo]"
+    ],
+    "trending_themes": [
+      "Dopamine Detox",
+      "Monk Mode"
+    ],
+    "metrics": []
+  },
+  {
+    "id": 21,
+    "name": "Abandoned Decay",
+    "url": "https://youtube.com/@urbexdecay",
+    "niche": "Urban Exploration",
+    "micro_niche": "Asylums & Soviet Relics",
+    "subniches": [
+      "Chernobyl",
+      "Bunkers",
+      "Hospitals"
+    ],
+    "keywords": [
+      "Abandoned",
+      "Urbex",
+      "Scary",
+      "Left Behind"
+    ],
+    "language": "English",
+    "titles": [
+      "Inside the Abandoned Soviet Hospital of Nightmares",
+      "I Found Something Terrifying In A Forgotten Mansion"
+    ],
+    "reference_structures": [
+      "Inside the Abandoned [Location] of Nightmares",
+      "I Found Something [Adjective] In A Forgotten [Location]"
+    ],
+    "trending_themes": [
+      "Radiation Zones",
+      "Time Capsules"
+    ],
+    "metrics": []
+  },
+  {
+    "id": 22,
+    "name": "Mythology Unleashed",
+    "url": "https://youtube.com/@mythunleashed",
+    "niche": "Mythology",
+    "micro_niche": "Norse & Greek Dark Tales",
+    "subniches": [
+      "Ragnarok",
+      "Underworld",
+      "Monsters"
+    ],
+    "keywords": [
+      "God",
+      "Myth",
+      "Zeus",
+      "Odin"
+    ],
+    "language": "English",
+    "titles": [
+      "The God So Evil That Even Zeus Was Terrified",
+      "What Actually Happens During Ragnarok"
+    ],
+    "reference_structures": [
+      "The [Entity] So [Trait] That Even [Supreme Being] Was Terrified",
+      "What Actually Happens During [Mythical Event]"
+    ],
+    "trending_themes": [
+      "Biblically Accurate Angels",
+      "Eldritch Horrors"
+    ],
+    "metrics": []
+  },
+  {
+    "id": 23,
+    "name": "Military Tech",
+    "url": "https://youtube.com/@miltech",
+    "niche": "Military",
+    "micro_niche": "Next-Gen Weapons & Tactics",
+    "subniches": [
+      "Fighter Jets",
+      "Drones",
+      "Submarines"
+    ],
+    "keywords": [
+      "Weapon",
+      "F-22",
+      "Secret",
+      "Navy"
+    ],
+    "language": "English",
+    "titles": [
+      "Why Russia Is Terrified of the F-22 Raptor",
+      "The Secret US Drone That Can Stay Airborne Forever"
+    ],
+    "reference_structures": [
+      "Why [Country] Is Terrified of [Weapon]",
+      "The Secret [Weapon] That Can [Impossible Feat]"
+    ],
+    "trending_themes": [
+      "Laser Weapons",
+      "AI Swarms"
+    ],
+    "metrics": []
+  },
+  {
+    "id": 24,
+    "name": "Segredos da Matrix",
+    "url": "https://youtube.com/@segredosmatrix",
+    "niche": "Conspiracy",
+    "micro_niche": "Simulation Theory & Quantum Mechanics",
+    "subniches": [
+      "Mandela Effect",
+      "CERN",
+      "Multiverse"
+    ],
+    "keywords": [
+      "Matrix",
+      "Simulação",
+      "CERN",
+      "Realidade"
+    ],
+    "language": "Portuguese",
+    "titles": [
+      "Cientistas Provam Que Estamos Vivendo Na Matrix",
+      "O Efeito Mandela Está Piorando (Aqui Está O Porquê)"
+    ],
+    "reference_structures": [
+      "[Autoridade] Provam Que Estamos [Situação Bizarra]",
+      "O [Fenômeno] Está Piorando (Aqui Está O Porquê)"
+    ],
+    "trending_themes": [
+      "Glitches in Reality",
+      "Quantum Immortality"
+    ],
+    "metrics": []
+  },
+  {
+    "id": 25,
+    "name": "Aviation Disasters",
+    "url": "https://youtube.com/@aviadisaster",
+    "niche": "Aviation",
+    "micro_niche": "Black Box Recordings & ATC",
+    "subniches": [
+      "Boeing",
+      "Mid-Air Collisions",
+      "Pilot Error"
+    ],
+    "keywords": [
+      "Crash",
+      "Flight",
+      "Black Box",
+      "ATC"
+    ],
+    "language": "English",
+    "titles": [
+      "The 3 Minutes Of Terror On Flight 192",
+      "Why This Boeing Plane Suddenly Dropped 10,000 Feet"
+    ],
+    "reference_structures": [
+      "The [Time] Of Terror On Flight [Number]",
+      "Why This [Vehicle] Suddenly [Disaster Action]"
+    ],
+    "trending_themes": [
+      "Boeing Whistleblowers",
+      "Fighter Jet Intercepts"
+    ],
+    "metrics": []
   }
 ]

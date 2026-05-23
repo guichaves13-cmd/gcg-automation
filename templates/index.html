@@ -51,6 +51,9 @@
       <button class="nav-btn" data-page="crossover" onclick="showPage('crossover')">
         <span>🧬</span> Crossover Engine
       </button>
+      <button class="nav-btn" data-page="hijacker" onclick="showPage('hijacker')">
+        <span>🚀</span> Trend Hijacker
+      </button>
     </div>
     <div class="sidebar-footer">
       <div class="ai-badge">🤖 Gemini Pro AI</div>
@@ -67,8 +70,11 @@
       </div>
       <div class="input-group">
         <input type="text" id="analyze-input" placeholder="Paste a YouTube title here..." maxlength="150">
-        <button class="btn-primary" onclick="analyzeTitle()">🔍 Analyze</button>
-        <button class="btn-secondary" onclick="deepAnalyze()">🧠 AI Deep Analysis</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <button class="btn-primary" style="flex:1" onclick="analyzeTitle()">🔍 BASIC SCAN</button>
+        <button class="btn-primary" style="flex:1;background:#8b5cf6" onclick="deepAnalyze()">🧠 DEEP ANALYSIS</button>
+        <button class="btn-primary" style="flex:1;background:#f59e0b;color:#1a1a2e" onclick="generateHookBlueprint()">🎬 HOOK BLUEPRINT</button>
       </div>
       <div id="analyze-result" class="result-area"></div>
     </div>
@@ -145,6 +151,21 @@
       
       <button class="btn-primary btn-full" onclick="generateCrossover()">🧬 GENERATE CROSSOVER NARRATIVE</button>
       <div id="crossover-result" class="result-area"></div>
+    </div>
+
+    <!-- TREND HIJACKER PAGE -->
+    <div class="page" id="page-hijacker">
+      <div class="page-header">
+        <h1>🚀 Trend Hijacker</h1>
+        <p>Turn temporary breaking news into timeless, high-retention evergreen videos.</p>
+      </div>
+      <div class="input-row">
+        <input type="text" id="hijack-news" placeholder="Breaking News (e.g., Elon Musk Buys Twitter)" style="flex:2">
+        <input type="text" id="hijack-niche" placeholder="Target Niche (e.g., Psychology)" style="flex:1">
+      </div>
+      <select id="hijack-lang" style="width:100%;margin:12px 0"><option>English</option><option>Portuguese</option><option>Spanish</option></select>
+      <button class="btn-primary btn-full" onclick="generateHijack()">🚀 HIJACK THIS TREND</button>
+      <div id="hijacker-result" class="result-area"></div>
     </div>
 
     <!-- GENERATOR PAGE -->
