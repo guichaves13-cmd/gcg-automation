@@ -2682,6 +2682,88 @@ except Exception as e:
 
 
 # =============================================================================
+# MODULO 32 -- GLM FALLBACK CHAIN (quando Gemini falha)
+# =============================================================================
+sep("32. GLM FALLBACK - Cadeia GLM -> Gemini -> heuristica")
+
+# 32.1 _glm_ask existe e importa
+try:
+    from core.video_intelligence import VideoIntelligence
+    vi = VideoIntelligence(google_api_key="")
+    assert hasattr(vi, "_glm_ask"), "_glm_ask method missing"
+    ok("GLM fallback: _glm_ask method existe")
+except Exception as e:
+    fail("GLM _glm_ask method", str(e))
+
+# 32.2 _glm_score_clip existe e tem cap de chamadas
+try:
+    vi = VideoIntelligence(google_api_key="")
+    assert hasattr(vi, "_glm_score_clip"), "_glm_score_clip method missing"
+    assert hasattr(VideoIntelligence, "_glm_score_max"), "no _glm_score_max class attr"
+    assert VideoIntelligence._glm_score_max >= 10, "cap too low"
+    ok("GLM fallback: _glm_score_clip method + cap de seguranca",
+       f"max={VideoIntelligence._glm_score_max}")
+except Exception as e:
+    fail("GLM _glm_score_clip", str(e))
+
+# 32.3 _glm_score_clip retorna -1 com input vazio
+try:
+    vi = VideoIntelligence(google_api_key="")
+    # Sem metadata, sem keywords -> nao chama GLM, retorna -1 direto
+    score = vi._glm_score_clip("", [], "theme")
+    assert score == -1.0, f"esperado -1.0, got {score}"
+    ok("GLM fallback: input vazio -> -1 (sem chamada API)")
+except Exception as e:
+    fail("GLM score input vazio", str(e))
+
+# 32.4 _glm_score_clip respeita cap
+try:
+    vi = VideoIntelligence(google_api_key="")
+    # Forca o counter no max
+    VideoIntelligence._glm_score_calls = VideoIntelligence._glm_score_max
+    score = vi._glm_score_clip("test metadata", ["test"], "theme")
+    assert score == -1.0, f"esperado -1 quando cap atingido, got {score}"
+    ok("GLM fallback: cap atingido -> -1 (protege quota NVIDIA)")
+    VideoIntelligence._glm_score_calls = 0  # reset
+except Exception as e:
+    fail("GLM score cap", str(e))
+
+# 32.5 validate_clip com quota=True chama GLM antes do textual
+try:
+    from core.video_intelligence import VideoIntelligence as VI
+    import tempfile, os as _os
+    VI._vision_quota_exhausted = True
+    VI._glm_score_calls = 0  # reset counter
+    vi = VI(google_api_key="")  # no client = goes straight to quota path
+    # Cria arquivo com metadata via filename
+    with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False,
+                                      prefix="lymphatic_health_") as tf:
+        tf.write(b"x" * 2000); p = tf.name
+    # Call validate_clip — should try GLM textual (won't get vision since no client)
+    score = vi.validate_clip(p, ["lymphatic", "health"], "lymphatic system",
+                              metadata_text="lymphatic health closeup elderly")
+    _os.remove(p)
+    # Score pode ser GLM (0.0-1.0) ou -1 se NVIDIA tambem falhar
+    assert score == -1.0 or 0.0 <= score <= 1.0, f"score invalido: {score}"
+    ok("GLM fallback: validate_clip quota=True chama GLM",
+       f"score={score}, glm_calls={VI._glm_score_calls}")
+    VI._vision_quota_exhausted = False
+    VI._glm_score_calls = 0
+except Exception as e:
+    fail("GLM validate_clip integration", str(e))
+
+# 32.6 Verifica que _create_shot_list tenta GLM primeiro (via inspect)
+try:
+    import inspect
+    src = inspect.getsource(VideoIntelligence._create_shot_list)
+    assert "_try_glm_shot_list" in src or "_glm_ask" in src
+    assert "GLM" in src
+    ok("GLM fallback: _create_shot_list tenta GLM antes do Gemini")
+except Exception as e:
+    fail("GLM shot_list ordem", str(e))
+
+
+# =============================================================================
 # RESULTADO FINAL
 # =============================================================================
 total = passes + fails

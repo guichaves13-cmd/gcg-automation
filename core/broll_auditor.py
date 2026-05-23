@@ -469,7 +469,7 @@ def rerender_video(
                             pass
 
             except Exception as seg_e:
-                print(f"  [Auditor] Seg {i} falhou ({seg_e}), fallback → avatar")
+                print(f"  [Auditor] Seg {i} falhou ({str(seg_e).encode('ascii','replace').decode()}), fallback -> avatar")
                 try:
                     _trim_avatar(avatar_path, seg["start"], seg["duration"],
                                  seg_out, width, height, fps)
@@ -525,7 +525,9 @@ def rerender_video(
         return True
 
     except Exception as e:
-        print(f"  [Auditor] Re-render FALHOU: {e}")
+        # Sanitize error message to avoid charmap encode crashes on Windows terminals
+        err_safe = str(e).encode('ascii', 'replace').decode()
+        print(f"  [Auditor] Re-render FALHOU: {err_safe[:300]}")
         return False
 
     finally:

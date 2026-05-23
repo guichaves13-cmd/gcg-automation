@@ -42,6 +42,42 @@ class VideoIntelligence:
             print(f"    [GLM] Error: {err}")
             return ""
         return result.get("content", "")
+
+    # GLM call counter — limit calls per session to avoid burning NVIDIA quota
+    _glm_score_calls = 0
+    _glm_score_max = 50  # safety cap; reset per process
+
+    def _glm_score_clip(self, metadata_text: str, expected_keywords: list,
+                        theme: str) -> float:
+        """Textual scoring via GLM reasoning model.
+        Used as fallback when Gemini Vision quota is exhausted.
+        Returns 0.0-1.0 score, or -1.0 if GLM unavailable/unparseable.
+        Capped at 50 calls per session to protect NVIDIA quota."""
+        if VideoIntelligence._glm_score_calls >= VideoIntelligence._glm_score_max:
+            return -1.0
+        if not metadata_text or not expected_keywords:
+            return -1.0
+        kw = ", ".join(str(k) for k in expected_keywords[:3])
+        prompt = (
+            f"Rate from 0 to 10 how well a stock clip with this metadata matches the topic.\n"
+            f"Topic/theme: {theme}\n"
+            f"Search keywords: {kw}\n"
+            f"Clip metadata (filename/tags): {metadata_text[:200]}\n\n"
+            f"10=perfect literal match; 7=related; 4=weak; 0=wrong/unrelated.\n"
+            f"Reply ONLY with a single integer 0-10. No explanation."
+        )
+        try:
+            VideoIntelligence._glm_score_calls += 1
+            text = self._glm_ask(prompt, temperature=0.0)
+            if not text:
+                return -1.0
+            import re as _re
+            m = _re.search(r"\b(\d{1,2})\b", text)
+            if m:
+                return min(10, max(0, int(m.group(1)))) / 10.0
+        except Exception as e:
+            print(f"    [GLM scorer] error: {str(e)[:80]}")
+        return -1.0
     
     def analyze_video(self, avatar_path: str, output_dir: str) -> dict:
         """
@@ -545,7 +581,46 @@ Return ONLY valid JSON array (no markdown):
                     validated.append(shot)
             return validated, used_terms
 
-        # Generate global shot list with Gemini — JSON mode + 2-attempt retry
+        # === AI FALLBACK CHAIN: GLM (NVIDIA) -> Gemini -> per-chunk heuristic ===
+        # GLM-5.1 (reasoning model) tried FIRST because:
+        #   - More quota than Gemini free tier
+        #   - Reasoning mode produces better structured output for shot lists
+        #   - If GLM fails (rate limit/error), Gemini is tried automatically
+
+        def _try_glm_shot_list():
+            """Call GLM-5.1 with the same shot list prompt. Returns parsed JSON or None."""
+            glm_text = self._glm_ask(prompt + "\n\nReturn STRICTLY valid JSON only.",
+                                     temperature=0.3)
+            if not glm_text:
+                return None
+            try:
+                if glm_text.startswith("```"):
+                    glm_text = glm_text.split("\n", 1)[1] if "\n" in glm_text else glm_text
+                    glm_text = glm_text.rsplit("```", 1)[0] if "```" in glm_text else glm_text
+                # Extract JSON between first [ and last ]
+                start = glm_text.find("[")
+                end = glm_text.rfind("]")
+                if start >= 0 and end > start:
+                    return glm_text[start:end+1].strip()
+                return glm_text.strip()
+            except Exception:
+                return None
+
+        # Try GLM first
+        glm_json = _try_glm_shot_list()
+        if glm_json:
+            try:
+                validated, used_terms = _parse_and_validate(glm_json)
+                if validated:
+                    print(f"    -> Global shot list (GLM): {len(validated)} segments, {len(used_terms)} unique terms")
+                    return validated
+                print(f"    -> GLM returned 0 valid shots, trying Gemini fallback...")
+            except json.JSONDecodeError as je:
+                print(f"    -> GLM JSON parse failed ({je}), trying Gemini fallback...")
+            except Exception as e:
+                print(f"    -> GLM error: {e}, trying Gemini fallback...")
+
+        # Fallback: Gemini — JSON mode + 2-attempt retry
         if self.client:
             for attempt in range(2):
                 try:
@@ -570,7 +645,7 @@ Return ONLY valid JSON array (no markdown):
                     if response and response.text:
                         validated, used_terms = _parse_and_validate(response.text.strip())
                         if validated:
-                            print(f"    -> Global shot list: {len(validated)} segments, {len(used_terms)} unique terms")
+                            print(f"    -> Global shot list (Gemini): {len(validated)} segments, {len(used_terms)} unique terms")
                             return validated
                         else:
                             print(f"    -> Attempt {attempt+1}: 0 valid shots after filtering (banned/generic terms)")
@@ -630,22 +705,36 @@ Every term must be UNIQUE across all segments.
 Return ONLY terms, 2 per segment, in order. No explanation, no numbers."""
             
             batch_terms = []
+
+            # Try GLM first for per-chunk batch (faster + more quota than Gemini free)
+            glm_resp = self._glm_ask(prompt, temperature=0.3)
+            response = None
+            if glm_resp and glm_resp.strip():
+                # Wrap GLM response in a mock object with .text attribute
+                class _FakeResp:
+                    def __init__(self, text): self.text = text
+                response = _FakeResp(glm_resp)
+
             for attempt in range(2):
                 try:
-                    rc = []
-                    def _call_batch():
-                        r = self.client.models.generate_content(
-                            model="gemini-2.5-flash",
-                            contents=prompt,
-                        )
-                        rc.append(r)
-                    t = threading.Thread(target=_call_batch, daemon=True)
-                    t.start()
-                    # Adaptive timeout: 15s per chunk in batch
-                    t.join(timeout=max(30, len(batch) * 15))
-                    if t.is_alive():
-                        raise TimeoutError("Gemini batch analysis timed out")
-                    response = rc[0] if rc else None
+                    if response is None:
+                        # GLM didn't work for this batch, try Gemini
+                        if not self.client:
+                            break
+                        rc = []
+                        def _call_batch():
+                            r = self.client.models.generate_content(
+                                model="gemini-2.5-flash",
+                                contents=prompt,
+                            )
+                            rc.append(r)
+                        t = threading.Thread(target=_call_batch, daemon=True)
+                        t.start()
+                        # Adaptive timeout: 15s per chunk in batch
+                        t.join(timeout=max(30, len(batch) * 15))
+                        if t.is_alive():
+                            raise TimeoutError("Gemini batch analysis timed out")
+                        response = rc[0] if rc else None
                     if response and response.text:
                         raw = [t.strip().lstrip("0123456789.-) ").strip("\"'*•–—")
                                for t in response.text.strip().split("\n") if t.strip()]
@@ -887,6 +976,10 @@ Return ONLY terms, 2 per segment, in order. No explanation, no numbers."""
 
         # If no Gemini client OR quota already exhausted this session, skip Vision
         if not self.client or VideoIntelligence._vision_quota_exhausted:
+            # Try GLM textual scoring first (more semantic than _textual_match_score)
+            glm_score = self._glm_score_clip(metadata_text, expected_keywords, theme)
+            if glm_score >= 0:
+                return glm_score
             txt = self._textual_match_score(metadata_text, expected_keywords, theme)
             # When in fallback mode with no metadata match, accept the clip
             # (better than rejecting everything in a loop)
@@ -972,10 +1065,17 @@ Return ONLY terms, 2 per segment, in order. No explanation, no numbers."""
                             continue
                         # PERMANENT: set class-level flag so subsequent calls skip Vision
                         VideoIntelligence._vision_quota_exhausted = True
-                        print(f"    [validate_clip] quota PERMANENTLY exhausted — disabling Vision validation for this session")
+                        print(f"    [validate_clip] quota PERMANENTLY exhausted — switching to GLM textual fallback")
+                        # Try GLM first, then textual heuristic
+                        glm_s = self._glm_score_clip(metadata_text, expected_keywords, theme)
+                        if glm_s >= 0:
+                            return glm_s
                         txt = self._textual_match_score(metadata_text, expected_keywords, theme)
                         return txt if txt > 0 else -1.0  # -1 = accept without filtering
-                    print(f"    [validate_clip] Vision error ({msg[:80]}) — textual fallback")
+                    print(f"    [validate_clip] Vision error ({msg[:80]}) — GLM/textual fallback")
+                    glm_s = self._glm_score_clip(metadata_text, expected_keywords, theme)
+                    if glm_s >= 0:
+                        return glm_s
                     txt = self._textual_match_score(metadata_text, expected_keywords, theme)
                     return txt if txt > 0 else -1.0
         finally:
