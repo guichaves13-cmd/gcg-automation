@@ -95,8 +95,11 @@ async function findSubniches(){
       let titles=(n.example_titles||[]).map(t=>`<div class="title-item" style="margin:4px 0"><div class="title-text">${escHtml(t)}</div><div class="title-len">${t.length}c</div></div>`).join('');
       let kws=(n.keywords||[]).map(k=>`<span class="tag tag-blue">${k}</span>`).join('');
       html+=`<div class="niche-card">
-        <h3>#${i+1} ${escHtml(n.name)}</h3>
-        <div class="niche-meter">
+        <div style="display:flex;justify-content:space-between;align-items:start">
+          <h3 style="margin:0">#${i+1} ${escHtml(n.name)}</h3>
+          <button class="btn-primary" style="font-size:11px;padding:4px 8px" onclick="useInRemix('${escHtml(n.name).replace(/'/g, "\\'")}')">🔀 Use in Remix</button>
+        </div>
+        <div class="niche-meter" style="margin-top:12px">
           <div class="meter"><div class="meter-label">DEMAND</div><div class="meter-bar"><div class="meter-fill" style="width:${n.demand*10}%;background:${demColor}"></div></div><div style="font-size:11px;color:${demColor};margin-top:2px">${n.demand}/10</div></div>
           <div class="meter"><div class="meter-label">SUPPLY</div><div class="meter-bar"><div class="meter-fill" style="width:${n.supply*10}%;background:${supColor}"></div></div><div style="font-size:11px;color:${supColor};margin-top:2px">${n.supply}/10</div></div>
           <div class="meter"><div class="meter-label">OPPORTUNITY</div><div class="meter-bar"><div class="meter-fill" style="width:${n.opportunity*10}%;background:${oppColor}"></div></div><div style="font-size:11px;color:${oppColor};margin-top:2px;font-weight:700">${n.opportunity}/10</div></div>
@@ -121,7 +124,69 @@ async function scanTrends(){
   const lang=document.getElementById('trend-lang').value;
   loading(true,'Scanning YouTube trends...');
   const r=await post('/api/trend_scanner',{category:cat,language:lang});
-  document.getElementById('trend-result').innerHTML=`<div class="ai-text">${escHtml(r.trends||'')}</div>`;
+  
+  if(r.error) {
+    document.getElementById('trend-result').innerHTML=`<div class="score-card" style="border-left:3px solid #e94560"><h3 style="color:#e94560">⚠️ Error</h3><p style="font-size:13px;color:#aaa">${escHtml(r.error)}</p></div>`;
+    return;
+  }
+  
+  const d = r.trends_data || {};
+  let html = '';
+  
+  // TRENDING THEMES
+  if(d.trending_themes && d.trending_themes.length) {
+    html += `<div class="niche-card" style="border-left:3px solid #FFD700"><h3 style="color:#FFD700;margin-bottom:12px">🔥 Top Trending Themes</h3>`;
+    d.trending_themes.forEach((t, i) => {
+      const demColor = t.demand>=7?'#4ecca3':t.demand>=4?'#f59e0b':'#e94560';
+      const compColor = t.competition<=3?'#4ecca3':t.competition<=6?'#f59e0b':'#e94560';
+      html += `<div style="background:#0d1117;padding:12px;border-radius:8px;margin-bottom:8px;border:1px solid #30363d">
+        <div style="display:flex;justify-content:space-between;align-items:start">
+          <div style="font-size:15px;font-weight:bold;color:#fff">#${i+1} ${escHtml(t.name)}</div>
+          <button class="btn-primary" style="font-size:11px;padding:4px 8px" onclick="useInRemix('${escHtml(t.name).replace(/'/g, "\\'")}')">🔀 Use in Remix</button>
+        </div>
+        <div style="font-size:12px;color:#aaa;margin:6px 0"><i>Why:</i> ${escHtml(t.why_trending)}</div>
+        <div style="display:flex;gap:12px;margin:8px 0">
+          <div style="font-size:11px">Demand: <b style="color:${demColor}">${t.demand}/10</b></div>
+          <div style="font-size:11px">Competition: <b style="color:${compColor}">${t.competition}/10</b></div>
+        </div>
+        <div style="font-size:12px;color:#4ecca3"><b>Angle:</b> ${escHtml(t.best_angle)}</div>
+        <div style="font-size:12px;color:#ddd;margin-top:4px">"<i>${escHtml(t.example_title)}</i>"</div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+  
+  // EMERGING NICHES
+  if(d.emerging_niches && d.emerging_niches.length) {
+    html += `<div class="niche-card" style="border-left:3px solid #4ecca3"><h3 style="color:#4ecca3;margin-bottom:12px">🌱 Emerging Micro-Niches</h3>`;
+    d.emerging_niches.forEach(t => {
+      let ex = (t.example_titles||[]).map(x=>`<li>"${escHtml(x)}"</li>`).join('');
+      html += `<div style="background:#0d1117;padding:12px;border-radius:8px;margin-bottom:8px;border:1px solid #30363d">
+        <div style="display:flex;justify-content:space-between;align-items:start">
+          <div style="font-size:15px;font-weight:bold;color:#fff">${escHtml(t.name)}</div>
+          <button class="btn-primary" style="font-size:11px;padding:4px 8px" onclick="useInRemix('${escHtml(t.name).replace(/'/g, "\\'")}')">🔀 Use in Remix</button>
+        </div>
+        <div style="font-size:12px;color:#FFD700;margin:6px 0"><b>Opportunity:</b> ${t.opportunity_score}/10</div>
+        <div style="font-size:12px;color:#aaa"><i>Audience:</i> ${escHtml(t.target_audience)}</div>
+        <ul style="font-size:12px;color:#ddd;margin-left:16px;margin-top:6px">${ex}</ul>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+  
+  // DYING NICHES
+  if(d.dying_niches && d.dying_niches.length) {
+    html += `<div class="niche-card" style="border-left:3px solid #e94560"><h3 style="color:#e94560;margin-bottom:12px">💀 Dying Niches (Avoid)</h3>`;
+    d.dying_niches.forEach(t => {
+      html += `<div style="background:#0d1117;padding:12px;border-radius:8px;margin-bottom:8px;border:1px solid #30363d">
+        <div style="font-size:14px;font-weight:bold;color:#fff">${escHtml(t.name)}</div>
+        <div style="font-size:12px;color:#aaa;margin-top:4px">${escHtml(t.reason)}</div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+  
+  document.getElementById('trend-result').innerHTML=html;
 }
 
 // STRATEGY

@@ -876,37 +876,55 @@ CATEGORY: {category if category != 'all' else 'All categories'}
 LANGUAGE: {language}
 DATE: {datetime.now().strftime('%B %Y')}
 
-Analyze current YouTube trends and provide:
+Analyze current YouTube trends and provide a structured JSON response.
 
-1. TOP 10 TRENDING THEMES RIGHT NOW
-   For each theme:
-   - Theme name
-   - Why it's trending
-   - Demand level (1-10)
-   - Competition level (1-10)
-   - Best sub-angle
-   - Viral title example (max 100 chars)
+Return ONLY a valid JSON object in this exact format:
+{{
+  "trending_themes": [
+    {{
+      "name": "Theme name",
+      "why_trending": "Why it is popular right now",
+      "demand": 9,
+      "competition": 4,
+      "best_angle": "The best way to approach this",
+      "example_title": "Example viral title"
+    }}
+  ],
+  "emerging_niches": [
+    {{
+      "name": "Micro-niche name",
+      "opportunity_score": 8,
+      "target_audience": "Who watches this",
+      "example_titles": ["Title 1", "Title 2"]
+    }}
+  ],
+  "dying_niches": [
+    {{
+      "name": "Niche name",
+      "reason": "Why it is losing traction"
+    }}
+  ]
+}}
 
-2. EMERGING MICRO-NICHES (not yet saturated)
-   - 5 micro-niches with huge potential
-   - For each: name, opportunity score, target audience, 2 title examples
-
-3. DYING NICHES TO AVOID
-   - 3 niches losing traction and why
-
-4. CROSS-NICHE OPPORTUNITIES
-   - 3 ways to combine trending themes into unique angles
-   - Example: "Ancient History + Science" = "The Science Behind Ancient Mysteries"
-
-5. VIRAL MECHANICS THAT WORK NOW
-   - Top 3 title structures getting clicks right now
-   - Top 5 emotional triggers performing best
-   - Optimal title length trend
-
-Be specific with real examples. Focus on actionable insights."""
+Provide 8 trending themes, 4 emerging niches, and 2 dying niches.
+Return ONLY valid JSON. No markdown outside the JSON."""
 
     result = ask_gemini(prompt)
-    return jsonify({"trends": result, "category": category, "date": datetime.now().isoformat()})
+    
+    if result.startswith("[AI Error"):
+        return jsonify({"error": result})
+        
+    try:
+        cleaned = result.strip()
+        cleaned = re.sub(r'^```json\s*', '', cleaned)
+        cleaned = re.sub(r'^```\s*', '', cleaned)
+        cleaned = re.sub(r'\s*```$', '', cleaned)
+        match = re.search(r'\{.*\}', cleaned, re.DOTALL)
+        trends_json = json.loads(match.group()) if match else json.loads(cleaned)
+        
+        return jsonify({"trends_data": trends_json, "category": category, "date": datetime.now().isoformat()})
+    except Exception as e:
+        return jsonify({"error": f"JSON parse error: {str(e)[:80]}", "raw": result})
 
 # =============================================
 # YOUTUBE DATA API — Real metrics
