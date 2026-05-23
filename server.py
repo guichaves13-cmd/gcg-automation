@@ -452,7 +452,9 @@ MANDATORY RULES:
 IMPORTANT: Return ONLY the 15 titles, one per line, numbered 1-15. No explanations."""
 
     result = ask_gemini(prompt)
-    
+    if result.startswith("[AI Error"):
+        return jsonify({"error": result})
+        
     # Parse titles
     titles = []
     for line in result.strip().split("\n"):
@@ -566,27 +568,52 @@ def api_deep_analysis():
     
     basic = analyze_title(title)
     
-    prompt = f"""You are the world's #1 YouTube title optimization expert.
+    prompt = f"""You are the world's #1 YouTube retention and strategy expert.
 
 TITLE TO ANALYZE: "{title}"
 
-Provide a COMPREHENSIVE analysis:
+Provide a COMPREHENSIVE highly-structured JSON analysis of this title.
 
-1. FIRST IMPRESSION (1-2 sentences): What a viewer thinks seeing this
-2. MENTAL IMAGE TEST: Does the title create a clear mental image? What image?
-3. CLICK TRIGGER: Why would someone click? What curiosity does it create?
-4. EMOTIONAL HOOK: What emotion does it trigger? How strong (1-10)?
-5. SPECIFICITY SCORE (1-10): How specific vs generic is this title?
-6. COMPETITION CHECK: How saturated is this exact angle?
-7. THUMBNAIL COMPATIBILITY: What thumbnail would pair well?
-8. 3 IMPROVED VERSIONS: Better titles (60-100 chars, with viral structures)
-9. WEAKNESS: The #1 thing holding this title back
-10. VERDICT: Would this go viral? Why or why not?
+Return ONLY a valid JSON object in this exact format:
+{{
+  "verdict": "Will this go viral? Why or why not? (1-2 sentences)",
+  "emotional_mapping": {{
+    "primary_emotion": "Fear, Curiosity, Greed, etc.",
+    "intensity": 9
+  }},
+  "retention_prediction": {{
+    "hook_dropoff": "Predicted dropoff at 0:30 (e.g., 65%)",
+    "retention_risk": "What will make people click off?"
+  }},
+  "thumbnail_concept": {{
+    "visual": "Describe the main visual element",
+    "text": "The exact text to overlay"
+  }},
+  "improved_versions": [
+    "Better Version 1",
+    "Better Version 2",
+    "Better Version 3"
+  ]
+}}
 
-Be brutally honest. Be specific. No generic advice."""
+Be brutally honest. No generic advice. Return ONLY valid JSON."""
 
-    ai_analysis = ask_gemini(prompt)
-    basic["ai_deep_analysis"] = ai_analysis
+    result = ask_gemini(prompt)
+    if result.startswith("[AI Error"):
+        basic["ai_deep_analysis"] = {"error": result}
+        return jsonify(basic)
+        
+    try:
+        cleaned = result.strip()
+        cleaned = re.sub(r'^```json\s*', '', cleaned)
+        cleaned = re.sub(r'^```\s*', '', cleaned)
+        cleaned = re.sub(r'\s*```$', '', cleaned)
+        match = re.search(r'\{.*\}', cleaned, re.DOTALL)
+        ai_json = json.loads(match.group()) if match else json.loads(cleaned)
+        basic["ai_deep_analysis"] = ai_json
+    except Exception as e:
+        basic["ai_deep_analysis"] = {"error": f"JSON parse error: {str(e)[:80]}", "raw": result}
+        
     return jsonify(basic)
 
 @app.route("/api/channel_strategy", methods=["POST"])

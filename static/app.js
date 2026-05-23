@@ -33,8 +33,43 @@ async function deepAnalyze(){
   loading(true,'Running AI deep analysis...');
   const r=await post('/api/deep_analysis',{title});
   let html=renderScoreCard(r);
+  
   if(r.ai_deep_analysis){
-    html+=`<div class="ai-text">${escHtml(r.ai_deep_analysis)}</div>`;
+    const d = r.ai_deep_analysis;
+    if(d.error) {
+       html+=`<div class="score-card" style="border-left:3px solid #e94560"><h3 style="color:#e94560">⚠️ Error</h3><p>${escHtml(d.error)}</p></div>`;
+    } else {
+       html += `<div class="score-card" style="margin-top:16px;border-left:4px solid #8b5cf6">
+         <h3 style="color:#8b5cf6;margin-bottom:8px">🧠 Deep AI Analysis</h3>
+         <div style="font-size:14px;color:#ddd;line-height:1.5;margin-bottom:12px"><b>Verdict:</b> ${escHtml(d.verdict)}</div>
+         
+         <div style="display:flex;gap:12px;margin-bottom:12px">
+           <div style="flex:1;background:#0d1117;padding:12px;border-radius:8px;border:1px solid #30363d">
+             <div style="font-size:11px;color:#aaa">Primary Emotion</div>
+             <div style="font-size:15px;font-weight:bold;color:#f59e0b">${escHtml(d.emotional_mapping?.primary_emotion || '')} <span style="font-size:11px;color:#fff">(Level ${d.emotional_mapping?.intensity||0})</span></div>
+           </div>
+           <div style="flex:1;background:#0d1117;padding:12px;border-radius:8px;border:1px solid #30363d">
+             <div style="font-size:11px;color:#aaa">Predicted Dropoff (0:30)</div>
+             <div style="font-size:15px;font-weight:bold;color:#e94560">${escHtml(d.retention_prediction?.hook_dropoff || '')}</div>
+           </div>
+         </div>
+         
+         <div style="background:#0d1117;padding:12px;border-radius:8px;border:1px solid #30363d;margin-bottom:12px">
+           <div style="font-size:12px;color:#aaa;margin-bottom:4px"><b>Retention Risk:</b> ${escHtml(d.retention_prediction?.retention_risk || '')}</div>
+         </div>
+         
+         <div class="niche-card" style="border-left:3px solid #4ecca3;padding:12px;margin-bottom:12px">
+           <div style="font-size:13px;color:#4ecca3;font-weight:bold;margin-bottom:4px">🖼️ Thumbnail Concept</div>
+           <div style="font-size:12px;color:#ddd;margin-bottom:4px"><b>Visual:</b> ${escHtml(d.thumbnail_concept?.visual || '')}</div>
+           <div style="font-size:12px;color:#ddd"><b>Text:</b> <span class="tag tag-gold">${escHtml(d.thumbnail_concept?.text || '')}</span></div>
+         </div>
+         
+         <div style="font-size:13px;color:#fff;font-weight:bold;margin-bottom:8px">🔥 Improved Versions:</div>
+         <ul style="font-size:13px;color:#aaa;padding-left:20px;margin:0">
+           ${(d.improved_versions||[]).map(v => `<li>"${escHtml(v)}"</li>`).join('')}
+         </ul>
+       </div>`;
+    }
   }
   document.getElementById('analyze-result').innerHTML=html;
 }
