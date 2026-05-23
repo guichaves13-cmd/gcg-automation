@@ -370,6 +370,8 @@ def rerender_video(
     pip_percent: int = 22,
     subtitles_srt: str = "",
     on_progress=None,
+    lower_thirds_enabled: bool = False,
+    lower_thirds_style: str = "modern",
 ) -> bool:
     """
     Re-renderiza o video a partir do segments_plan corrigido.
@@ -440,6 +442,29 @@ def rerender_video(
                                                  shot_type=seg.get("shot_type"))
                             if os.path.isfile(filt_out) and os.path.getsize(filt_out) > 1000:
                                 os.replace(filt_out, seg_out)
+                        except Exception:
+                            pass
+
+                    # Apply lower third with keyword (preserves auditor's keyword field)
+                    if seg_ok and lower_thirds_enabled:
+                        try:
+                            kw = (seg.get("keyword") or "").strip()
+                            if kw and len(kw) <= 60:
+                                from core.motion_graphics import add_lower_third
+                                lt_out = seg_out + ".lt.mp4"
+                                lt_dur = min(float(seg.get("duration", 4.0)) - 0.5, 4.0)
+                                if lt_dur >= 1.5:
+                                    add_lower_third(
+                                        seg_out, lt_out,
+                                        text=kw.title(),
+                                        subtitle=seg.get("shot_type", ""),
+                                        start_time=0.5,
+                                        duration=lt_dur,
+                                        position="bottom_left",
+                                        style=lower_thirds_style,
+                                    )
+                                    if os.path.isfile(lt_out) and os.path.getsize(lt_out) > 1000:
+                                        os.replace(lt_out, seg_out)
                         except Exception:
                             pass
 
@@ -607,6 +632,8 @@ def run_auditor(
     pip_percent: int = 22,
     subtitles_srt: str = "",
     on_progress=None,
+    lower_thirds_enabled: bool = False,
+    lower_thirds_style: str = "modern",
 ) -> dict:
     """
     Pipeline completo do auditor:
@@ -699,6 +726,8 @@ def run_auditor(
         pip_percent=pip_percent,
         subtitles_srt=subtitles_srt,
         on_progress=on_progress,
+        lower_thirds_enabled=lower_thirds_enabled,
+        lower_thirds_style=lower_thirds_style,
     )
 
     if not ok_render:

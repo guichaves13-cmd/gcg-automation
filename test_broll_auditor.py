@@ -1322,6 +1322,246 @@ with tempfile.TemporaryDirectory() as td:
 
 
 # =============================================================================
+# MODULO 16 -- MOTION GRAPHICS + LOWER THIRDS
+# =============================================================================
+sep("16. MOTION GRAPHICS - Lower thirds, title cards, chapter, progress")
+
+try:
+    from core.motion_graphics import (add_lower_third, add_title_card,
+                                       add_chapter_marker, add_progress_bar, _esc)
+    ok("motion_graphics importa (4 funcoes + _esc)")
+except Exception as e:
+    fail("motion_graphics importa", str(e))
+    add_lower_third = None
+
+if add_lower_third:
+    with tempfile.TemporaryDirectory() as td:
+        vid = os.path.join(td, "base.mp4")
+        ok_v = create_synthetic_video(vid, 6.0, "blue", True)
+        if not ok_v:
+            fail("motion_graphics setup video", "ffmpeg falhou")
+        else:
+            # 16.1 add_lower_third style=modern
+            out_lt = os.path.join(td, "lt_modern.mp4")
+            try:
+                add_lower_third(vid, out_lt, text="Fish Oil Benefits",
+                                subtitle="wide shot", start_time=1.0,
+                                duration=3.0, style="modern")
+                assert os.path.isfile(out_lt) and os.path.getsize(out_lt) > 1000
+                ok("motion: add_lower_third style=modern", f"{os.path.getsize(out_lt)//1024}KB")
+            except Exception as e:
+                fail("motion lower_third modern", str(e))
+
+            # 16.2 add_lower_third style=minimal
+            out_min = os.path.join(td, "lt_min.mp4")
+            try:
+                add_lower_third(vid, out_min, text="Test", duration=2.0, style="minimal")
+                assert os.path.isfile(out_min)
+                ok("motion: add_lower_third style=minimal")
+            except Exception as e:
+                fail("motion lower_third minimal", str(e))
+
+            # 16.3 add_lower_third style=bold
+            out_bold = os.path.join(td, "lt_bold.mp4")
+            try:
+                add_lower_third(vid, out_bold, text="Bold Title", duration=2.0, style="bold")
+                assert os.path.isfile(out_bold)
+                ok("motion: add_lower_third style=bold")
+            except Exception as e:
+                fail("motion lower_third bold", str(e))
+
+            # 16.4 add_title_card
+            out_tc = os.path.join(td, "tc.mp4")
+            try:
+                add_title_card(vid, out_tc, title="Capitulo 1",
+                               subtitle="Introducao", duration=3.0)
+                assert os.path.isfile(out_tc)
+                ok("motion: add_title_card")
+            except Exception as e:
+                fail("motion title_card", str(e))
+
+            # 16.5 add_chapter_marker
+            out_cm = os.path.join(td, "cm.mp4")
+            try:
+                add_chapter_marker(vid, out_cm, chapter_text="Parte 1", duration=2.0)
+                assert os.path.isfile(out_cm)
+                ok("motion: add_chapter_marker")
+            except Exception as e:
+                fail("motion chapter_marker", str(e))
+
+            # 16.6 add_progress_bar
+            out_pb = os.path.join(td, "pb.mp4")
+            try:
+                add_progress_bar(vid, out_pb, total_duration=6.0, color="0x1E90FF")
+                assert os.path.isfile(out_pb)
+                ok("motion: add_progress_bar")
+            except Exception as e:
+                fail("motion progress_bar", str(e))
+
+            # 16.7 _esc protege caracteres especiais
+            try:
+                # caracteres que quebrariam drawtext: : ' \ %
+                escaped = _esc("Don't break: 100% \\test")
+                # esperado: escapado para forma segura
+                assert "\\'" in escaped or "'" not in escaped
+                assert "\\:" in escaped or ":" not in escaped
+                assert "%%" in escaped
+                ok("motion: _esc protege caracteres especiais", escaped[:30])
+            except Exception as e:
+                fail("motion _esc", str(e))
+
+            # 16.8 lower_third com texto vazio -> nao crash
+            out_empty = os.path.join(td, "lt_empty.mp4")
+            try:
+                add_lower_third(vid, out_empty, text="", duration=2.0)
+                # texto vazio: aceita ou fallback (copy)
+                assert os.path.isfile(out_empty)
+                ok("motion: lower_third texto vazio -> sem crash")
+            except Exception as e:
+                fail("motion lower_third vazio", str(e))
+
+            # 16.9 lower_third com unicode (acentos, emoji)
+            out_uni = os.path.join(td, "lt_uni.mp4")
+            try:
+                add_lower_third(vid, out_uni, text="Saude e Bem-estar",
+                                subtitle="closeup", duration=2.0)
+                assert os.path.isfile(out_uni)
+                ok("motion: lower_third unicode/acentos -> ok")
+            except Exception as e:
+                fail("motion lower_third unicode", str(e))
+
+            # 16.10 lower_third com texto longo (XSS-like, special chars)
+            out_xss = os.path.join(td, "lt_xss.mp4")
+            try:
+                add_lower_third(vid, out_xss,
+                                text="A:B;C'D\\E%F", duration=2.0)
+                assert os.path.isfile(out_xss)
+                ok("motion: lower_third special chars escapados -> ok")
+            except Exception as e:
+                fail("motion lower_third special chars", str(e))
+
+
+# =============================================================================
+# MODULO 17 -- INTEGRACAO LOWER THIRDS COM AUDITOR RERENDER
+# =============================================================================
+sep("17. INTEGRACAO - Lower thirds aplicados no rerender")
+
+if add_lower_third:
+    with tempfile.TemporaryDirectory() as td:
+        avatar = os.path.join(td, "avatar.mp4")
+        broll = os.path.join(td, "broll.mp4")
+        create_synthetic_video(avatar, 8.0, "blue", True)
+        create_synthetic_video(broll, 4.0, "red", False)
+
+        # 17.1 rerender_video com lower_thirds_enabled=True
+        plan = [
+            {"type":"avatar", "start":0, "duration":4},
+            {"type":"broll",  "start":4, "duration":4, "file": broll,
+             "keyword": "fish oil omega 3", "shot_type": "wide"},
+        ]
+        out = os.path.join(td, "lt_render.mp4")
+        try:
+            ok_r = rerender_video(avatar, plan, out,
+                                  lower_thirds_enabled=True,
+                                  lower_thirds_style="modern")
+            assert ok_r == True or os.path.isfile(out)
+            assert os.path.isfile(out) and os.path.getsize(out) > 1000
+            ok("integracao: rerender com lower_thirds_enabled=True",
+               f"{os.path.getsize(out)//1024}KB")
+        except Exception as e:
+            fail("integracao rerender lower_thirds", str(e))
+
+        # 17.2 rerender_video com lower_thirds_enabled=False (default)
+        out2 = os.path.join(td, "no_lt.mp4")
+        try:
+            ok_r2 = rerender_video(avatar, plan, out2, lower_thirds_enabled=False)
+            assert os.path.isfile(out2)
+            ok("integracao: rerender com lower_thirds_enabled=False (default)")
+        except Exception as e:
+            fail("integracao rerender sem lower_thirds", str(e))
+
+        # 17.3 run_auditor com lower_thirds via kwarg
+        tl_path = os.path.join(td, "tl.json")
+        dec_path = os.path.join(td, "dec.json")
+        out3 = os.path.join(td, "auditor_lt.mp4")
+        beats = [_avatar_beat("a1",0,4),
+                 _broll_beat("b1",file=broll,start=4,duration=4)]
+        beats[1]["keyword"] = "test keyword"
+        with open(tl_path,"w",encoding="utf-8") as f: json.dump(_make_timeline(beats),f)
+        with open(dec_path,"w",encoding="utf-8") as f: json.dump({"b1":"approved"},f)
+        try:
+            r = run_auditor(tl_path, dec_path, avatar, out3,
+                            lower_thirds_enabled=True,
+                            lower_thirds_style="bold")
+            assert r.get("ok") == True
+            ok("integracao: run_auditor com lower_thirds_enabled=True",
+               f"ok={r.get('ok')}")
+        except Exception as e:
+            fail("integracao run_auditor lower_thirds", str(e))
+
+        # 17.4 lower_thirds com keyword vazia -> nao aplica (mas nao quebra)
+        plan_nokw = [
+            {"type":"broll", "start":0, "duration":3, "file": broll,
+             "keyword": "", "shot_type": ""},
+        ]
+        out4 = os.path.join(td, "no_kw.mp4")
+        try:
+            ok_r4 = rerender_video(avatar, plan_nokw, out4,
+                                   lower_thirds_enabled=True)
+            assert os.path.isfile(out4)
+            ok("integracao: lower_thirds com keyword vazia -> skip, sem crash")
+        except Exception as e:
+            fail("integracao keyword vazia", str(e))
+
+        # 17.5 lower_thirds com keyword muito longa (>60 chars) -> skip
+        long_kw = "a" * 150
+        plan_long = [
+            {"type":"broll", "start":0, "duration":3, "file": broll,
+             "keyword": long_kw, "shot_type": "wide"},
+        ]
+        out5 = os.path.join(td, "long_kw.mp4")
+        try:
+            ok_r5 = rerender_video(avatar, plan_long, out5,
+                                   lower_thirds_enabled=True)
+            assert os.path.isfile(out5)
+            ok("integracao: lower_thirds keyword >60chars -> skip, sem crash")
+        except Exception as e:
+            fail("integracao keyword longa", str(e))
+
+
+# =============================================================================
+# MODULO 18 -- PIPELINE_AVATAR_AUTO COM LOWER_THIRDS_ENABLED CONFIG
+# =============================================================================
+sep("18. PIPELINE - config lower_thirds_enabled aceita pelo run_auto")
+
+try:
+    from core.pipeline_avatar_auto import run_auto
+    import inspect
+    src = inspect.getsource(run_auto)
+    # 18.1 Pipeline le config.get("lower_thirds_enabled", ...)
+    assert "lower_thirds_enabled" in src
+    ok("pipeline: config 'lower_thirds_enabled' reconhecido no run_auto")
+except Exception as e:
+    fail("pipeline lower_thirds_enabled config", str(e))
+
+try:
+    src = inspect.getsource(run_auto)
+    # 18.2 Pipeline le config.get("lower_thirds_style", ...)
+    assert "lower_thirds_style" in src
+    ok("pipeline: config 'lower_thirds_style' reconhecido no run_auto")
+except Exception as e:
+    fail("pipeline lower_thirds_style config", str(e))
+
+try:
+    src = inspect.getsource(run_auto)
+    # 18.3 Pipeline importa add_lower_third de motion_graphics
+    assert "from core.motion_graphics import add_lower_third" in src
+    ok("pipeline: importa add_lower_third de motion_graphics")
+except Exception as e:
+    fail("pipeline import motion_graphics", str(e))
+
+
+# =============================================================================
 # RESULTADO FINAL
 # =============================================================================
 total = passes + fails

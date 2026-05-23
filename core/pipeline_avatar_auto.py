@@ -334,6 +334,30 @@ def run_auto(config: dict, on_progress=None):
                                     os.replace(filtered, seg_final)
                             except Exception as fx_e:
                                 console.print(f"  [cyan]Auto-Fix:[/cyan] Filtro no seg {i} ignorado ({fx_e})")
+
+                        # === LOWER THIRD: apply on B-Roll with keyword text ===
+                        if seg_ok and config.get("lower_thirds_enabled", False):
+                            try:
+                                kw = seg.get("keyword", "").strip()
+                                if kw and len(kw) <= 60:  # avoid huge texts
+                                    from core.motion_graphics import add_lower_third
+                                    lt_out = os.path.join(temp_dir, f"seg_{i:04d}_lt.mp4")
+                                    lt_style = config.get("lower_thirds_style", "modern")
+                                    lt_duration = min(float(seg.get("duration", 4.0)) - 0.5, 4.0)
+                                    if lt_duration >= 1.5:
+                                        add_lower_third(
+                                            seg_final, lt_out,
+                                            text=kw.title(),
+                                            subtitle=seg.get("shot_type", ""),
+                                            start_time=0.5,
+                                            duration=lt_duration,
+                                            position="bottom_left",
+                                            style=lt_style,
+                                        )
+                                        if os.path.exists(lt_out) and os.path.getsize(lt_out) > 1000:
+                                            os.replace(lt_out, seg_final)
+                            except Exception as lt_e:
+                                console.print(f"  [cyan]Auto-Fix:[/cyan] Lower third no seg {i} ignorado ({lt_e})")
                 except Exception as e:
                     console.print(f"  [red]Auto-Fix:[/red] Seg {i} falhou ({e}). Tentando fallback...")
                     seg_ok = False
