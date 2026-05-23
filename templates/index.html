@@ -60,6 +60,9 @@
       <button class="nav-btn" data-page="xray" onclick="showPage('xray')">
         <span>🕵️</span> Competitor X-Ray
       </button>
+      <button class="nav-btn" data-page="scorer" onclick="showPage('scorer')">
+        <span>📊</span> Niche Scorer
+      </button>
     </div>
     <div class="sidebar-footer">
       <div class="ai-badge">🤖 Gemini Pro AI</div>
@@ -199,6 +202,19 @@
         <button class="btn-primary" style="margin-top:12px;width:100%;background:#e94560" onclick="generateXRay()">🕵️ SCAN COMPETITOR</button>
       </div>
       <div id="xray-result" class="result-area"></div>
+    </div>
+
+    <!-- NICHE SCORER PAGE -->
+    <div class="page" id="page-scorer">
+      <div class="page-header">
+        <h1>📊 AI Niche Scorer</h1>
+        <p>Analyze profitability, saturation, and average channel size for any YouTube niche.</p>
+      </div>
+      <div class="input-row">
+        <input type="text" id="scorer-niche" placeholder="Enter niche (e.g. Minecraft, Stoicism)" style="flex:1">
+        <button class="btn-primary" style="background:#8b5cf6" onclick="generateNicheScore()">📊 SCORE NICHE</button>
+      </div>
+      <div id="scorer-result" class="result-area"></div>
     </div>
 
     <!-- GENERATOR PAGE -->

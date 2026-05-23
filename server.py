@@ -910,6 +910,124 @@ Return ONLY valid JSON."""
     except Exception as e:
         return jsonify({"error": f"JSON parse error: {str(e)[:80]}"})
 
+@app.route("/api/niche_scorer", methods=["POST"])
+def api_niche_scorer():
+    """NexLev-style AI Niche Profitability & Saturation Scorer."""
+    data = request.json
+    niche = data.get("niche", "").strip()
+    
+    key = YOUTUBE_API_KEY
+    if not key:
+        return jsonify({"error": "YouTube API key not set."}), 400
+        
+    if not niche:
+        return jsonify({"error": "Niche required."}), 400
+
+    from core.youtube_api import _get, search_outliers
+    from datetime import datetime, timezone, timedelta
+    
+    # We will use search_outliers logic but adapt it to score the niche
+    # 1. Search recent videos in this niche
+    month_ago = (datetime.now(timezone.utc) - timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    
+    params = {
+        "part": "snippet",
+        "q": niche,
+        "type": "video",
+        "order": "viewCount",
+        "maxResults": 30,
+        "regionCode": "US",
+        "publishedAfter": month_ago
+    }
+    
+    search_data = _get("search", params, key)
+    items = search_data.get("items", [])
+    if not items:
+        return jsonify({"error": "Not enough data found for this niche."})
+        
+    video_ids = [item["id"]["videoId"] for item in items if item["id"].get("videoId")]
+    channel_ids = list(set([item["snippet"]["channelId"] for item in items if item["snippet"].get("channelId")]))
+    
+    # 2. Get Video Stats (views)
+    v_stats = _get("videos", {"part": "statistics", "id": ",".join(video_ids)}, key)
+    views_list = []
+    for v in v_stats.get("items", []):
+        views_list.append(int(v.get("statistics", {}).get("viewCount", 0)))
+        
+    # 3. Get Channel Stats (subscribers)
+    c_stats = _get("channels", {"part": "statistics", "id": ",".join(channel_ids[:50])}, key)
+    subs_list = []
+    for c in c_stats.get("items", []):
+        subs_list.append(int(c.get("statistics", {}).get("subscriberCount", 0)))
+        
+    # 4. Calculate Saturation & Opportunity
+    avg_views = sum(views_list) / len(views_list) if views_list else 0
+    avg_subs = sum(subs_list) / len(subs_list) if subs_list else 0
+    
+    # How many "small" channels (< 50k subs) are getting > 50k views?
+    small_channel_wins = 0
+    # To do this accurately we need to match them, but we'll approximate for the scorer
+    # If the average views is high but average subs is low, it's a great niche.
+    
+    ratio = avg_views / max(1, avg_subs)
+    
+    if avg_subs > 1000000:
+        saturation = "High (Dominated by Giants)"
+        color = "#e94560" # Red
+        score = 30
+    elif avg_subs > 500000:
+        saturation = "Medium-High (Competitive)"
+        color = "#f59e0b" # Orange
+        score = 50
+    elif ratio > 2.0:
+        saturation = "Low (Blue Ocean - High Outlier Potential)"
+        color = "#10b981" # Green
+        score = 95
+    elif ratio > 0.5:
+        saturation = "Medium (Balanced)"
+        color = "#4ecca3" # Light Green
+        score = 75
+    else:
+        saturation = "Dead / Low Demand"
+        color = "#555" # Gray
+        score = 20
+        
+    prompt = f"""You are an elite YouTube analyst. 
+NICHE: {niche}
+AVG RECENT VIEWS: {avg_views}
+AVG COMPETITOR SUBS: {avg_subs}
+SATURATION: {saturation}
+
+Analyze the profitability of this niche for a faceless automation channel.
+Return ONLY a valid JSON object:
+{{
+  "verdict": "1-2 sentences on whether to enter this niche.",
+  "monetization_strategy": "How to monetize this beyond AdSense (Sponsorships, Affiliates, etc)",
+  "subniche_pivot": "A micro-niche within this topic that has even less competition."
+}}
+Return ONLY valid JSON."""
+
+    result = ask_gemini(prompt)
+    if result.startswith("[AI Error"): return jsonify({"error": result})
+    try:
+        cleaned = re.sub(r'^```json\s*|^```\s*|\s*```$', '', result.strip())
+        match = re.search(r'\{.*\}', cleaned, re.DOTALL)
+        ai_data = json.loads(match.group()) if match else json.loads(cleaned)
+        
+        return jsonify({
+            "metrics": {
+                "avg_views": round(avg_views),
+                "avg_subs": round(avg_subs),
+                "saturation_label": saturation,
+                "color": color,
+                "score": score,
+                "ratio": round(ratio, 2)
+            },
+            "ai_analysis": ai_data
+        })
+    except Exception as e:
+        return jsonify({"error": f"JSON parse error: {str(e)[:80]}"})
+
 @app.route("/api/channel_strategy", methods=["POST"])
 def api_channel_strategy():
     """AI-powered channel strategy analysis."""

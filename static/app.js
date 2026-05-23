@@ -474,6 +474,57 @@ async function generateXRay() {
   document.getElementById('xray-result').innerHTML = html;
 }
 
+// NICHE SCORER
+async function generateNicheScore() {
+  const niche = document.getElementById('scorer-niche').value.trim();
+  
+  if(!niche) {
+    alert("Please enter a niche.");
+    return;
+  }
+  
+  loading(true, 'Calculating Niche Profitability & Saturation Score...');
+  const r = await post('/api/niche_scorer', { niche });
+  
+  if(r.error) {
+    document.getElementById('scorer-result').innerHTML=`<div class="score-card" style="border-left:3px solid #e94560"><h3 style="color:#e94560">⚠️ Error</h3><p style="font-size:13px;color:#aaa">${escHtml(r.error)}</p></div>`;
+    return;
+  }
+  
+  const m = r.metrics || {};
+  const ai = r.ai_analysis || {};
+  
+  let html = `<div class="score-card" style="margin-bottom:16px;border-left:4px solid ${m.color}">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h2 style="color:${m.color};margin:0">Niche Score: ${m.score}/100</h2>
+      <div style="background:#0d1117;padding:4px 8px;border-radius:12px;font-size:12px;border:1px solid ${m.color};color:${m.color}">${escHtml(m.saturation_label)}</div>
+    </div>
+    
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+      <div style="background:#0d1117;padding:12px;border-radius:8px;border:1px solid #30363d">
+        <div style="font-size:11px;color:#aaa;text-transform:uppercase">Avg Recent Views</div>
+        <div style="font-size:18px;font-weight:bold;color:#fff">${m.avg_views.toLocaleString()}</div>
+      </div>
+      <div style="background:#0d1117;padding:12px;border-radius:8px;border:1px solid #30363d">
+        <div style="font-size:11px;color:#aaa;text-transform:uppercase">Avg Competitor Size</div>
+        <div style="font-size:18px;font-weight:bold;color:#fff">${m.avg_subs.toLocaleString()} subs</div>
+      </div>
+    </div>
+    
+    <h3 style="color:#8b5cf6;margin-bottom:8px">🧠 Monetization & Pivot Strategy</h3>
+    <div style="font-size:13px;color:#ddd;line-height:1.5;margin-bottom:16px;background:#0d1117;padding:12px;border-radius:8px;border:1px solid #30363d">
+      <b>Verdict:</b><br>
+      ${escHtml(ai.verdict)}<br><br>
+      <b>Monetization Strategy:</b><br>
+      ${escHtml(ai.monetization_strategy)}<br><br>
+      <b>💡 Subniche Pivot (Blue Ocean):</b><br>
+      <span style="color:#4ecca3">${escHtml(ai.subniche_pivot)}</span>
+    </div>
+  </div>`;
+  
+  document.getElementById('scorer-result').innerHTML = html;
+}
+
 function renderScoreCard(r){
   let structs=r.structures.map(s=>`<span class="tag tag-green">${s.name} +${Math.round((s.ctr_boost-1)*100)}%</span>`).join('');
   let emots=r.emotional_words.map(w=>`<span class="tag tag-purple">${w}</span>`).join('');
