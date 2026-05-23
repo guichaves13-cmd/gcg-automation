@@ -5,6 +5,7 @@ Premium viral title analysis with Gemini AI + YouTube Data API.
 import os, sys, json, re, time, math, webbrowser, threading
 from datetime import datetime
 from collections import Counter
+import werkzeug
 from flask import Flask, request, jsonify, render_template, send_from_directory
 from flask_cors import CORS
 
@@ -17,6 +18,16 @@ sys.path.insert(0, PARENT_DIR)
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 CORS(app)
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    # Pass through HTTP errors
+    if isinstance(e, werkzeug.exceptions.HTTPException):
+        return e
+    # Return JSON instead of HTML for internal server errors
+    import traceback
+    err_str = traceback.format_exc()
+    return jsonify({"error": f"Internal Server Error: {str(e)}", "trace": err_str}), 200
 
 # Load API key
 def _load_key():

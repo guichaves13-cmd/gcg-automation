@@ -13,7 +13,21 @@ async function post(url,data){
   loading(true,'Analyzing with Gemini AI...');
   try{
     const r=await fetch(API+url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
-    return await r.json();
+    const text = await r.text();
+    try {
+      const json = JSON.parse(text);
+      if(!r.ok && !json.error) json.error = `HTTP Error ${r.status}`;
+      if(json.error) {
+         alert("TitlePilot AI Error:\n" + json.error);
+      }
+      return json;
+    } catch(e) {
+      alert(`Invalid JSON Response (${r.status}): ${text.substring(0,100)}...`);
+      return {error: `Invalid JSON Response (${r.status}): ${text.substring(0,100)}...`};
+    }
+  }catch(err){
+    alert(`Network Request Failed: ${err.message}`);
+    return {error: `Network Request Failed: ${err.message}`};
   }finally{loading(false)}
 }
 function gradeClass(g){return 'grade-'+(g||'F')}
@@ -25,6 +39,10 @@ async function analyzeTitle(){
   const title=document.getElementById('analyze-input').value.trim();
   if(!title)return;
   const r=await post('/api/analyze',{title});
+  if(r.error){
+    document.getElementById('analyze-result').innerHTML=`<div class="score-card" style="color:#e94560">${escHtml(r.error)}</div>`;
+    return;
+  }
   document.getElementById('analyze-result').innerHTML=renderScoreCard(r);
 }
 async function deepAnalyze(){
@@ -32,6 +50,10 @@ async function deepAnalyze(){
   if(!title)return;
   loading(true,'Running AI deep analysis...');
   const r=await post('/api/deep_analysis',{title});
+  if(r.error){
+    document.getElementById('analyze-result').innerHTML=`<div class="score-card" style="color:#e94560">${escHtml(r.error)}</div>`;
+    return;
+  }
   let html=renderScoreCard(r);
   
   if(r.ai_deep_analysis){
@@ -843,8 +865,13 @@ async function batchAnalyze(){
   if(!text)return;
   const titles=text.split('\n').filter(t=>t.trim());
   loading(true,`Analyzing ${titles.length} titles...`);
-  const r=await post('/api/analyze_batch',{titles});
-  let html=`<div class="score-card">
+  try {
+    const r=await post('/api/analyze_batch',{titles});
+    if(r.error){
+      document.getElementById('batch-result').innerHTML=`<div class="score-card" style="color:#e94560">${escHtml(r.error)}</div>`;
+      return;
+    }
+    let html=`<div class="score-card">
     <div style="display:flex;gap:20px;margin-bottom:16px">
       <div style="flex:1;text-align:center"><div style="font-size:32px;font-weight:900;color:${barColor(r.avg_score)}">${r.avg_score}</div><div style="font-size:11px;color:#666">Avg Score</div></div>
       <div style="flex:1;text-align:center"><div style="font-size:32px;font-weight:900;color:#FFD700">${r.count}</div><div style="font-size:11px;color:#666">Titles</div></div>
@@ -865,6 +892,9 @@ async function batchAnalyze(){
     html+=`<div class="title-item"><div class="title-score ${gradeClass(t.grade)}" style="font-size:12px">${t.grade}<br>${t.score}</div><div class="title-text">${escHtml(t.title)}</div><div class="title-len">${t.length}c</div></div>`;
   });
   document.getElementById('batch-result').innerHTML=html;
+  } catch (e) {
+    document.getElementById('batch-result').innerHTML=`<div class="score-card" style="color:#e94560">Error: ${escHtml(e.message)}</div>`;
+  }
 }
 
 // =============================================
