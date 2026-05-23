@@ -616,6 +616,70 @@ Be brutally honest. No generic advice. Return ONLY valid JSON."""
         
     return jsonify(basic)
 
+@app.route("/api/crossover_engine", methods=["POST"])
+def api_crossover_engine():
+    """Generates viral crossover concepts linking two completely different niches."""
+    data = request.json
+    niche_a = data.get("niche_a", "")
+    niche_b = data.get("niche_b", "")
+    mechanic = data.get("mechanic", "No specific mechanic")
+    language = data.get("language", "English")
+
+    if not niche_a or not niche_b:
+        return jsonify({"error": "You must provide two niches to crossover."}), 400
+
+    prompt = f"""You are the ultimate YouTube growth hacker of 2026. Your secret weapon is the "CROSSOVER ENGINE".
+You link two completely different scientific, economic, or entertainment themes into a cascading cause-and-effect narrative. This hijacks two audiences at once.
+
+NICHE A: {niche_a}
+NICHE B: {niche_b}
+VIRAL MECHANIC TO INJECT: {mechanic} (e.g. Specific Pricing, Permanence Claim, Professional Villain)
+LANGUAGE: {language}
+
+Create a highly structured JSON response linking these two niches into a mind-blowing viral video concept.
+
+Return ONLY a valid JSON object in this exact format:
+{{
+  "crossover_concept": "Explain the mind-blowing link between Niche A and Niche B (1-2 paragraphs)",
+  "cascading_narrative": [
+    "Step 1: The trigger in Niche A",
+    "Step 2: The hidden escalation",
+    "Step 3: The catastrophic/massive effect on Niche B"
+  ],
+  "audience_psychology": "Why this specific combination creates an irresistible curiosity gap",
+  "viral_crossover_titles": [
+    {{
+      "title": "Title 1 (60-100 chars)",
+      "structure": "The structure used"
+    }},
+    {{
+      "title": "Title 2 (60-100 chars)",
+      "structure": "The structure used"
+    }},
+    {{
+      "title": "Title 3 (60-100 chars)",
+      "structure": "The structure used"
+    }}
+  ]
+}}
+
+Make the connection logical but shocking. Return ONLY valid JSON. No markdown outside the JSON."""
+
+    result = ask_gemini(prompt)
+    if result.startswith("[AI Error"):
+        return jsonify({"error": result})
+        
+    try:
+        cleaned = result.strip()
+        cleaned = re.sub(r'^```json\s*', '', cleaned)
+        cleaned = re.sub(r'^```\s*', '', cleaned)
+        cleaned = re.sub(r'\s*```$', '', cleaned)
+        match = re.search(r'\{.*\}', cleaned, re.DOTALL)
+        crossover_json = json.loads(match.group()) if match else json.loads(cleaned)
+        return jsonify({"crossover_data": crossover_json})
+    except Exception as e:
+        return jsonify({"error": f"JSON parse error: {str(e)[:80]}", "raw": result})
+
 @app.route("/api/channel_strategy", methods=["POST"])
 def api_channel_strategy():
     """AI-powered channel strategy analysis."""

@@ -48,6 +48,9 @@
       <button class="nav-btn" data-page="vphradar" onclick="showPage('vphradar')">
         <span>🔥</span> VPH Radar
       </button>
+      <button class="nav-btn" data-page="crossover" onclick="showPage('crossover')">
+        <span>🧬</span> Crossover Engine
+      </button>
     </div>
     <div class="sidebar-footer">
       <div class="ai-badge">🤖 Gemini Pro AI</div>
@@ -104,6 +107,44 @@
       <select id="vph-lang" style="width:100%;margin-bottom:12px"><option>English</option><option>Portuguese</option><option>Spanish</option></select>
       <button class="btn-primary btn-full" onclick="runVphRadar()">🔥 SCAN LIVE VPH DATA</button>
       <div id="vph-result" class="result-area"></div>
+    </div>
+    
+    <!-- CROSSOVER ENGINE PAGE -->
+    <div class="page" id="page-crossover">
+      <div class="page-header">
+        <h1>🧬 Crossover Engine</h1>
+        <p>Merge two different niches into a single cascading narrative to hijack multiple audiences at once.</p>
+      </div>
+      
+      <div style="display:flex;gap:12px;margin-bottom:12px">
+        <div style="flex:1">
+          <label style="font-size:12px;color:#aaa">Niche A (Trigger)</label>
+          <input type="text" id="cross-niche-a" placeholder="e.g. Deep Ocean" style="width:100%;margin-top:4px">
+        </div>
+        <div style="flex:1">
+          <label style="font-size:12px;color:#aaa">Niche B (Effect)</label>
+          <input type="text" id="cross-niche-b" placeholder="e.g. Space Exploration" style="width:100%;margin-top:4px">
+        </div>
+      </div>
+      
+      <div style="display:flex;gap:12px;margin-bottom:12px">
+        <div style="flex:2">
+          <label style="font-size:12px;color:#aaa">Viral Mechanic</label>
+          <select id="cross-mechanic" style="width:100%;margin-top:4px">
+            <option value="Professional Villain">Professional Villain (Corporate/Govt Coverup)</option>
+            <option value="Permanence Claim">Permanence Claim (Forever Changed/Irreversible)</option>
+            <option value="Specific Pricing">Specific Pricing (e.g. $5 Billion Mistake)</option>
+            <option value="Curiosity Gap">Extreme Curiosity Gap</option>
+          </select>
+        </div>
+        <div style="flex:1">
+          <label style="font-size:12px;color:#aaa">Language</label>
+          <select id="cross-lang" style="width:100%;margin-top:4px"><option>English</option><option>Portuguese</option><option>Spanish</option></select>
+        </div>
+      </div>
+      
+      <button class="btn-primary btn-full" onclick="generateCrossover()">🧬 GENERATE CROSSOVER NARRATIVE</button>
+      <div id="crossover-result" class="result-area"></div>
     </div>
 
     <!-- GENERATOR PAGE -->

@@ -307,5 +307,164 @@
       "Automação YouTube"
     ],
     "metrics": []
+  },
+  {
+    "id": 11,
+    "name": "Oceanic Abyss",
+    "url": "https://youtube.com/@oceanabyss",
+    "niche": "Ocean Documentary",
+    "micro_niche": "Deep Sea & Seismic Events",
+    "subniches": [
+      "Mariana Trench",
+      "Tsunamis",
+      "Undiscovered Species"
+    ],
+    "keywords": [
+      "Ocean",
+      "Deep",
+      "Seismic",
+      "Tsunami"
+    ],
+    "language": "English",
+    "titles": [
+      "Scientists Just Reached The Bottom Of The Ocean And Found This",
+      "The Tsunami That Could Destroy The East Coast"
+    ],
+    "reference_structures": [
+      "Scientists Just Reached [Place] And Found [Terrifying Thing]",
+      "The [Disaster] That Could Destroy [Location]"
+    ],
+    "trending_themes": [
+      "Submersibles",
+      "Whale Anomalies"
+    ],
+    "metrics": []
+  },
+  {
+    "id": 12,
+    "name": "Engenharia Extrema",
+    "url": "https://youtube.com/@engenhariaext",
+    "niche": "Construction",
+    "micro_niche": "Megaprojects & Failures",
+    "subniches": [
+      "Abandoned Cities",
+      "Impossible Bridges",
+      "Desert Cities"
+    ],
+    "keywords": [
+      "Construção",
+      "Megaprojeto",
+      "Ponte",
+      "Deserto"
+    ],
+    "language": "Portuguese",
+    "titles": [
+      "Por Que Ninguém Mora Na Cidade De  Bilhões",
+      "A Ponte Que Desafiou As Leis Da Física"
+    ],
+    "reference_structures": [
+      "Por Que Ninguém Mora Em [Lugar Caro]",
+      "O [Objeto] Que Desafiou [Regra Fundamental]"
+    ],
+    "trending_themes": [
+      "The Line Saudi Arabia",
+      "China Ghost Cities"
+    ],
+    "metrics": []
+  },
+  {
+    "id": 13,
+    "name": "Dark Web Diaries",
+    "url": "https://youtube.com/@dwdiaries",
+    "niche": "Cyber Security",
+    "micro_niche": "Hacker Stories & Scams",
+    "subniches": [
+      "Crypto Heists",
+      "Social Engineering",
+      "Dark Web Markets"
+    ],
+    "keywords": [
+      "Hacker",
+      "Scam",
+      "Heist",
+      "Dark Web"
+    ],
+    "language": "English",
+    "titles": [
+      "How One Hacker Stole  Million In 3 Minutes",
+      "The Scammer Who Tricked The FBI"
+    ],
+    "reference_structures": [
+      "How [Person] Stole $[Amount] In [Time]",
+      "The [Villain] Who Tricked [Authority]"
+    ],
+    "trending_themes": [
+      "Phishing Rings",
+      "Ransomware"
+    ],
+    "metrics": []
+  },
+  {
+    "id": 14,
+    "name": "Medical Mysteries",
+    "url": "https://youtube.com/@medmyst",
+    "niche": "Medicine",
+    "micro_niche": "Bizarre Cases & Pandemics",
+    "subniches": [
+      "Parasites",
+      "Historical Plagues",
+      "Medical Anomalies"
+    ],
+    "keywords": [
+      "Disease",
+      "Doctor",
+      "Parasite",
+      "Surgery"
+    ],
+    "language": "English",
+    "titles": [
+      "The Disease That Turns People Into Statues",
+      "What Happens When You Ignore A Tooth Infection"
+    ],
+    "reference_structures": [
+      "The Disease That Turns [Subject] Into [Object]",
+      "What Happens When You Ignore [Common Problem]"
+    ],
+    "trending_themes": [
+      "Ancient Viruses in Permafrost"
+    ],
+    "metrics": []
+  },
+  {
+    "id": 15,
+    "name": "Economia Sombria",
+    "url": "https://youtube.com/@ecosombria",
+    "niche": "Economics",
+    "micro_niche": "Corporate Corruption & Monopolies",
+    "subniches": [
+      "BlackRock",
+      "Cartels",
+      "Hyperinflation"
+    ],
+    "keywords": [
+      "Monopólio",
+      "Bilionário",
+      "Colapso",
+      "BlackRock"
+    ],
+    "language": "Portuguese",
+    "titles": [
+      "A Empresa Que É Dona Do Mundo Inteiro",
+      "Como A Inflação Está Destruindo A Classe Média"
+    ],
+    "reference_structures": [
+      "A Empresa Que É Dona De [Tudo]",
+      "Como [Força Invisível] Está Destruindo [Grupo]"
+    ],
+    "trending_themes": [
+      "CBDCs",
+      "WEF Agenda"
+    ],
+    "metrics": []
   }
 ]

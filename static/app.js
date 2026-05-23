@@ -219,6 +219,56 @@ async function runVphRadar() {
   document.getElementById('vph-result').innerHTML = html;
 }
 
+// CROSSOVER ENGINE
+async function generateCrossover() {
+  const nicheA = document.getElementById('cross-niche-a').value.trim();
+  const nicheB = document.getElementById('cross-niche-b').value.trim();
+  const mechanic = document.getElementById('cross-mechanic').value;
+  const lang = document.getElementById('cross-lang').value;
+  
+  if(!nicheA || !nicheB) {
+    alert("Please enter both Niche A and Niche B.");
+    return;
+  }
+  
+  loading(true, 'Igniting Crossover Engine... Fusing ' + nicheA + ' with ' + nicheB + '...');
+  const r = await post('/api/crossover_engine', { niche_a: nicheA, niche_b: nicheB, mechanic, language: lang });
+  
+  if(r.error) {
+    document.getElementById('crossover-result').innerHTML=`<div class="score-card" style="border-left:3px solid #e94560"><h3 style="color:#e94560">⚠️ Error</h3><p style="font-size:13px;color:#aaa">${escHtml(r.error)}</p></div>`;
+    return;
+  }
+  
+  const d = r.crossover_data || {};
+  let html = `<div class="score-card" style="margin-bottom:16px;border-left:4px solid #8b5cf6">
+    <h2 style="color:#8b5cf6;margin-bottom:12px">🧬 The Crossover Concept</h2>
+    <div style="font-size:14px;color:#ddd;line-height:1.5;margin-bottom:16px">${escHtml(d.crossover_concept)}</div>
+    
+    <h3 style="color:#4ecca3;margin-bottom:8px">🌊 Cascading Narrative (Cause & Effect)</h3>
+    <div style="background:#0d1117;padding:12px;border-radius:8px;border:1px solid #30363d;margin-bottom:16px">
+      ${(d.cascading_narrative||[]).map(step => `<div style="font-size:13px;color:#aaa;margin-bottom:4px">▶️ ${escHtml(step)}</div>`).join('')}
+    </div>
+    
+    <div style="font-size:12px;color:#f59e0b;margin-bottom:16px"><b>🧠 Audience Psychology:</b> ${escHtml(d.audience_psychology)}</div>
+  </div>`;
+  
+  if(d.viral_crossover_titles && d.viral_crossover_titles.length) {
+    html += `<div class="niche-card" style="border-left:3px solid #f59e0b"><h3 style="color:#f59e0b;margin-bottom:12px">🔥 Viral Crossover Titles</h3>`;
+    d.viral_crossover_titles.forEach(t => {
+      html += `<div style="background:#0d1117;padding:12px;border-radius:8px;margin-bottom:8px;border:1px solid #30363d">
+        <div style="display:flex;justify-content:space-between;align-items:start">
+          <div style="font-size:15px;font-weight:bold;color:#fff">${escHtml(t.title)}</div>
+          <button class="btn-primary" style="font-size:11px;padding:4px 8px" onclick="document.getElementById('ab-title-a').value='${escHtml(t.title).replace(/'/g, "\\'") }';showPage('abtest')">⚖️ A/B Test</button>
+        </div>
+        <div style="font-size:12px;color:#aaa;margin-top:6px"><i>Structure:</i> ${escHtml(t.structure)}</div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+  
+  document.getElementById('crossover-result').innerHTML = html;
+}
+
 function renderScoreCard(r){
   let structs=r.structures.map(s=>`<span class="tag tag-green">${s.name} +${Math.round((s.ctr_boost-1)*100)}%</span>`).join('');
   let emots=r.emotional_words.map(w=>`<span class="tag tag-purple">${w}</span>`).join('');
