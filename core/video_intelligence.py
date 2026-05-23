@@ -508,7 +508,9 @@ Return ONLY valid JSON array (no markdown):
                 # If Gemini returned 0 valid terms for this shot, derive from text_preview
                 if not unique_terms:
                     preview = shot.get("text_preview") or ""
-                    fallback = self._extract_visual_keywords_from_text(preview[:200], theme)
+                    # Pass subtopics so fallback can use semantic phrases instead of random words
+                    fallback = self._extract_visual_keywords_from_text(
+                        preview[:200], theme, subtopics=analysis.get("subtopics"))
                     for t in fallback:
                         tl = t.lower()
                         if tl not in used_terms and tl not in BANNED_GENERIC_TERMS:
@@ -675,7 +677,9 @@ Return ONLY terms, 2 per segment, in order. No explanation, no numbers."""
                     gemini_ok += 1
                 else:
                     gemini_fail += 1
-                    terms = self._extract_visual_keywords_from_text(chunk["text"].strip()[:400], theme)
+                    terms = self._extract_visual_keywords_from_text(
+                        chunk["text"].strip()[:400], theme,
+                        subtopics=analysis.get("subtopics"))
                     for t in terms:
                         used_terms.add(t.lower())
                 
@@ -692,17 +696,32 @@ Return ONLY terms, 2 per segment, in order. No explanation, no numbers."""
         print(f"    -> Gemini OK: {gemini_ok}, Fallback: {gemini_fail}")
         return shot_list
     
-    def _extract_visual_keywords_from_text(self, text: str, theme: str) -> list:
+    def _extract_visual_keywords_from_text(self, text: str, theme: str,
+                                            subtopics: list = None) -> list:
         """Extract visual keywords when Gemini fails. ALWAYS anchors to theme so
-        searches don't hit unrelated content (e.g., 'personalizar' alone matches
-        Minecraft videos; 'personalizar' + theme 'social media' narrows to
-        relevant stock).
+        searches don't hit unrelated content.
 
-        Strategy:
-          1. Strip stopwords (EN + PT + ES).
-          2. Keep concrete nouns (>3 chars, not in generic-fluff list).
-          3. Pair top-2 frequency words WITH theme as anchor.
+        Strategy (in order):
+          1. If subtopics provided, use first 2-3 subtopics directly (they're
+             already semantic phrases like 'lymphatic system function').
+          2. Extract bigrams (noun phrases) from text.
+          3. Pair top-2 frequency words WITH theme as anchor (last resort).
+
+        This avoids the 'body Lymphatic' / 'tell Lymphatic' bug where random
+        words from transcript get paired with theme.
         """
+        # FAST PATH: if we have good subtopics, use them directly
+        if subtopics:
+            # Subtopics are typically 'Lymphatic system function' or
+            # 'Age-related body changes' — already great B-roll queries
+            result = []
+            for st in subtopics[:3]:
+                if isinstance(st, str) and 3 <= len(st) <= 80:
+                    # Trim long phrases to 5 words max
+                    words = st.split()[:5]
+                    result.append(" ".join(words))
+            if result:
+                return result
         stop = {
             # EN
             "the","a","an","is","are","was","were","be","to","of","in","for","on",

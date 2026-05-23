@@ -2638,6 +2638,30 @@ try:
 except Exception as e:
     fail("E2E quota flag", str(e))
 
+# 31.5b BUG #4 - _extract_visual_keywords_from_text usa subtopics
+try:
+    from core.video_intelligence import VideoIntelligence
+    vi = VideoIntelligence(google_api_key="")
+    text = "body desperately needs after the age of 60"
+    # COM subtopics: deve usar elas direto
+    subs = ["Lymphatic system function", "Age-related body changes", "Health supplements"]
+    r = vi._extract_visual_keywords_from_text(text, "Lymphatic Health", subtopics=subs)
+    assert all(" " in q for q in r), f"esperado phrases, got {r}"
+    assert not any(q.endswith("Lymphatic") for q in r), f"BUG REGRESSION: padrao word+theme: {r}"
+    ok("E2E fix BUG#4: _extract_visual_keywords usa subtopics em vez de word+theme",
+       f"first={r[0][:40]}")
+except Exception as e:
+    fail("E2E BUG#4 subtopics", str(e))
+
+# 31.5c Sem subtopics -> legacy fallback (word+theme) ainda funciona
+try:
+    vi = VideoIntelligence(google_api_key="")
+    r = vi._extract_visual_keywords_from_text("body desperately changes", "Health")
+    assert len(r) >= 2 and isinstance(r[0], str)
+    ok("E2E fix: sem subtopics -> legacy fallback funciona", f"{r}")
+except Exception as e:
+    fail("E2E legacy fallback", str(e))
+
 # 31.6 Quota exhausted COM metadata match -> retorna textual score positivo
 try:
     from core.video_intelligence import VideoIntelligence as VI
