@@ -38,6 +38,72 @@ async function deepAnalyze(){
   }
   document.getElementById('analyze-result').innerHTML=html;
 }
+
+// AB SIMULATOR
+async function simulateABTest() {
+  const title_a = document.getElementById('ab-title-a').value.trim();
+  const title_b = document.getElementById('ab-title-b').value.trim();
+  const niche = document.getElementById('ab-niche').value.trim();
+  const lang = document.getElementById('ab-lang').value;
+  
+  if(!title_a || !title_b) {
+    alert("Please provide both Title A and Title B");
+    return;
+  }
+  if(!niche) {
+    alert("Please provide the main niche context");
+    return;
+  }
+  
+  loading(true, 'Simulating A/B Test and Generating Thumbnail Concept...');
+  const r = await post('/api/ab_simulate', { title_a, title_b, niche, language: lang });
+  
+  if(r.error) {
+    document.getElementById('ab-result').innerHTML=`<div class="score-card" style="border-left:3px solid #e94560"><h3 style="color:#e94560">⚠️ Error</h3><p style="font-size:13px;color:#aaa">${escHtml(r.error)}</p></div>`;
+    return;
+  }
+  
+  const d = r.ab_data || {};
+  const winColor = d.winner === 'A' ? '#f59e0b' : '#4ecca3';
+  
+  let html = `<div class="score-card" style="margin-bottom:16px;border-left:4px solid ${winColor}">
+    <h2 style="color:${winColor};margin-bottom:8px">🏆 WINNER: Title ${escHtml(d.winner)}</h2>
+    <div style="display:flex;gap:12px;margin-bottom:12px">
+      <div style="flex:1;background:#0d1117;padding:12px;border-radius:8px;border:1px solid ${d.winner === 'A' ? winColor : '#30363d'}">
+        <div style="font-size:11px;color:#aaa">Title A Score</div>
+        <div style="font-size:24px;font-weight:bold;color:${d.winner === 'A' ? winColor : '#aaa'}">${d.winner === 'A' ? d.winner_score : d.loser_score}%</div>
+      </div>
+      <div style="flex:1;background:#0d1117;padding:12px;border-radius:8px;border:1px solid ${d.winner === 'B' ? winColor : '#30363d'}">
+        <div style="font-size:11px;color:#aaa">Title B Score</div>
+        <div style="font-size:24px;font-weight:bold;color:${d.winner === 'B' ? winColor : '#aaa'}">${d.winner === 'B' ? d.winner_score : d.loser_score}%</div>
+      </div>
+    </div>
+    <div style="font-size:14px;color:#ddd;line-height:1.5;margin-bottom:12px"><b>Why it wins:</b> ${escHtml(d.analysis)}</div>
+  </div>`;
+  
+  if(d.thumbnail_concept) {
+    html += `<div class="niche-card" style="border-left:3px solid #e94560">
+      <h3 style="color:#e94560;margin-bottom:12px">🖼️ Viral Thumbnail Concept</h3>
+      <div style="background:#0d1117;padding:12px;border-radius:8px;border:1px solid #30363d">
+        <div style="font-size:13px;color:#aaa;margin-bottom:4px"><b>Visual:</b> ${escHtml(d.thumbnail_concept.visual)}</div>
+        <div style="font-size:13px;color:#aaa;margin-bottom:4px"><b>Overlay Text:</b> <span class="tag tag-gold">${escHtml(d.thumbnail_concept.text)}</span></div>
+        <div style="font-size:13px;color:#aaa"><b>Emotion:</b> ${escHtml(d.thumbnail_concept.emotion)}</div>
+      </div>
+    </div>`;
+  }
+  
+  if(d.video_hook) {
+    html += `<div class="niche-card" style="border-left:3px solid #8b5cf6">
+      <h3 style="color:#8b5cf6;margin-bottom:12px">🪝 Perfect Video Hook (First 15s)</h3>
+      <div style="background:#0d1117;padding:12px;border-radius:8px;border:1px solid #30363d;font-style:italic;color:#ddd;line-height:1.5">
+        "${escHtml(d.video_hook)}"
+      </div>
+    </div>`;
+  }
+  
+  document.getElementById('ab-result').innerHTML = html;
+}
+
 function renderScoreCard(r){
   let structs=r.structures.map(s=>`<span class="tag tag-green">${s.name} +${Math.round((s.ctr_boost-1)*100)}%</span>`).join('');
   let emots=r.emotional_words.map(w=>`<span class="tag tag-purple">${w}</span>`).join('');

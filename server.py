@@ -1242,6 +1242,61 @@ def update_channel():
     _save_channels(channels)
     return jsonify({"status": "ok"})
 
+@app.route("/api/ab_simulate", methods=["POST"])
+def api_ab_simulate():
+    """Simulate an A/B test between two titles and generate a thumbnail concept."""
+    data = request.json
+    title_a = data.get("title_a", "")
+    title_b = data.get("title_b", "")
+    niche = data.get("niche", "")
+    language = data.get("language", "English")
+    
+    if not title_a or not title_b:
+        return jsonify({"error": "Both titles must be provided"}), 400
+        
+    prompt = f"""You are the ultimate YouTube A/B testing algorithm. 
+I am going to give you two titles for the exact same video.
+
+NICHE: {niche}
+LANGUAGE: {language}
+TITLE A: "{title_a}"
+TITLE B: "{title_b}"
+
+You must predict the winner based on human psychology, curiosity gaps, clarity, and viral structures.
+Provide a strictly structured JSON response.
+
+Return ONLY a valid JSON object in this exact format:
+{{
+  "winner": "A or B",
+  "winner_score": 95,
+  "loser_score": 75,
+  "analysis": "A concise paragraph explaining exactly why the winner triggers more clicks.",
+  "thumbnail_concept": {{
+    "visual": "Describe the main visual element (e.g., Extreme close up of...)",
+    "text": "The exact text to overlay on the thumbnail (max 3 words)",
+    "emotion": "The core emotion it should evoke"
+  }},
+  "video_hook": "Write the first 15 seconds (script) of the video that perfectly delivers on the winning title's promise."
+}}
+
+Return ONLY valid JSON. No markdown outside the JSON."""
+
+    result = ask_gemini(prompt)
+    if result.startswith("[AI Error"):
+        return jsonify({"error": result})
+        
+    try:
+        cleaned = result.strip()
+        cleaned = re.sub(r'^```json\s*', '', cleaned)
+        cleaned = re.sub(r'^```\s*', '', cleaned)
+        cleaned = re.sub(r'\s*```$', '', cleaned)
+        match = re.search(r'\{.*\}', cleaned, re.DOTALL)
+        ab_json = json.loads(match.group()) if match else json.loads(cleaned)
+        
+        return jsonify({"ab_data": ab_json})
+    except Exception as e:
+        return jsonify({"error": f"JSON parse error: {str(e)[:80]}", "raw": result})
+
 # =============================================
 # STARTUP
 # =============================================

@@ -42,6 +42,9 @@
       <button class="nav-btn" data-page="youtube" onclick="showPage('youtube')">
         <span>🔍</span> YouTube Scanner
       </button>
+      <button class="nav-btn" data-page="abtest" onclick="showPage('abtest')">
+        <span>⚖️</span> A/B Simulator
+      </button>
     </div>
     <div class="sidebar-footer">
       <div class="ai-badge">🤖 Gemini Pro AI</div>
@@ -62,6 +65,30 @@
         <button class="btn-secondary" onclick="deepAnalyze()">🧠 AI Deep Analysis</button>
       </div>
       <div id="analyze-result" class="result-area"></div>
+    </div>
+    
+    <!-- AB SIMULATOR PAGE -->
+    <div class="page" id="page-abtest">
+      <div class="page-header">
+        <h1>⚖️ A/B Testing Simulator</h1>
+        <p>Simulate audience behavior. Pit two titles against each other to see which wins, and generate a viral Thumbnail & Hook.</p>
+      </div>
+      <input type="text" id="ab-niche" placeholder="Main Niche (e.g. Ocean Documentary)" style="width:100%;margin-bottom:8px">
+      <select id="ab-lang" style="width:100%;margin-bottom:12px"><option>English</option><option>Portuguese</option><option>Spanish</option></select>
+      
+      <div style="display:flex;gap:12px;margin-bottom:12px">
+        <div style="flex:1;background:#0d1117;padding:12px;border-radius:8px;border-left:4px solid #f59e0b">
+          <h3 style="color:#f59e0b;margin-bottom:8px">Title A</h3>
+          <input type="text" id="ab-title-a" placeholder="Enter first title idea..." style="width:100%">
+        </div>
+        <div style="flex:1;background:#0d1117;padding:12px;border-radius:8px;border-left:4px solid #4ecca3">
+          <h3 style="color:#4ecca3;margin-bottom:8px">Title B</h3>
+          <input type="text" id="ab-title-b" placeholder="Enter second title idea..." style="width:100%">
+        </div>
+      </div>
+      
+      <button class="btn-primary btn-full" onclick="simulateABTest()">⚖️ RUN A/B SIMULATION</button>
+      <div id="ab-result" class="result-area"></div>
     </div>
 
     <!-- GENERATOR PAGE -->
