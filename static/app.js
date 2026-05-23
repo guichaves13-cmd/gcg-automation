@@ -532,7 +532,49 @@ async function analyzeChannel(channel){
     reference_structures: channel.reference_structures||[],
     trending_themes: channel.trending_themes||[],
   });
-  document.getElementById('channel-analysis').innerHTML=`<div class="ai-text">${escHtml(r.analysis||'')}</div>`;
+  
+  if(r.error) {
+    document.getElementById('channel-analysis').innerHTML=`<div class="score-card" style="border-left:3px solid #e94560"><h3 style="color:#e94560">⚠️ Error</h3><p style="font-size:13px;color:#aaa">${escHtml(r.error)}</p></div>`;
+    return;
+  }
+  
+  const d = r.analysis_data || {};
+  let html = `<div class="score-card" style="margin-bottom:16px;border-left:4px solid #4ecca3">
+    <h2 style="color:#4ecca3;margin-bottom:8px">🧬 Channel DNA Analysis</h2>
+    <div style="font-size:14px;color:#ddd;line-height:1.5">${escHtml(d.dna_analysis || '')}</div>
+  </div>`;
+  
+  if(d.new_subniches && d.new_subniches.length) {
+    html += `<div class="niche-card" style="border-left:3px solid #f59e0b"><h3 style="color:#f59e0b;margin-bottom:12px">💎 Discovered Subniches</h3>`;
+    d.new_subniches.forEach(s => {
+      let ex = (s.example_titles||[]).map(t=>`<li>"${escHtml(t)}"</li>`).join('');
+      html += `<div style="background:#0d1117;padding:12px;border-radius:8px;margin-bottom:8px;border:1px solid #30363d">
+        <div style="display:flex;justify-content:space-between;align-items:start">
+          <div style="font-size:15px;font-weight:bold;color:#fff">${escHtml(s.name)}</div>
+          <button class="btn-primary" style="font-size:11px;padding:4px 8px" onclick="useInRemix('${escHtml(s.name).replace(/'/g, "\\'")}')">🔀 Use in Remix</button>
+        </div>
+        <div style="font-size:12px;color:#aaa;margin:4px 0"><i>Why:</i> ${escHtml(s.why_it_works)}</div>
+        <div style="font-size:12px;color:#aaa;margin:4px 0"><i>Pain point:</i> ${escHtml(s.pain_point)}</div>
+        <div style="font-size:11px;color:#f59e0b;margin-top:6px">Competition: ${escHtml(s.competition)}</div>
+        <ul style="font-size:12px;color:#ddd;margin-left:16px;margin-top:8px">${ex}</ul>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+  
+  if(d.action_plan && d.action_plan.length) {
+    html += `<div class="niche-card" style="border-left:3px solid #8b5cf6"><h3 style="color:#8b5cf6;margin-bottom:12px">📅 Weekly Action Plan</h3>`;
+    d.action_plan.forEach((p,i) => {
+      html += `<div style="background:#0d1117;padding:12px;border-radius:8px;margin-bottom:8px;border:1px solid #30363d">
+        <div style="font-size:14px;font-weight:bold;color:#fff">Video ${i+1}: ${escHtml(p.topic)}</div>
+        <div style="font-size:12px;color:#4ecca3;margin-top:4px">🎯 Target: ${escHtml(p.priority_subniche)}</div>
+        <div style="font-size:12px;color:#aaa;margin-top:2px">📐 Structure: ${escHtml(p.structure_used)}</div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+  
+  document.getElementById('channel-analysis').innerHTML = html;
 }
 
 async function addMetrics(){

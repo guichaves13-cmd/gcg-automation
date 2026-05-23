@@ -1140,47 +1140,48 @@ LANGUAGE: {channel.get('language', 'English')}
 === PERFORMANCE METRICS ===
 {metrics_text}
 
-=== YOUR MISSION ===
+Analyze this channel and provide a completely structured JSON response.
 
-**STEP 1: CHANNEL DNA ANALYSIS**
-- Identify the channel's EXACT DNA: what themes work, what structures get clicks
-- Analyze what's working and what's NOT based on metrics (if available)
+Return ONLY a valid JSON object in this exact format:
+{{
+  "dna_analysis": "One concise paragraph explaining what works for this channel's DNA.",
+  "new_subniches": [
+    {{
+      "name": "New Subniche Name",
+      "why_it_works": "Why it has demand but low supply",
+      "competition": "Low",
+      "pain_point": "Target audience pain point",
+      "example_titles": ["Title 1", "Title 2", "Title 3"]
+    }}
+  ],
+  "action_plan": [
+    {{
+      "topic": "Video topic",
+      "priority_subniche": "Subniche to target",
+      "structure_used": "Which viral structure is applied"
+    }}
+  ]
+}}
 
-**STEP 2: NEW SUBNICHE DISCOVERY** (THIS IS THE KEY)
-The goal is NOT to copy existing subniches. The goal is to CREATE NEW ONES.
-
-METHOD:
-1. Take a VALIDATED TRENDING THEME (e.g., "construction" is trending)
-2. Take a VALIDATED TITLE STRUCTURE (e.g., "Why Nobody Lives In..." works)
-3. CHANGE THE SUBNICHE to something NEW with the same theme
-   - Example: Construction is trending → "cities" is the obvious subniche (too much competition)
-   - NEW subniche: "underground bunkers", "underwater tunnels", "impossible bridges"
-   - Same theme (construction), same validated structure, but DIFFERENT angle = less competition
-
-For each new subniche:
-- Name it precisely
-- Explain WHY it has demand but low supply
-- Show 3 viral titles using VALIDATED structures (max 100 chars each)
-- Estimated competition level (low/medium/high)
-- Target audience pain point
-
-**STEP 3: TITLE OPTIMIZATION**
-- Take the validated structures and adapt them to each new subniche
-- Every title MUST be 60-100 characters
-- Use 1-2 CAPS words per title
-- Use emotional triggers
-
-**STEP 4: WEEKLY ACTION PLAN**
-Based on the analysis, suggest:
-- 5 video topics for THIS WEEK
-- Which subniche to prioritize
-- What title structure to use for each
-
-Provide 5 NEW subniches with 3 titles each.
-Be extremely specific. No generic advice. Real differentiated opportunities."""
+Provide 5 NEW subniches (not currently used) and a 5-video action plan.
+Return ONLY valid JSON. No markdown outside the JSON."""
 
     result = ask_gemini(prompt)
-    return jsonify({"analysis": result, "channel": channel})
+    
+    if result.startswith("[AI Error"):
+        return jsonify({"error": result})
+        
+    try:
+        cleaned = result.strip()
+        cleaned = re.sub(r'^```json\s*', '', cleaned)
+        cleaned = re.sub(r'^```\s*', '', cleaned)
+        cleaned = re.sub(r'\s*```$', '', cleaned)
+        match = re.search(r'\{.*\}', cleaned, re.DOTALL)
+        analysis_json = json.loads(match.group()) if match else json.loads(cleaned)
+        
+        return jsonify({"analysis_data": analysis_json, "channel": channel})
+    except Exception as e:
+        return jsonify({"error": f"JSON parse error: {str(e)[:80]}", "raw": result})
 
 @app.route("/api/channels/update_metrics", methods=["POST"])
 def update_channel_metrics():
