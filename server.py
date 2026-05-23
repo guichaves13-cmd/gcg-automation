@@ -803,6 +803,113 @@ Return ONLY valid JSON."""
     except Exception as e:
         return jsonify({"error": f"JSON parse error: {str(e)[:80]}"})
 
+@app.route("/api/competitor_xray", methods=["POST"])
+def api_competitor_xray():
+    """Nexlev-style Competitor Deep Dive: RPM, Velocity, and Secret Sauce."""
+    data = request.json
+    channel_handle = data.get("channel", "").strip()
+    
+    key = YOUTUBE_API_KEY
+    if not key:
+        return jsonify({"error": "YouTube API key not set."}), 400
+        
+    if not channel_handle:
+        return jsonify({"error": "Channel handle required (e.g., @MrBeast)."}), 400
+
+    from core.youtube_api import get_channel_info, get_channel_videos
+    
+    # 1. Fetch channel info
+    ch_info = get_channel_info(channel_handle, key)
+    if not ch_info or "error" in ch_info:
+        return jsonify({"error": "Could not find channel. Make sure to use the exact handle or URL."})
+        
+    ch_id = ch_info.get("id")
+    
+    # 2. Fetch last 30 videos
+    videos = get_channel_videos(ch_id, key, max_videos=30)
+    if not videos:
+        return jsonify({"error": "No public videos found for this channel."})
+        
+    # 3. Calculate Nexlev Metrics
+    from datetime import datetime, timezone
+    
+    total_recent_views = 0
+    now = datetime.now(timezone.utc)
+    
+    outlier_video = videos[0]
+    highest_views = -1
+    
+    for v in videos:
+        v_views = v.get("views", 0)
+        total_recent_views += v_views
+        if v_views > highest_views:
+            highest_views = v_views
+            outlier_video = v
+            
+    avg_views = total_recent_views // len(videos) if videos else 0
+    
+    # Calculate velocity (videos per month based on last 30)
+    try:
+        oldest_date = datetime.strptime(videos[-1]["published_at"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        days_diff = max(1, (now - oldest_date).days)
+        videos_per_month = round((len(videos) / days_diff) * 30, 1)
+    except:
+        videos_per_month = "N/A"
+        
+    # Estimate Monthly Revenue (Nexlev uses varying RPMs, we'll use a conservative $4.00 RPM)
+    # Revenue = (Total views in a month / 1000) * 4
+    # To get views in a month, we calculate average views per day from the recent videos, then * 30
+    views_per_day = total_recent_views / days_diff if 'days_diff' in locals() else 0
+    estimated_monthly_views = views_per_day * 30
+    est_revenue = round((estimated_monthly_views / 1000) * 4)
+    
+    # 4. Extract Secret Sauce via Gemini
+    titles_list = "\n".join([f"- {v['title']} ({v.get('views', 0)} views)" for v in videos[:15]])
+    
+    prompt = f"""You are an elite YouTube strategist. Analyze this competitor's recent performance.
+CHANNEL: {ch_info.get('title')}
+AVG VIEWS: {avg_views}
+RECENT TITLES:
+{titles_list}
+
+Analyze their "Secret Sauce".
+Return ONLY a valid JSON object:
+{{
+  "content_pillars": ["Pillar 1", "Pillar 2"],
+  "title_framework": "Explain their core psychological title formula (1 paragraph)",
+  "weakness": "What are they not doing that someone else could exploit?"
+}}
+Return ONLY valid JSON."""
+
+    result = ask_gemini(prompt)
+    if result.startswith("[AI Error"): return jsonify({"error": result})
+    try:
+        cleaned = re.sub(r'^```json\s*|^```\s*|\s*```$', '', result.strip())
+        match = re.search(r'\{.*\}', cleaned, re.DOTALL)
+        ai_data = json.loads(match.group()) if match else json.loads(cleaned)
+        
+        return jsonify({
+            "channel_stats": {
+                "title": ch_info.get("title"),
+                "subscribers": ch_info.get("subscriber_count", 0),
+                "total_views": ch_info.get("view_count", 0),
+                "thumbnail": ch_info.get("thumbnail", "")
+            },
+            "nexlev_metrics": {
+                "avg_views": avg_views,
+                "upload_velocity": f"{videos_per_month} videos/mo",
+                "est_revenue": f"${est_revenue:,}/mo",
+                "top_recent_video": {
+                    "title": outlier_video.get("title", ""),
+                    "views": outlier_video.get("views", 0),
+                    "url": outlier_video.get("url", "")
+                }
+            },
+            "ai_analysis": ai_data
+        })
+    except Exception as e:
+        return jsonify({"error": f"JSON parse error: {str(e)[:80]}"})
+
 @app.route("/api/channel_strategy", methods=["POST"])
 def api_channel_strategy():
     """AI-powered channel strategy analysis."""

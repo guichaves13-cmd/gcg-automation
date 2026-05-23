@@ -409,6 +409,71 @@ async function generateOutliers() {
   document.getElementById('outlier-result').innerHTML = html;
 }
 
+// COMPETITOR X-RAY
+async function generateXRay() {
+  const channel = document.getElementById('xray-handle').value.trim();
+  
+  if(!channel) {
+    alert("Please enter a channel handle.");
+    return;
+  }
+  
+  loading(true, 'Running X-Ray on ' + channel + '... Scraping videos and estimating RPM...');
+  const r = await post('/api/competitor_xray', { channel });
+  
+  if(r.error) {
+    document.getElementById('xray-result').innerHTML=`<div class="score-card" style="border-left:3px solid #e94560"><h3 style="color:#e94560">⚠️ Error</h3><p style="font-size:13px;color:#aaa">${escHtml(r.error)}</p></div>`;
+    return;
+  }
+  
+  const stats = r.channel_stats || {};
+  const metrics = r.nexlev_metrics || {};
+  const ai = r.ai_analysis || {};
+  
+  let html = `<div class="score-card" style="margin-bottom:16px;border-left:4px solid #e94560">
+    <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px">
+      ${stats.thumbnail ? `<img src="${stats.thumbnail}" style="width:60px;height:60px;border-radius:50%">` : ''}
+      <div>
+        <h2 style="color:#fff;margin:0">${escHtml(stats.title)}</h2>
+        <div style="color:#aaa;font-size:13px">👥 ${parseInt(stats.subscribers).toLocaleString()} subs • 👁️ ${parseInt(stats.total_views).toLocaleString()} total views</div>
+      </div>
+    </div>
+    
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+      <div style="background:#0d1117;padding:12px;border-radius:8px;border:1px solid #30363d">
+        <div style="font-size:11px;color:#aaa;text-transform:uppercase">Avg Views (Recent)</div>
+        <div style="font-size:18px;font-weight:bold;color:#4ecca3">${parseInt(metrics.avg_views).toLocaleString()}</div>
+      </div>
+      <div style="background:#0d1117;padding:12px;border-radius:8px;border:1px solid #30363d">
+        <div style="font-size:11px;color:#aaa;text-transform:uppercase">Upload Velocity</div>
+        <div style="font-size:18px;font-weight:bold;color:#f59e0b">${escHtml(metrics.upload_velocity)}</div>
+      </div>
+      <div style="background:#0d1117;padding:12px;border-radius:8px;border:1px solid #30363d;grid-column:1 / -1">
+        <div style="font-size:11px;color:#aaa;text-transform:uppercase">Estimated AdSense ($4 RPM)</div>
+        <div style="font-size:22px;font-weight:bold;color:#10b981">${escHtml(metrics.est_revenue)}</div>
+      </div>
+    </div>
+    
+    <h3 style="color:#e94560;margin-bottom:8px">🔥 Top Recent Outlier</h3>
+    <div style="background:#1a1a2e;padding:12px;border-radius:8px;border-left:2px solid #e94560;margin-bottom:16px">
+      <a href="${metrics.top_recent_video.url}" target="_blank" style="color:#fff;font-weight:bold;text-decoration:none;display:block;margin-bottom:4px">${escHtml(metrics.top_recent_video.title)}</a>
+      <div style="font-size:12px;color:#aaa">👁️ ${parseInt(metrics.top_recent_video.views).toLocaleString()} views</div>
+    </div>
+    
+    <h3 style="color:#8b5cf6;margin-bottom:8px">🧠 The Secret Sauce (AI Analysis)</h3>
+    <div style="font-size:13px;color:#ddd;line-height:1.5;margin-bottom:16px;background:#0d1117;padding:12px;border-radius:8px;border:1px solid #30363d">
+      <b>Content Pillars:</b><br>
+      ${(ai.content_pillars||[]).map(p => `• ${escHtml(p)}`).join('<br>')}<br><br>
+      <b>Title Framework:</b><br>
+      ${escHtml(ai.title_framework)}<br><br>
+      <b>⚠️ Weakness (Your Opportunity):</b><br>
+      <span style="color:#f59e0b">${escHtml(ai.weakness)}</span>
+    </div>
+  </div>`;
+  
+  document.getElementById('xray-result').innerHTML = html;
+}
+
 function renderScoreCard(r){
   let structs=r.structures.map(s=>`<span class="tag tag-green">${s.name} +${Math.round((s.ctr_boost-1)*100)}%</span>`).join('');
   let emots=r.emotional_words.map(w=>`<span class="tag tag-purple">${w}</span>`).join('');

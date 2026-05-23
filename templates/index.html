@@ -57,6 +57,9 @@
       <button class="nav-btn" data-page="outlier" onclick="showPage('outlier')">
         <span>🎯</span> Outlier Finder
       </button>
+      <button class="nav-btn" data-page="xray" onclick="showPage('xray')">
+        <span>🕵️</span> Competitor X-Ray
+      </button>
     </div>
     <div class="sidebar-footer">
       <div class="ai-badge">🤖 Gemini Pro AI</div>
@@ -183,6 +186,19 @@
       </div>
       <button class="btn-primary btn-full" style="margin-top:12px;background:#10b981;color:#1a1a2e" onclick="generateOutliers()">🎯 HUNT OUTLIERS</button>
       <div id="outlier-result" class="result-area"></div>
+    </div>
+
+    <!-- COMPETITOR X-RAY PAGE -->
+    <div class="page" id="page-xray">
+      <div class="page-header">
+        <h1>🕵️ Competitor X-Ray</h1>
+        <p>Reverse-engineer any channel's business model, RPM, and secret content formula.</p>
+      </div>
+      <div class="input-group">
+        <input type="text" id="xray-handle" placeholder="Enter channel handle (e.g. @MrBeast, @MagnatesMedia)" style="width:100%">
+        <button class="btn-primary" style="margin-top:12px;width:100%;background:#e94560" onclick="generateXRay()">🕵️ SCAN COMPETITOR</button>
+      </div>
+      <div id="xray-result" class="result-area"></div>
     </div>
 
     <!-- GENERATOR PAGE -->
