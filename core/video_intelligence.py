@@ -36,15 +36,18 @@ class VideoIntelligence:
         return self._client
     
     def _glm_ask(self, prompt: str, temperature=0.3,
-                  enable_thinking: bool = False, timeout: float = 90.0) -> str:
+                  enable_thinking: bool = False, timeout: float = 90.0,
+                  max_retries: int = 0) -> str:
         """Call GLM-5.1. Defaults:
           - enable_thinking=False (fast mode; reasoning adds 60s+ overhead)
           - timeout=90s (long enough for JSON shot lists, short enough to fall back)
+          - max_retries=0 (honor timeout strictly; we have Gemini fallback anyway)
         Returns content string or empty string on error (caller falls back to Gemini).
         """
         from core.glm_agent import ask
         result, err = ask(prompt, temperature=temperature, stream=False,
-                          enable_thinking=enable_thinking, timeout=timeout)
+                          enable_thinking=enable_thinking, timeout=timeout,
+                          max_retries=max_retries)
         if err:
             print(f"    [GLM] Error ({err[:100]}) - falling back to next AI in chain")
             return ""
