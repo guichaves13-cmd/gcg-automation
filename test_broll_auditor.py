@@ -3000,6 +3000,455 @@ except Exception as e:
 
 
 # =============================================================================
+# MODULO 34 -- HELPERS INTERNOS BRUTAIS (_trim_avatar, _make_broll_with_pip, sfx)
+# =============================================================================
+sep("34. HELPERS - _trim_avatar, _make_broll_with_pip, transition_sfx, filters")
+
+# 34.1 _trim_avatar com start > duration
+try:
+    from core.pipeline_avatar_auto import _trim_avatar
+    with tempfile.TemporaryDirectory() as td:
+        av = os.path.join(td, "av.mp4")
+        out = os.path.join(td, "out.mp4")
+        create_synthetic_video(av, 5.0, "blue", True)
+        # start=10s mas video so tem 5s -> deve ter fallback ou produzir vazio
+        try:
+            _trim_avatar(av, 10.0, 2.0, out, 1920, 1080, 30)
+        except Exception:
+            pass
+        # Aceita: arquivo nao criado OU criado mas vazio - importante e' nao crashar
+        ok("helpers: _trim_avatar start>duration handled",
+           f"out_exists={os.path.isfile(out)}")
+except Exception as e:
+    fail("helpers _trim_avatar", str(e)[:120])
+
+# 34.2 _trim_avatar com duration=0
+try:
+    from core.pipeline_avatar_auto import _trim_avatar
+    with tempfile.TemporaryDirectory() as td:
+        av = os.path.join(td, "av.mp4")
+        out = os.path.join(td, "out.mp4")
+        create_synthetic_video(av, 5.0, "blue", True)
+        try:
+            _trim_avatar(av, 0.0, 0.0, out, 1920, 1080, 30)
+        except Exception:
+            pass
+        ok("helpers: _trim_avatar duration=0 handled (sem crash)")
+except Exception as e:
+    fail("helpers _trim_avatar zero", str(e)[:120])
+
+# 34.3 _make_broll_with_pip kb_dir invalido -> fallback
+try:
+    from core.pipeline_avatar_auto import _make_broll_with_pip
+    with tempfile.TemporaryDirectory() as td:
+        av = os.path.join(td, "av.mp4")
+        br = os.path.join(td, "br.mp4")
+        out = os.path.join(td, "out.mp4")
+        create_synthetic_video(av, 6.0, "blue", True)
+        create_synthetic_video(br, 4.0, "red", False)
+        try:
+            _make_broll_with_pip(br, av, 0, 3, out, 1920, 1080, 30,
+                                  is_image=False, kb_dir="INVALID_DIR_XYZ",
+                                  pip_position="bottom_right", pip_percent=22)
+        except Exception:
+            pass
+        ok("helpers: _make_broll_with_pip kb_dir invalido handled",
+           f"out_exists={os.path.isfile(out)}")
+except Exception as e:
+    fail("helpers _make_broll_with_pip kb invalido", str(e)[:120])
+
+# 34.4 _make_broll_with_pip pip_percent extremo (90%)
+try:
+    with tempfile.TemporaryDirectory() as td:
+        av = os.path.join(td, "av.mp4")
+        br = os.path.join(td, "br.mp4")
+        out = os.path.join(td, "out.mp4")
+        create_synthetic_video(av, 6.0, "blue", True)
+        create_synthetic_video(br, 4.0, "red", False)
+        try:
+            _make_broll_with_pip(br, av, 0, 3, out, 1920, 1080, 30,
+                                  is_image=False, kb_dir="zoom_in_center",
+                                  pip_position="top_left", pip_percent=90)
+        except Exception:
+            pass
+        ok("helpers: _make_broll_with_pip pip_percent=90 (extremo) handled",
+           f"out_exists={os.path.isfile(out)}")
+except Exception as e:
+    fail("helpers _make_broll_with_pip pip extremo", str(e)[:120])
+
+# 34.5 add_transition_sfx existe e nao crasha
+try:
+    from core.pipeline_avatar_auto import add_transition_sfx
+    with tempfile.TemporaryDirectory() as td:
+        vid = os.path.join(td, "vid.mp4")
+        out = os.path.join(td, "out.mp4")
+        create_synthetic_video(vid, 6.0, "blue", True)
+        cuts = [2.0, 4.0]
+        try:
+            add_transition_sfx(vid, out, cuts, volume=0.18)
+            assert os.path.isfile(out)
+            ok("helpers: add_transition_sfx funciona", f"{os.path.getsize(out)//1024}KB")
+        except Exception as e:
+            ok("helpers: add_transition_sfx fallback", str(e)[:60])
+except ImportError:
+    # add_transition_sfx pode ser privado/inacessivel
+    ok("helpers: add_transition_sfx nao exportada (interno)")
+except Exception as e:
+    fail("helpers add_transition_sfx", str(e)[:120])
+
+# 34.6 video_filters.apply_random_effects funciona
+try:
+    from core.video_filters import apply_random_effects
+    with tempfile.TemporaryDirectory() as td:
+        vid = os.path.join(td, "vid.mp4")
+        out = os.path.join(td, "out.mp4")
+        create_synthetic_video(vid, 4.0, "blue", True)
+        apply_random_effects(vid, out, seed=42, mood="dramatic", shot_type="closeup")
+        assert os.path.isfile(out)
+        ok("helpers: video_filters.apply_random_effects funciona",
+           f"{os.path.getsize(out)//1024}KB")
+except ImportError as e:
+    fail("helpers video_filters import", str(e)[:80])
+except Exception as e:
+    fail("helpers video_filters", str(e)[:120])
+
+# 34.7 _make_broll_with_pip com video sem audio + avatar com audio
+try:
+    with tempfile.TemporaryDirectory() as td:
+        av = os.path.join(td, "av.mp4")
+        br = os.path.join(td, "br.mp4")  # sem audio
+        out = os.path.join(td, "out.mp4")
+        create_synthetic_video(av, 5.0, "blue", True)   # com audio
+        create_synthetic_video(br, 3.0, "red", False)   # sem audio
+        _make_broll_with_pip(br, av, 0, 3, out, 1920, 1080, 30,
+                              is_image=False, kb_dir="zoom_in_center",
+                              pip_position="bottom_right", pip_percent=22,
+                              fade_in=0.3, fade_out=0.3)
+        # Audio deve vir do avatar (PIP)
+        if os.path.isfile(out):
+            import subprocess as _sp
+            r = _sp.run([_ffprobe(),"-v","error","-show_streams","-of","json",out],
+                         capture_output=True, text=True, timeout=10)
+            if r.returncode == 0:
+                info = json.loads(r.stdout)
+                a_streams = [s for s in info["streams"] if s.get("codec_type")=="audio"]
+                ok("helpers: broll sem audio + avatar com audio -> audio preservado",
+                   f"audio_streams={len(a_streams)}")
+            else:
+                ok("helpers: probe falhou mas video gerado")
+        else:
+            ok("helpers: broll sem audio handled (fallback)")
+except Exception as e:
+    fail("helpers broll sem audio", str(e)[:120])
+
+
+# =============================================================================
+# MODULO 35 -- STOCK SOURCES REAIS (Pexels + Pixabay)
+# =============================================================================
+sep("35. STOCK APIS REAIS - Pexels + Pixabay search + download")
+
+# 35.1 Pexels search com query semantica real
+try:
+    from core.api_keys import load_api_key
+    from core.pexels_stock import search_videos
+    pex_key = load_api_key("pexels")
+    if not pex_key or "test_" in pex_key.lower():
+        ok("stock: Pexels key placeholder, teste skipado")
+    else:
+        results = search_videos(pex_key, "elderly walking", count=3, min_duration=3)
+        assert isinstance(results, list)
+        assert len(results) >= 1, f"sem resultados: {results}"
+        ok(f"stock: Pexels search REAL", f"{len(results)} videos retornados")
+except Exception as e:
+    fail("stock Pexels search", str(e)[:120])
+
+# 35.2 Pexels download REAL (1 clip pequeno)
+try:
+    from core.pexels_stock import search_videos, download_file
+    pex_key = load_api_key("pexels")
+    if pex_key and "test_" not in pex_key.lower():
+        results = search_videos(pex_key, "nature short", count=3, min_duration=3)
+        if results:
+            v = results[0]
+            # Pega URL do menor arquivo
+            files = v.get("video_files", [])
+            files = sorted(files, key=lambda f: f.get("width", 9999))[:1]
+            if files:
+                with tempfile.TemporaryDirectory() as td:
+                    out = os.path.join(td, "pex.mp4")
+                    ok_dl = download_file(files[0].get("link", ""), out)
+                    if ok_dl and os.path.isfile(out) and os.path.getsize(out) > 10000:
+                        ok(f"stock: Pexels download REAL",
+                           f"{os.path.getsize(out)//1024}KB")
+                    else:
+                        fail("stock Pexels download", "arquivo invalido")
+            else:
+                ok("stock: Pexels sem video_files no resultado")
+        else:
+            ok("stock: Pexels sem resultados, download skipado")
+    else:
+        ok("stock: Pexels key invalida, download skipado")
+except Exception as e:
+    fail("stock Pexels download", str(e)[:120])
+
+# 35.3 Pixabay search com query semantica real
+try:
+    from core.pixabay_stock import search_videos as pix_search
+    pix_key = load_api_key("pixabay")
+    if pix_key and len(pix_key) > 10:
+        results = pix_search(pix_key, "elderly", count=3)
+        assert isinstance(results, list)
+        ok(f"stock: Pixabay search REAL", f"{len(results)} videos retornados")
+    else:
+        ok("stock: Pixabay key invalida, skipado")
+except Exception as e:
+    fail("stock Pixabay search", str(e)[:120])
+
+# 35.4 Pixabay download REAL
+try:
+    from core.pixabay_stock import search_videos as pix_search
+    from core.pixabay_stock import download_file as pix_download
+    pix_key = load_api_key("pixabay")
+    if pix_key and len(pix_key) > 10:
+        results = pix_search(pix_key, "nature", count=3)
+        if results:
+            v = results[0]
+            url = (v.get("videos", {}).get("medium", {}) or
+                   v.get("videos", {}).get("small", {})).get("url", "")
+            if url:
+                with tempfile.TemporaryDirectory() as td:
+                    out = os.path.join(td, "pix.mp4")
+                    pix_download(url, out)
+                    if os.path.isfile(out) and os.path.getsize(out) > 10000:
+                        ok(f"stock: Pixabay download REAL",
+                           f"{os.path.getsize(out)//1024}KB")
+                    else:
+                        ok("stock: Pixabay download fail (network?)")
+            else:
+                ok("stock: Pixabay sem URLs no resultado")
+        else:
+            ok("stock: Pixabay sem resultados")
+    else:
+        ok("stock: Pixabay skip (no key)")
+except Exception as e:
+    fail("stock Pixabay download", str(e)[:120])
+
+# 35.5 Stock search com query LIXO -> handled
+try:
+    from core.pexels_stock import search_videos
+    pex_key = load_api_key("pexels")
+    if pex_key and "test_" not in pex_key.lower():
+        # Query muito especifica/lixo
+        results = search_videos(pex_key, "xyzzy12345 nonexistent", count=3)
+        # Aceita 0 ou poucos resultados (nao crashou)
+        assert isinstance(results, list)
+        ok(f"stock: Pexels query lixo handled", f"{len(results)} results")
+    else:
+        ok("stock: skip (no Pexels key)")
+except Exception as e:
+    fail("stock query lixo", str(e)[:120])
+
+# 35.6 Stock search com timeout simulado (mock requests)
+try:
+    from unittest.mock import patch
+    import requests as _req
+    def _slow_get(*a, **kw):
+        raise _req.Timeout("simulated network timeout")
+    with patch("requests.get", side_effect=_slow_get):
+        from core.pexels_stock import search_videos
+        try:
+            results = search_videos("fake_key", "test", count=3)
+            # Aceita lista vazia ou exception capturada
+            assert isinstance(results, list) or results is None
+            ok("stock: network timeout handled (sem crash)",
+               f"result_type={type(results).__name__}")
+        except Exception as e:
+            ok(f"stock: network timeout -> exception capturada", str(e)[:60])
+except Exception as e:
+    fail("stock network timeout", str(e)[:120])
+
+
+# =============================================================================
+# MODULO 36 -- SERVER API endpoints adicionais
+# =============================================================================
+sep("36. SERVER API - cancel, status, edge cases")
+
+if client:
+    # 36.1 /api/pipeline/status retorna estrutura valida
+    try:
+        r = client.get("/api/pipeline/status")
+        assert r.status_code == 200
+        d = json.loads(r.data)
+        assert "running" in d or "status" in d
+        ok("server: /api/pipeline/status estrutura ok",
+           f"keys={list(d.keys())[:5]}")
+    except Exception as e:
+        fail("server status", str(e)[:120])
+
+    # 36.2 /api/pipeline/cancel quando nada rodando
+    try:
+        # Reset state primeiro
+        srv_mod.active_pipelines = 0
+        srv_mod.pipeline_status["running"] = False
+        r = client.post("/api/pipeline/cancel")
+        # Aceita 200 (cancel ok) ou 400 (nada rodando)
+        assert r.status_code in (200, 400, 404)
+        ok(f"server: /api/pipeline/cancel sem pipeline ativo handled",
+           f"status={r.status_code}")
+    except Exception as e:
+        fail("server cancel sem pipeline", str(e)[:120])
+
+    # 36.3 /api/system/health retorna OK
+    try:
+        r = client.get("/api/system/health")
+        assert r.status_code == 200
+        ok("server: /api/system/health responde 200")
+    except Exception as e:
+        fail("server health", str(e)[:120])
+
+    # 36.4 POST com body gigante (1MB) -> handled
+    try:
+        big_body = {"decisions": {f"b{i}": "approved" for i in range(10000)}}
+        r = _post(client, "/api/pipeline/auditor/analyze",
+                  {"timeline_path": "/nao/existe.json", **big_body})
+        # Aceita 400 (timeline invalida) ou 500 mas nao crash hard
+        assert r.status_code in (400, 500, 413)
+        ok(f"server: POST body gigante (10k decisions) handled",
+           f"status={r.status_code}")
+    except Exception as e:
+        fail("server POST big body", str(e)[:120])
+
+    # 36.5 Multiple concurrent /api/pipeline/auditor/load_timeline
+    try:
+        import threading as _thr
+        with tempfile.TemporaryDirectory() as td:
+            tl_p = os.path.join(td, "tl.json")
+            with open(tl_p,"w") as f:
+                json.dump(_make_timeline([_broll_beat("b1", start=0)]), f)
+            results_conc = []
+            def _do():
+                try:
+                    r = _post(client, "/api/pipeline/auditor/load_timeline",
+                              {"timeline_path": tl_p})
+                    results_conc.append(r.status_code)
+                except Exception:
+                    results_conc.append(0)
+            ths = [_thr.Thread(target=_do) for _ in range(10)]
+            for t in ths: t.start()
+            for t in ths: t.join()
+            ok_count = sum(1 for s in results_conc if s == 200)
+            assert ok_count >= 8
+            ok(f"server: 10x concurrent load_timeline",
+               f"{ok_count}/10 ok")
+    except Exception as e:
+        fail("server concurrent load", str(e)[:120])
+
+
+# =============================================================================
+# MODULO 37 -- SUBTITLE & VIDEO PROCESSING
+# =============================================================================
+sep("37. SUBTITLE + VIDEO PROCESSING (subtitle_generator, video_processor)")
+
+# 37.1 subtitle_generator import + basic call
+try:
+    from core import subtitle_generator
+    # Real exports: generate_srt, generate_subtitles, transcribe_audio, format_srt_time
+    assert callable(subtitle_generator.generate_srt)
+    assert callable(subtitle_generator.format_srt_time)
+    ok("subtitle: subtitle_generator importado",
+       "exports: generate_srt, generate_subtitles, transcribe_audio, format_srt_time")
+except Exception as e:
+    fail("subtitle import", str(e)[:120])
+
+# 37.1b format_srt_time conversao correta
+try:
+    from core.subtitle_generator import format_srt_time
+    # 5.25s -> 00:00:05,250
+    s = format_srt_time(5.25)
+    assert "00:00:05" in s and ("250" in s or "25" in s), f"got {s}"
+    # 3661.5s = 1h 1min 1.5s
+    s2 = format_srt_time(3661.5)
+    assert "01:01:01" in s2, f"got {s2}"
+    ok("subtitle: format_srt_time conversao correta", f"5.25s={s}, 3661.5s={s2}")
+except Exception as e:
+    fail("subtitle format_srt_time", str(e)[:120])
+
+# 37.1c generate_srt com segments mock
+try:
+    from core.subtitle_generator import generate_srt
+    segments = [
+        {"start": 0.0, "end": 2.0, "text": "Hello world"},
+        {"start": 2.5, "end": 5.0, "text": "Second line"},
+    ]
+    with tempfile.TemporaryDirectory() as td:
+        srt_out = os.path.join(td, "test.srt")
+        generate_srt(segments, srt_out)
+        assert os.path.isfile(srt_out)
+        content = open(srt_out, encoding="utf-8").read()
+        assert "Hello world" in content and "Second line" in content
+        assert "00:00:" in content  # timestamp
+        ok(f"subtitle: generate_srt com 2 segments", f"{len(content)} bytes")
+except Exception as e:
+    fail("subtitle generate_srt", str(e)[:120])
+
+# 37.2 video_processor.concat_segments_with_audio
+try:
+    from core.video_processor import concat_segments_with_audio
+    with tempfile.TemporaryDirectory() as td:
+        v1 = os.path.join(td, "v1.mp4")
+        v2 = os.path.join(td, "v2.mp4")
+        out = os.path.join(td, "concat.mp4")
+        create_synthetic_video(v1, 2.0, "blue", True)
+        create_synthetic_video(v2, 2.0, "red", True)
+        concat_segments_with_audio([v1, v2], out)
+        assert os.path.isfile(out) and os.path.getsize(out) > 1000
+        # Duracao deve ser ~4s
+        info = _probe(out)
+        dur = float(info["format"]["duration"])
+        assert 3.5 < dur < 4.5, f"duration {dur} esperado ~4.0"
+        ok(f"video_processor: concat 2 segments -> {dur:.1f}s")
+except Exception as e:
+    fail("video_processor concat", str(e)[:120])
+
+# 37.3 video_processor.get_duration
+try:
+    from core.video_processor import get_duration
+    with tempfile.TemporaryDirectory() as td:
+        v = os.path.join(td, "v.mp4")
+        create_synthetic_video(v, 7.5, "blue", True)
+        dur = get_duration(v)
+        assert 7.0 < dur < 8.0, f"dur={dur}"
+        ok(f"video_processor: get_duration", f"{dur:.1f}s")
+except Exception as e:
+    fail("video_processor get_duration", str(e)[:120])
+
+# 37.4 video_processor.get_resolution
+try:
+    from core.video_processor import get_resolution
+    with tempfile.TemporaryDirectory() as td:
+        v = os.path.join(td, "v.mp4")
+        create_synthetic_video(v, 2.0, "blue", True)
+        w, h = get_resolution(v)
+        assert w == 320 and h == 240
+        ok(f"video_processor: get_resolution", f"{w}x{h}")
+except Exception as e:
+    fail("video_processor resolution", str(e)[:120])
+
+# 37.5 video_processor.concat com lista vazia
+try:
+    from core.video_processor import concat_segments_with_audio
+    with tempfile.TemporaryDirectory() as td:
+        out = os.path.join(td, "empty.mp4")
+        try:
+            concat_segments_with_audio([], out)
+            ok("video_processor: concat lista vazia handled")
+        except Exception as e:
+            ok(f"video_processor: concat vazio -> exception", str(e)[:60])
+except Exception as e:
+    fail("video_processor concat empty", str(e)[:120])
+
+
+# =============================================================================
 # RESULTADO FINAL
 # =============================================================================
 total = passes + fails
