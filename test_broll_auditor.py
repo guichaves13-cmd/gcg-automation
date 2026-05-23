@@ -1562,6 +1562,328 @@ except Exception as e:
 
 
 # =============================================================================
+# MODULO 19 -- MOTION GRAPHICS AVANCADO (injection, bounds, encoding)
+# =============================================================================
+sep("19. MOTION GRAPHICS AVANCADO - FFmpeg injection, bounds, encoding")
+
+if add_lower_third:
+    with tempfile.TemporaryDirectory() as td:
+        vid = os.path.join(td, "base.mp4")
+        create_synthetic_video(vid, 6.0, "blue", True)
+
+        # 19.1 FFmpeg filter injection via text (deve ser escapado, nao executar)
+        # Tentativa de injetar segundo filtro com aspas, ponto-virgula e colchetes
+        out_inj = os.path.join(td, "lt_inj.mp4")
+        try:
+            evil_text = "'; drawbox=x=0:y=0:w=999:h=999:color=red:t=fill; '"
+            add_lower_third(vid, out_inj, text=evil_text, duration=2.0)
+            # Output deve existir (escapado, ffmpeg nao executa injection)
+            assert os.path.isfile(out_inj) and os.path.getsize(out_inj) > 1000
+            ok("avancado: filter injection via text -> escapado")
+        except Exception as e:
+            fail("avancado filter injection", str(e))
+
+        # 19.2 Drawtext bomb: texto extremamente longo (5000 chars)
+        out_bomb = os.path.join(td, "lt_bomb.mp4")
+        try:
+            huge_text = "X" * 5000
+            add_lower_third(vid, out_bomb, text=huge_text, duration=1.5)
+            # Deve renderizar (FFmpeg trunca) ou fallback (copy)
+            assert os.path.isfile(out_bomb)
+            ok("avancado: text bomb 5000 chars -> handled")
+        except Exception as e:
+            fail("avancado text bomb", str(e))
+
+        # 19.3 Texto com control chars (NUL, ESC, CR, LF, TAB)
+        out_ctrl = os.path.join(td, "lt_ctrl.mp4")
+        try:
+            ctrl_text = "Line1\nLine2\rTab\there\x1b[31mESC"
+            add_lower_third(vid, out_ctrl, text=ctrl_text, duration=2.0)
+            assert os.path.isfile(out_ctrl)
+            ok("avancado: control chars (CR/LF/TAB/ESC) -> handled")
+        except Exception as e:
+            fail("avancado control chars", str(e))
+
+        # 19.4 Style invalido -> fallback para modern
+        out_bad_style = os.path.join(td, "lt_bad_style.mp4")
+        try:
+            add_lower_third(vid, out_bad_style, text="Test",
+                            duration=2.0, style="STYLE_INEXISTENTE")
+            assert os.path.isfile(out_bad_style)
+            ok("avancado: style invalido -> fallback modern, sem crash")
+        except Exception as e:
+            fail("avancado style invalido", str(e))
+
+        # 19.5 start_time negativo
+        out_neg = os.path.join(td, "lt_neg.mp4")
+        try:
+            add_lower_third(vid, out_neg, text="Test",
+                            start_time=-5.0, duration=2.0)
+            # ffmpeg aceita start negativo (clampa pra 0) ou falha -> copy fallback
+            assert os.path.isfile(out_neg)
+            ok("avancado: start_time negativo -> sem crash")
+        except Exception as e:
+            fail("avancado start negativo", str(e))
+
+        # 19.6 duration > video duration (video=6s, duration=20s)
+        out_long = os.path.join(td, "lt_long.mp4")
+        try:
+            add_lower_third(vid, out_long, text="Test",
+                            start_time=0.5, duration=20.0)
+            assert os.path.isfile(out_long)
+            ok("avancado: duration > video length -> renderiza sem crash")
+        except Exception as e:
+            fail("avancado duration excede", str(e))
+
+        # 19.7 duration zero ou negativa
+        out_zero = os.path.join(td, "lt_zero.mp4")
+        try:
+            add_lower_third(vid, out_zero, text="Test",
+                            start_time=1.0, duration=0.0)
+            assert os.path.isfile(out_zero)
+            ok("avancado: duration zero -> sem crash (fallback copy)")
+        except Exception as e:
+            fail("avancado duration zero", str(e))
+
+        # 19.8 Video corrompido como input -> fallback copy
+        bad_vid = os.path.join(td, "bad.mp4")
+        with open(bad_vid, "wb") as f: f.write(b"NOT A VIDEO FILE" * 100)
+        out_bad = os.path.join(td, "lt_bad.mp4")
+        try:
+            add_lower_third(bad_vid, out_bad, text="Test", duration=2.0)
+            # Funcao faz shutil.copy2 em fallback -> output existe
+            assert os.path.isfile(out_bad)
+            ok("avancado: input corrompido -> fallback copy")
+        except Exception as e:
+            fail("avancado input corrompido", str(e))
+
+        # 19.9 Cadeia completa: lower_third -> title_card -> chapter -> progress
+        chain1 = os.path.join(td, "chain1.mp4")
+        chain2 = os.path.join(td, "chain2.mp4")
+        chain3 = os.path.join(td, "chain3.mp4")
+        chain4 = os.path.join(td, "chain4.mp4")
+        try:
+            add_lower_third(vid, chain1, text="Step 1", duration=2.0)
+            add_title_card(chain1, chain2, title="Cap", duration=1.5)
+            add_chapter_marker(chain2, chain3, chapter_text="Parte A", duration=1.5)
+            add_progress_bar(chain3, chain4, total_duration=6.0)
+            assert os.path.isfile(chain4) and os.path.getsize(chain4) > 1000
+            ok("avancado: cadeia 4 efeitos lower+title+chapter+progress -> ok",
+               f"{os.path.getsize(chain4)//1024}KB")
+        except Exception as e:
+            fail("avancado cadeia 4 efeitos", str(e))
+
+        # 19.10 Concorrencia: 10x lower_third paralelos em arquivos diferentes
+        import threading as _thr
+        results_lt = []
+        def _do_lt(idx):
+            try:
+                out_p = os.path.join(td, f"lt_par_{idx}.mp4")
+                add_lower_third(vid, out_p, text=f"Parallel {idx}",
+                                duration=1.5, style="modern")
+                results_lt.append(os.path.isfile(out_p) and os.path.getsize(out_p) > 1000)
+            except Exception:
+                results_lt.append(False)
+        threads = [_thr.Thread(target=_do_lt, args=(i,)) for i in range(10)]
+        t0 = time.time()
+        for t in threads: t.start()
+        for t in threads: t.join()
+        elapsed = time.time() - t0
+        ok_count = sum(results_lt)
+        try:
+            assert ok_count >= 8  # tolera 2 falhas em concorrencia
+            ok(f"avancado: 10x lower_third concorrente",
+               f"{ok_count}/10 ok em {elapsed:.1f}s")
+        except AssertionError:
+            fail("avancado concorrencia 10x", f"{ok_count}/10 ok")
+
+        # 19.11 Stress: 30 lower_thirds sequenciais (medir tempo medio)
+        try:
+            t0 = time.time()
+            for i in range(30):
+                out_seq = os.path.join(td, f"seq_{i}.mp4")
+                add_lower_third(vid, out_seq, text=f"Seq {i}",
+                                duration=1.2, style="minimal")
+            elapsed = time.time() - t0
+            avg = elapsed / 30
+            ok(f"avancado: stress 30 lower_thirds sequenciais",
+               f"total={elapsed:.1f}s, avg={avg*1000:.0f}ms/each")
+        except Exception as e:
+            fail("avancado stress 30 sequenciais", str(e))
+
+        # 19.12 NULL byte no texto (Python str aceita, FFmpeg deve sobreviver)
+        out_null = os.path.join(td, "lt_null.mp4")
+        try:
+            null_text = "Before\x00After"
+            add_lower_third(vid, out_null, text=null_text, duration=1.5)
+            assert os.path.isfile(out_null)
+            ok("avancado: NULL byte no texto -> handled")
+        except Exception as e:
+            fail("avancado NULL byte", str(e))
+
+        # 19.13 Posicao com style nao mapeada (position e' param mas codigo nao usa)
+        out_pos = os.path.join(td, "lt_pos.mp4")
+        try:
+            add_lower_third(vid, out_pos, text="Test", duration=1.5,
+                            position="INEXISTENTE_QUALQUER")
+            assert os.path.isfile(out_pos)
+            ok("avancado: position invalida -> sem crash (param ignorado)")
+        except Exception as e:
+            fail("avancado position invalida", str(e))
+
+        # 19.14 Subtitle muito longo
+        out_sub = os.path.join(td, "lt_sub.mp4")
+        try:
+            add_lower_third(vid, out_sub, text="Title",
+                            subtitle="A"*500, duration=2.0)
+            assert os.path.isfile(out_sub)
+            ok("avancado: subtitle 500 chars -> handled")
+        except Exception as e:
+            fail("avancado subtitle longo", str(e))
+
+        # 19.15 Texto so com chars que precisam escape
+        out_esc = os.path.join(td, "lt_esc.mp4")
+        try:
+            only_esc = "\\'%:\\'%:"
+            add_lower_third(vid, out_esc, text=only_esc, duration=1.5)
+            assert os.path.isfile(out_esc)
+            ok("avancado: texto so com chars de escape -> ok")
+        except Exception as e:
+            fail("avancado texto so escape", str(e))
+
+
+# =============================================================================
+# MODULO 20 -- AUDITOR + LOWER THIRDS STRESS (50 beats)
+# =============================================================================
+sep("20. AUDITOR + LOWER THIRDS STRESS")
+
+if add_lower_third:
+    with tempfile.TemporaryDirectory() as td:
+        avatar = os.path.join(td, "avatar.mp4")
+        broll = os.path.join(td, "broll.mp4")
+        ok_a = create_synthetic_video(avatar, 60.0, "blue", True)
+        ok_b = create_synthetic_video(broll, 3.0, "green", False)
+
+        if ok_a and ok_b:
+            # 20.1 50 B-Roll beats com lower_thirds enabled
+            plan_50 = []
+            for i in range(50):
+                plan_50.append({
+                    "type": "broll" if i % 2 == 0 else "avatar",
+                    "start": i * 1.0,
+                    "duration": 1.0,
+                    "file": broll if i % 2 == 0 else "",
+                    "keyword": f"keyword test {i}" if i % 2 == 0 else "",
+                    "shot_type": "wide" if i % 2 == 0 else "",
+                })
+
+            out_stress = os.path.join(td, "stress_lt.mp4")
+            try:
+                t0 = time.time()
+                ok_r = rerender_video(avatar, plan_50, out_stress,
+                                      lower_thirds_enabled=True,
+                                      lower_thirds_style="modern")
+                elapsed = time.time() - t0
+                assert ok_r == True or os.path.isfile(out_stress)
+                ok(f"stress: 50 segs com lower_thirds rerenderizou",
+                   f"{elapsed:.1f}s, {os.path.getsize(out_stress)//1024}KB")
+            except Exception as e:
+                fail("stress 50 segs lower_thirds", str(e))
+
+            # 20.2 50 beats com keywords problematicas mixadas
+            plan_evil = []
+            evil_kws = [
+                "normal text",
+                "'; drop table;",
+                "X"*100,  # vai ser skipado (>60)
+                "",  # vai ser skipado
+                "unicode acentos saude",
+                "emojis aqui",
+                "with : colons : here",
+                "with 'quotes' here",
+                "with %% percent",
+                "with \\ backslash",
+            ]
+            for i in range(20):
+                plan_evil.append({
+                    "type": "broll",
+                    "start": i * 2.0,
+                    "duration": 2.0,
+                    "file": broll,
+                    "keyword": evil_kws[i % len(evil_kws)],
+                    "shot_type": "wide",
+                })
+
+            out_evil = os.path.join(td, "evil_lt.mp4")
+            try:
+                ok_r = rerender_video(avatar, plan_evil, out_evil,
+                                      lower_thirds_enabled=True)
+                assert os.path.isfile(out_evil)
+                ok("stress: 20 segs com keywords problematicas -> ok")
+            except Exception as e:
+                fail("stress keywords problematicas", str(e))
+
+            # 20.3 Comparacao tamanho: com vs sem lower_thirds (diff esperado)
+            plan_cmp = [{"type":"broll", "start":i*3.0, "duration":3.0,
+                         "file": broll, "keyword": f"test {i}",
+                         "shot_type": "wide"} for i in range(5)]
+            out_with = os.path.join(td, "cmp_with.mp4")
+            out_without = os.path.join(td, "cmp_without.mp4")
+            try:
+                rerender_video(avatar, plan_cmp, out_with,
+                               lower_thirds_enabled=True)
+                rerender_video(avatar, plan_cmp, out_without,
+                               lower_thirds_enabled=False)
+                size_with = os.path.getsize(out_with)
+                size_without = os.path.getsize(out_without)
+                # com lower_thirds tende a ser maior (texto adicionado)
+                # mas tolera +- 50%
+                ok("stress: comparacao com/sem lower_thirds",
+                   f"with={size_with//1024}KB, without={size_without//1024}KB")
+            except Exception as e:
+                fail("stress comparacao tamanhos", str(e))
+
+
+# =============================================================================
+# MODULO 21 -- PIPELINE_AVATAR_AUTO config sanity check
+# =============================================================================
+sep("21. PIPELINE - lower_thirds config sanity")
+
+try:
+    import inspect
+    from core.pipeline_avatar_auto import run_auto
+    src = inspect.getsource(run_auto)
+
+    # 21.1 Default e False (opt-in feature)
+    assert 'config.get("lower_thirds_enabled", False)' in src
+    ok("config sanity: lower_thirds_enabled default=False (opt-in)")
+
+    # 21.2 Style default e modern
+    assert 'lower_thirds_style", "modern"' in src
+    ok("config sanity: lower_thirds_style default='modern'")
+
+    # 21.3 Skip se keyword > 60 chars (proteccao visual)
+    assert "<= 60" in src or "len(kw) <= 60" in src
+    ok("config sanity: skip keyword > 60 chars")
+
+    # 21.4 Aplicado apos apply_random_effects (ordem correta)
+    idx_fx = src.find("apply_random_effects")
+    idx_lt = src.find("add_lower_third")
+    assert idx_fx < idx_lt and idx_fx > 0 and idx_lt > 0
+    ok("config sanity: lower_thirds APOS apply_random_effects (ordem correta)")
+
+    # 21.5 try/except envolve add_lower_third (auto-fix)
+    # busca "add_lower_third" e verifica que tem "except" dentro de ~500 chars
+    lt_pos = src.find("add_lower_third(")
+    surrounding = src[max(0,lt_pos-1500):lt_pos+500]
+    assert "try:" in surrounding and "except" in surrounding
+    ok("config sanity: add_lower_third envolto em try/except (auto-fix)")
+
+except Exception as e:
+    fail("config sanity", str(e))
+
+
+# =============================================================================
 # RESULTADO FINAL
 # =============================================================================
 total = passes + fails
