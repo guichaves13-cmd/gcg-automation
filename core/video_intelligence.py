@@ -35,13 +35,20 @@ class VideoIntelligence:
                 print("[VideoIntelligence] google-genai not installed")
         return self._client
     
-    def _glm_ask(self, prompt: str, temperature=0.3) -> str:
+    def _glm_ask(self, prompt: str, temperature=0.3,
+                  enable_thinking: bool = False, timeout: float = 90.0) -> str:
+        """Call GLM-5.1. Defaults:
+          - enable_thinking=False (fast mode; reasoning adds 60s+ overhead)
+          - timeout=90s (long enough for JSON shot lists, short enough to fall back)
+        Returns content string or empty string on error (caller falls back to Gemini).
+        """
         from core.glm_agent import ask
-        result, err = ask(prompt, temperature=temperature, stream=False)
+        result, err = ask(prompt, temperature=temperature, stream=False,
+                          enable_thinking=enable_thinking, timeout=timeout)
         if err:
-            print(f"    [GLM] Error: {err}")
+            print(f"    [GLM] Error ({err[:100]}) - falling back to next AI in chain")
             return ""
-        return result.get("content", "")
+        return result.get("content", "") if result else ""
 
     # GLM call counter — limit calls per session to avoid burning NVIDIA quota
     _glm_score_calls = 0

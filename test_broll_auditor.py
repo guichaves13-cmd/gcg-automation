@@ -2762,6 +2762,39 @@ try:
 except Exception as e:
     fail("GLM shot_list ordem", str(e))
 
+# 32.7 GLM REAL call - shot list generation parseavel (com thinking=False fast mode)
+try:
+    vi = VideoIntelligence(google_api_key="")
+    prompt = ('Create JSON array of 2 shot objects for a 20s lymphatic health video. '
+              'Each: {"terms":["query1","query2"],"shot_type":"wide","mood":"informative"}. '
+              'Return JSON array only, no markdown.')
+    text = vi._glm_ask(prompt, temperature=0.3)
+    assert text and len(text) > 10, f"empty/short GLM response: {text!r}"
+    start = text.find("[")
+    end = text.rfind("]")
+    assert start >= 0 and end > start, f"no JSON brackets in: {text[:100]}"
+    import json as _json
+    parsed = _json.loads(text[start:end+1])
+    assert isinstance(parsed, list) and len(parsed) >= 1
+    assert "terms" in parsed[0] and isinstance(parsed[0]["terms"], list)
+    ok("GLM REAL: shot list parseavel via thinking=False",
+       f"{len(parsed)} shots, first terms={parsed[0]['terms']}")
+except Exception as e:
+    fail("GLM REAL shot list", str(e)[:120])
+
+# 32.8 thinking=False eh muito mais rapido que thinking=True
+try:
+    import time as _t
+    vi = VideoIntelligence(google_api_key="")
+    t0 = _t.time()
+    txt = vi._glm_ask("Reply only: OK", enable_thinking=False, temperature=0.0)
+    fast_time = _t.time() - t0
+    assert txt and "OK" in txt.upper()
+    assert fast_time < 30, f"thinking=False muito lento: {fast_time:.1f}s"
+    ok("GLM REAL: thinking=False rapido", f"{fast_time:.1f}s")
+except Exception as e:
+    fail("GLM fast mode", str(e)[:120])
+
 
 # =============================================================================
 # RESULTADO FINAL
