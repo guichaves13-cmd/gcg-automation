@@ -45,6 +45,9 @@
       <button class="nav-btn" data-page="abtest" onclick="showPage('abtest')">
         <span>⚖️</span> A/B Simulator
       </button>
+      <button class="nav-btn" data-page="vphradar" onclick="showPage('vphradar')">
+        <span>🔥</span> VPH Radar
+      </button>
     </div>
     <div class="sidebar-footer">
       <div class="ai-badge">🤖 Gemini Pro AI</div>
@@ -89,6 +92,18 @@
       
       <button class="btn-primary btn-full" onclick="simulateABTest()">⚖️ RUN A/B SIMULATION</button>
       <div id="ab-result" class="result-area"></div>
+    </div>
+    
+    <!-- VPH RADAR PAGE -->
+    <div class="page" id="page-vphradar">
+      <div class="page-header">
+        <h1>🔥 Live VPH Radar</h1>
+        <p>Scan YouTube for the highest Views-Per-Hour videos in the last 14 days and extract viral themes.</p>
+      </div>
+      <input type="text" id="vph-niche" placeholder="Niche to scan (e.g. Psychology, Space)" style="width:100%;margin-bottom:8px">
+      <select id="vph-lang" style="width:100%;margin-bottom:12px"><option>English</option><option>Portuguese</option><option>Spanish</option></select>
+      <button class="btn-primary btn-full" onclick="runVphRadar()">🔥 SCAN LIVE VPH DATA</button>
+      <div id="vph-result" class="result-area"></div>
     </div>
 
     <!-- GENERATOR PAGE -->

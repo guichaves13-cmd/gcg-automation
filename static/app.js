@@ -104,6 +104,86 @@ async function simulateABTest() {
   document.getElementById('ab-result').innerHTML = html;
 }
 
+// VPH RADAR
+async function runVphRadar() {
+  const niche = document.getElementById('vph-niche').value.trim();
+  const lang = document.getElementById('vph-lang').value;
+  if(!niche) {
+    alert("Please enter a niche to scan.");
+    return;
+  }
+  
+  loading(true, 'Fetching top VPH videos from the last 14 days and running AI analysis...');
+  const r = await post('/api/vph_radar', { niche, language: lang });
+  
+  if(r.error) {
+    document.getElementById('vph-result').innerHTML=`<div class="score-card" style="border-left:3px solid #e94560"><h3 style="color:#e94560">⚠️ Error</h3><p style="font-size:13px;color:#aaa">${escHtml(r.error)}</p></div>`;
+    return;
+  }
+  
+  const d = r.radar_data || {};
+  let html = '';
+  
+  // RAW DATA / VIDEOS
+  if(d.top_videos && d.top_videos.length) {
+    html += `<div class="niche-card" style="border-left:3px solid #e94560"><h3 style="color:#e94560;margin-bottom:12px">📈 Top VPH Videos (Last 14 Days)</h3>`;
+    html += `<div style="max-height:200px;overflow-y:auto;background:#0d1117;padding:12px;border-radius:8px;border:1px solid #30363d">`;
+    d.top_videos.forEach(v => {
+      html += `<div style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #1f2937">
+        <a href="https://youtube.com/watch?v=${v.id}" target="_blank" style="color:#fff;text-decoration:none;font-size:13px;font-weight:bold">▶️ ${escHtml(v.title)}</a>
+        <div style="font-size:11px;color:#aaa;margin-top:4px">
+          <span style="color:#e94560"><b>${Math.round(v.vph)} VPH</b></span> • ${v.views.toLocaleString()} views • 📺 ${escHtml(v.channel_title||'')}
+        </div>
+      </div>`;
+    });
+    html += `</div></div>`;
+  }
+  
+  // VIRAL THEMES
+  if(d.viral_themes && d.viral_themes.length) {
+    html += `<div class="niche-card" style="border-left:3px solid #f59e0b"><h3 style="color:#f59e0b;margin-bottom:12px">🔥 Core Viral Themes</h3>`;
+    d.viral_themes.forEach(t => {
+      html += `<div style="background:#0d1117;padding:12px;border-radius:8px;margin-bottom:8px;border:1px solid #30363d">
+        <div style="font-size:14px;font-weight:bold;color:#fff">${escHtml(t.theme)}</div>
+        <div style="font-size:12px;color:#aaa;margin-top:4px"><i>Why it's hot:</i> ${escHtml(t.why_its_hot)}</div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+  
+  // VIRAL STRUCTURES
+  if(d.viral_structures && d.viral_structures.length) {
+    html += `<div class="niche-card" style="border-left:3px solid #4ecca3"><h3 style="color:#4ecca3;margin-bottom:12px">📐 Validated Title Structures</h3>`;
+    d.viral_structures.forEach(s => {
+      html += `<div style="background:#0d1117;padding:12px;border-radius:8px;margin-bottom:8px;border:1px solid #30363d">
+        <div style="font-size:14px;font-weight:bold;color:#fff">${escHtml(s.name)}</div>
+        <div style="font-size:12px;color:#aaa;margin:4px 0"><i>Pattern:</i> ${escHtml(s.pattern)}</div>
+        <div style="font-size:11px;color:#4ecca3">Example: "${escHtml(s.example_from_data)}"</div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+  
+  // NEW PERSPECTIVES
+  if(d.new_perspectives && d.new_perspectives.length) {
+    html += `<div class="niche-card" style="border-left:3px solid #8b5cf6"><h3 style="color:#8b5cf6;margin-bottom:12px">💡 New Angles & Subthemes</h3>`;
+    d.new_perspectives.forEach(p => {
+      let ex = (p.generated_titles||[]).map(t=>`<li>"${escHtml(t)}"</li>`).join('');
+      html += `<div style="background:#0d1117;padding:12px;border-radius:8px;margin-bottom:8px;border:1px solid #30363d">
+        <div style="display:flex;justify-content:space-between;align-items:start">
+          <div style="font-size:14px;font-weight:bold;color:#fff">${escHtml(p.new_angle)}</div>
+          <button class="btn-primary" style="font-size:11px;padding:4px 8px" onclick="useInRemix('${escHtml(p.new_angle).replace(/'/g, "\\'")}')">🔀 Use in Remix</button>
+        </div>
+        <div style="font-size:12px;color:#aaa;margin:6px 0"><i>Why it wins:</i> ${escHtml(p.why_it_will_win)}</div>
+        <ul style="font-size:12px;color:#ddd;margin-left:16px;margin-top:6px">${ex}</ul>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+  
+  document.getElementById('vph-result').innerHTML = html;
+}
+
 function renderScoreCard(r){
   let structs=r.structures.map(s=>`<span class="tag tag-green">${s.name} +${Math.round((s.ctr_boost-1)*100)}%</span>`).join('');
   let emots=r.emotional_words.map(w=>`<span class="tag tag-purple">${w}</span>`).join('');

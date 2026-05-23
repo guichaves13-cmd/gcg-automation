@@ -1242,6 +1242,90 @@ def update_channel():
     _save_channels(channels)
     return jsonify({"status": "ok"})
 
+@app.route("/api/vph_radar", methods=["POST"])
+def api_vph_radar():
+    """Live VPH Niche Analysis - fetches real videos from the last 14 days and extracts themes/structures."""
+    from core.youtube_api import search_trending
+    from datetime import datetime, timezone, timedelta
+    
+    data = request.json
+    niche = data.get("niche", "")
+    language = data.get("language", "English")
+    key = YOUTUBE_API_KEY
+    
+    if not key:
+        return jsonify({"error": "YouTube API key not set. Go to Settings tab."}), 400
+        
+    two_weeks_ago = (datetime.now(timezone.utc) - timedelta(days=14)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    
+    try:
+        videos = search_trending(niche, key, max_results=30, published_after=two_weeks_ago)
+    except Exception as e:
+        return jsonify({"error": f"Failed to fetch from YouTube: {str(e)}"}), 500
+        
+    if not videos:
+        return jsonify({"error": f"No recent videos found for '{niche}' in the last 14 days."}), 404
+        
+    videos.sort(key=lambda x: x.get("vph", 0), reverse=True)
+    top_videos = videos[:15]
+    
+    video_list_str = "\n".join([f"- Title: {v['title']} (Views: {v.get('views', 0)}, VPH: {v.get('vph', 0)})" for v in top_videos])
+    
+    prompt = f"""You are an elite YouTube data analyst.
+I have fetched the top 15 highest Views-Per-Hour (VPH) videos published in the last 14 days for the niche: "{niche}".
+Language target: {language}
+
+Here is the raw data (REAL high-performance videos right now):
+{video_list_str}
+
+Analyze this live data and provide a strictly structured JSON response.
+
+Return ONLY a valid JSON object in this exact format:
+{{
+  "viral_structures": [
+    {{
+      "name": "Structure Name",
+      "pattern": "Why this specific structure is getting clicks right now",
+      "example_from_data": "Quote a title from the data"
+    }}
+  ],
+  "viral_themes": [
+    {{
+      "theme": "Core theme driving VPH",
+      "why_its_hot": "Why audiences are obsessed with this right now"
+    }}
+  ],
+  "new_perspectives": [
+    {{
+      "new_angle": "A completely new perspective/subtheme based on the hot themes",
+      "why_it_will_win": "Why this avoids competition but keeps the viral DNA",
+      "generated_titles": ["Title 1", "Title 2"]
+    }}
+  ]
+}}
+
+Provide 3 viral structures, 3 viral themes, and 4 new perspectives.
+Return ONLY valid JSON. No markdown outside the JSON."""
+
+    result = ask_gemini(prompt)
+    if result.startswith("[AI Error"):
+        return jsonify({"error": result})
+        
+    try:
+        cleaned = result.strip()
+        cleaned = re.sub(r'^```json\s*', '', cleaned)
+        cleaned = re.sub(r'^```\s*', '', cleaned)
+        cleaned = re.sub(r'\s*```$', '', cleaned)
+        match = re.search(r'\{.*\}', cleaned, re.DOTALL)
+        radar_json = json.loads(match.group()) if match else json.loads(cleaned)
+        
+        # Attach the raw videos for the UI
+        radar_json["top_videos"] = top_videos
+        
+        return jsonify({"radar_data": radar_json})
+    except Exception as e:
+        return jsonify({"error": f"JSON parse error: {str(e)[:80]}", "raw": result})
+
 @app.route("/api/ab_simulate", methods=["POST"])
 def api_ab_simulate():
     """Simulate an A/B test between two titles and generate a thumbnail concept."""
