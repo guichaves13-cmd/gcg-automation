@@ -348,6 +348,67 @@ async function generateHijack() {
   document.getElementById('hijacker-result').innerHTML = html;
 }
 
+// OUTLIER FINDER
+async function generateOutliers() {
+  const niche = document.getElementById('outlier-niche').value.trim();
+  const lang = document.getElementById('outlier-lang').value;
+  
+  if(!niche) {
+    alert("Please enter a niche.");
+    return;
+  }
+  
+  loading(true, 'Hunting Outliers... Scanning YouTube and calculating Outlier Scores...');
+  const r = await post('/api/outlier_finder', { niche, language: lang });
+  
+  if(r.error) {
+    document.getElementById('outlier-result').innerHTML=`<div class="score-card" style="border-left:3px solid #e94560"><h3 style="color:#e94560">⚠️ Error</h3><p style="font-size:13px;color:#aaa">${escHtml(r.error)}</p></div>`;
+    return;
+  }
+  
+  const outliers = r.outliers_found || [];
+  const ai = r.ai_analysis || {};
+  
+  let html = `<div class="score-card" style="margin-bottom:16px;border-left:4px solid #10b981">
+    <h2 style="color:#10b981;margin-bottom:12px">🎯 Outliers Found</h2>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">`;
+    
+  outliers.forEach(o => {
+    html += `<div style="background:#0d1117;padding:12px;border-radius:8px;border:1px solid #30363d;position:relative">
+      <div style="position:absolute;top:-10px;right:-10px;background:#e94560;color:white;padding:4px 8px;border-radius:12px;font-size:12px;font-weight:bold">${o.outlier_score}x OUTLIER</div>
+      <a href="${o.url}" target="_blank" style="font-size:14px;font-weight:bold;color:#fff;text-decoration:none;display:block;margin-bottom:6px">${escHtml(o.title)}</a>
+      <div style="font-size:12px;color:#aaa;display:flex;gap:12px">
+        <span>👁️ ${o.views.toLocaleString()} views</span>
+        <span>👥 ${o.subscribers.toLocaleString()} subs</span>
+        <span>📺 ${escHtml(o.channel_title)}</span>
+      </div>
+    </div>`;
+  });
+  
+  html += `</div>
+    <h3 style="color:#f59e0b;margin-bottom:8px">🧠 The Outlier Secret</h3>
+    <div style="font-size:13px;color:#ddd;line-height:1.5;margin-bottom:16px;background:#0d1117;padding:12px;border-radius:8px;border:1px solid #30363d">
+      ${escHtml(ai.outlier_secret)}
+    </div>
+  </div>`;
+  
+  if(ai.cloned_titles && ai.cloned_titles.length) {
+    html += `<div class="niche-card" style="border-left:3px solid #8b5cf6"><h3 style="color:#8b5cf6;margin-bottom:12px">🧬 Cloned Formats</h3>`;
+    ai.cloned_titles.forEach(t => {
+      html += `<div style="background:#0d1117;padding:12px;border-radius:8px;margin-bottom:8px;border:1px solid #30363d">
+        <div style="display:flex;justify-content:space-between;align-items:start">
+          <div style="font-size:15px;font-weight:bold;color:#fff">${escHtml(t.title)}</div>
+          <button class="btn-primary" style="font-size:11px;padding:4px 8px" onclick="document.getElementById('ab-title-a').value='${escHtml(t.title).replace(/'/g, "\\'") }';showPage('abtest')">⚖️ A/B Test</button>
+        </div>
+        <div style="font-size:12px;color:#aaa;margin-top:6px"><i>Structure:</i> ${escHtml(t.structure)}</div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+  
+  document.getElementById('outlier-result').innerHTML = html;
+}
+
 function renderScoreCard(r){
   let structs=r.structures.map(s=>`<span class="tag tag-green">${s.name} +${Math.round((s.ctr_boost-1)*100)}%</span>`).join('');
   let emots=r.emotional_words.map(w=>`<span class="tag tag-purple">${w}</span>`).join('');

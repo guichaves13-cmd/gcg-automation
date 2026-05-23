@@ -749,6 +749,60 @@ Return ONLY valid JSON."""
     except Exception as e:
         return jsonify({"error": f"JSON parse error: {str(e)[:80]}"})
 
+@app.route("/api/outlier_finder", methods=["POST"])
+def api_outlier_finder():
+    """Finds viral outlier videos using Nexlev-style math and decodes their secret."""
+    data = request.json
+    niche = data.get("niche", "")
+    language = data.get("language", "English")
+
+    if not niche: return jsonify({"error": "Niche required."}), 400
+
+    key = YOUTUBE_API_KEY
+    if not key:
+        return jsonify({"error": "YouTube API key not set. Please set it in the YouTube Scanner tab."}), 400
+
+    from core.youtube_api import search_outliers
+    outliers = search_outliers(niche, key)
+    
+    if not outliers:
+        return jsonify({"error": "No significant outliers found for this niche in the last 30 days."})
+
+    # Pass the top 3 outliers to Gemini to extract the "Outlier Secret"
+    top_3 = outliers[:3]
+    outlier_text = "\n".join([f"- Title: {v['title']} (Views: {v['views']}, Subs: {v['subscribers']}, Score: {v['outlier_score']}x)" for v in top_3])
+
+    prompt = f"""You are an elite YouTube growth hacker. I just found 3 massive 'Outlier' videos in the "{niche}" niche.
+These videos got drastically more views than the channel's subscriber count.
+
+OUTLIER VIDEOS FOUND:
+{outlier_text}
+
+Analyze WHY these specific titles broke the algorithm for small channels.
+Return ONLY a valid JSON object:
+{{
+  "outlier_secret": "The psychological reason these small channels went viral (1 paragraph)",
+  "cloned_titles": [
+    {{ "title": "Adapted Title 1 (60-100 chars)", "structure": "Structure used" }},
+    {{ "title": "Adapted Title 2 (60-100 chars)", "structure": "Structure used" }}
+  ]
+}}
+Return ONLY valid JSON."""
+
+    result = ask_gemini(prompt)
+    if result.startswith("[AI Error"): return jsonify({"error": result})
+    try:
+        cleaned = re.sub(r'^```json\s*|^```\s*|\s*```$', '', result.strip())
+        match = re.search(r'\{.*\}', cleaned, re.DOTALL)
+        ai_data = json.loads(match.group()) if match else json.loads(cleaned)
+        
+        return jsonify({
+            "outliers_found": top_3,
+            "ai_analysis": ai_data
+        })
+    except Exception as e:
+        return jsonify({"error": f"JSON parse error: {str(e)[:80]}"})
+
 @app.route("/api/channel_strategy", methods=["POST"])
 def api_channel_strategy():
     """AI-powered channel strategy analysis."""

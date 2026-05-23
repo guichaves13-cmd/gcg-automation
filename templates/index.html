@@ -54,6 +54,9 @@
       <button class="nav-btn" data-page="hijacker" onclick="showPage('hijacker')">
         <span>🚀</span> Trend Hijacker
       </button>
+      <button class="nav-btn" data-page="outlier" onclick="showPage('outlier')">
+        <span>🎯</span> Outlier Finder
+      </button>
     </div>
     <div class="sidebar-footer">
       <div class="ai-badge">🤖 Gemini Pro AI</div>
@@ -166,6 +169,20 @@
       <select id="hijack-lang" style="width:100%;margin:12px 0"><option>English</option><option>Portuguese</option><option>Spanish</option></select>
       <button class="btn-primary btn-full" onclick="generateHijack()">🚀 HIJACK THIS TREND</button>
       <div id="hijacker-result" class="result-area"></div>
+    </div>
+
+    <!-- OUTLIER FINDER PAGE -->
+    <div class="page" id="page-outlier">
+      <div class="page-header">
+        <h1>🎯 Nexlev Outlier Finder</h1>
+        <p>Discover videos that outperformed their channel's subscriber base by 5x to 100x and steal their secret.</p>
+      </div>
+      <div class="input-row">
+        <input type="text" id="outlier-niche" placeholder="Enter a broad niche (e.g., Space, Crime, Minecraft)" style="flex:2">
+        <select id="outlier-lang" style="flex:1"><option>English</option><option>Portuguese</option><option>Spanish</option></select>
+      </div>
+      <button class="btn-primary btn-full" style="margin-top:12px;background:#10b981;color:#1a1a2e" onclick="generateOutliers()">🎯 HUNT OUTLIERS</button>
+      <div id="outlier-result" class="result-area"></div>
     </div>
 
     <!-- GENERATOR PAGE -->
