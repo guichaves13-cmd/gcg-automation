@@ -1028,6 +1028,46 @@ Return ONLY valid JSON."""
     except Exception as e:
         return jsonify({"error": f"JSON parse error: {str(e)[:80]}"})
 
+@app.route("/api/shorts_engine", methods=["POST"])
+def api_shorts_engine():
+    """Generates viral loops and script pacing for YouTube Shorts / TikTok."""
+    data = request.json
+    topic = data.get("topic", "").strip()
+    niche = data.get("niche", "").strip()
+    language = data.get("language", "English")
+    
+    if not topic or not niche:
+        return jsonify({"error": "Topic and Niche required."}), 400
+
+    prompt = f"""You are an elite YouTube Shorts / TikTok strategist.
+Your goal is to engineer a 60-second vertical video script about '{topic}' in the '{niche}' niche.
+Shorts rely on 3 things: The Visual Hook, High Pacing, and the "Perfect Loop" (the end of the video flows seamlessly into the first word of the video).
+
+Respond in {language}.
+Return ONLY a valid JSON object:
+{{
+  "scroll_stopper": "The 3-second visual/text hook to stop the user from scrolling.",
+  "script_structure": [
+    {{"time": "0s-3s", "action": "Hook / Audio Cue"}},
+    {{"time": "3s-15s", "action": "Context buildup"}},
+    {{"time": "15s-45s", "action": "The meat / revelation"}},
+    {{"time": "45s-58s", "action": "The cliffhanger / payoff"}}
+  ],
+  "perfect_loop_phrase": "The exact sentence to say at the end that perfectly connects to the first sentence of the video.",
+  "viral_audio_vibe": "What type of trending audio or sound effects to use (e.g., 'Phonk + Bass drop' or 'Eerie synth')."
+}}
+Return ONLY valid JSON."""
+
+    result = ask_gemini(prompt)
+    if result.startswith("[AI Error"): return jsonify({"error": result})
+    try:
+        cleaned = re.sub(r'^```json\s*|^```\s*|\s*```$', '', result.strip())
+        match = re.search(r'\{.*\}', cleaned, re.DOTALL)
+        ai_data = json.loads(match.group()) if match else json.loads(cleaned)
+        return jsonify(ai_data)
+    except Exception as e:
+        return jsonify({"error": f"JSON parse error: {str(e)[:80]}"})
+
 @app.route("/api/channel_strategy", methods=["POST"])
 def api_channel_strategy():
     """AI-powered channel strategy analysis."""

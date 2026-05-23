@@ -525,6 +525,64 @@ async function generateNicheScore() {
   document.getElementById('scorer-result').innerHTML = html;
 }
 
+// SHORTS ENGINE
+async function generateShorts() {
+  const niche = document.getElementById('shorts-niche').value.trim();
+  const topic = document.getElementById('shorts-topic').value.trim();
+  const lang = document.getElementById('shorts-lang').value;
+  
+  if(!niche || !topic) {
+    alert("Please enter both Niche and Topic.");
+    return;
+  }
+  
+  loading(true, 'Engineering TikTok/Shorts Viral Loop...');
+  const r = await post('/api/shorts_engine', { niche, topic, language: lang });
+  
+  if(r.error) {
+    document.getElementById('shorts-result').innerHTML=`<div class="score-card" style="border-left:3px solid #e94560"><h3 style="color:#e94560">⚠️ Error</h3><p style="font-size:13px;color:#aaa">${escHtml(r.error)}</p></div>`;
+    return;
+  }
+  
+  let html = `<div class="score-card" style="margin-bottom:16px;border-left:4px solid #f59e0b">
+    <h2 style="color:#f59e0b;margin-bottom:12px">📱 Viral Loop Generated</h2>
+    
+    <div style="background:#0d1117;padding:12px;border-radius:8px;border:1px solid #30363d;margin-bottom:16px">
+      <div style="font-size:11px;color:#aaa;text-transform:uppercase;margin-bottom:4px">🛑 Scroll Stopper (First 3s)</div>
+      <div style="font-size:16px;font-weight:bold;color:#fff">${escHtml(r.scroll_stopper)}</div>
+    </div>
+    
+    <div style="background:#0d1117;padding:12px;border-radius:8px;border:1px solid #30363d;margin-bottom:16px">
+      <div style="font-size:11px;color:#aaa;text-transform:uppercase;margin-bottom:8px">⏱️ 60-Second Pacing</div>
+      <div style="display:flex;flex-direction:column;gap:8px">`;
+      
+  if(r.script_structure) {
+    r.script_structure.forEach(s => {
+      html += `<div style="display:flex;gap:12px;align-items:center;background:#1a1a2e;padding:8px;border-radius:6px">
+        <span style="background:#f59e0b;color:#000;padding:2px 6px;border-radius:4px;font-size:11px;font-weight:bold;min-width:50px;text-align:center">${escHtml(s.time)}</span>
+        <span style="font-size:13px;color:#ddd">${escHtml(s.action)}</span>
+      </div>`;
+    });
+  }
+  
+  html += `</div>
+    </div>
+    
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div style="background:#1a1a2e;padding:12px;border-radius:8px;border-left:2px solid #10b981">
+        <div style="font-size:11px;color:#aaa;text-transform:uppercase;margin-bottom:4px">🔄 Perfect Loop Audio</div>
+        <div style="font-size:13px;color:#10b981;font-weight:bold">${escHtml(r.perfect_loop_phrase)}</div>
+      </div>
+      <div style="background:#1a1a2e;padding:12px;border-radius:8px;border-left:2px solid #8b5cf6">
+        <div style="font-size:11px;color:#aaa;text-transform:uppercase;margin-bottom:4px">🎵 Audio Vibe</div>
+        <div style="font-size:13px;color:#8b5cf6;font-weight:bold">${escHtml(r.viral_audio_vibe)}</div>
+      </div>
+    </div>
+  </div>`;
+  
+  document.getElementById('shorts-result').innerHTML = html;
+}
+
 function renderScoreCard(r){
   let structs=r.structures.map(s=>`<span class="tag tag-green">${s.name} +${Math.round((s.ctr_boost-1)*100)}%</span>`).join('');
   let emots=r.emotional_words.map(w=>`<span class="tag tag-purple">${w}</span>`).join('');

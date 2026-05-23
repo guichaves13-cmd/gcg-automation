@@ -63,6 +63,9 @@
       <button class="nav-btn" data-page="scorer" onclick="showPage('scorer')">
         <span>📊</span> Niche Scorer
       </button>
+      <button class="nav-btn" data-page="shorts" onclick="showPage('shorts')">
+        <span>📱</span> Shorts Engine
+      </button>
     </div>
     <div class="sidebar-footer">
       <div class="ai-badge">🤖 Gemini Pro AI</div>
@@ -215,6 +218,21 @@
         <button class="btn-primary" style="background:#8b5cf6" onclick="generateNicheScore()">📊 SCORE NICHE</button>
       </div>
       <div id="scorer-result" class="result-area"></div>
+    </div>
+
+    <!-- SHORTS ENGINE PAGE -->
+    <div class="page" id="page-shorts">
+      <div class="page-header">
+        <h1>📱 Shorts Viral Loop Engine</h1>
+        <p>Design hyper-retention scripts with "Perfect Loops" and scroll-stopping visuals.</p>
+      </div>
+      <div class="input-group">
+        <input type="text" id="shorts-niche" placeholder="Niche (e.g. Crime)" style="margin-bottom:12px;width:100%">
+        <input type="text" id="shorts-topic" placeholder="Topic (e.g. The Zodiac Killer)" style="margin-bottom:12px;width:100%">
+        <select id="shorts-lang" style="margin-bottom:12px;width:100%"><option>English</option><option>Portuguese</option><option>Spanish</option></select>
+        <button class="btn-primary btn-full" style="background:#f59e0b;color:#1a1a2e" onclick="generateShorts()">📱 GENERATE VIRAL LOOP</button>
+      </div>
+      <div id="shorts-result" class="result-area"></div>
     </div>
 
     <!-- GENERATOR PAGE -->
