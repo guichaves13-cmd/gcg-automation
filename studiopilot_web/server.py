@@ -856,6 +856,11 @@ def api_pipeline_rerender():
     inline_decisions = data.get("decisions")      # dict ou None
     inline_replacements = data.get("replacements", {})
     subtitles_srt = data.get("subtitles_srt", "").strip()
+    # Lower thirds opcoes (do picker UI)
+    lower_thirds_enabled = bool(data.get("lower_thirds_enabled", False))
+    lower_thirds_style = str(data.get("lower_thirds_style", "modern")).strip()
+    if lower_thirds_style not in ("modern", "minimal", "bold"):
+        lower_thirds_style = "modern"
 
     # Validacoes (antes de checar pipeline ativo para retornar 400 em inputs invalidos)
     if not avatar_path:
@@ -933,6 +938,8 @@ def api_pipeline_rerender():
                 width=width, height=height, fps=30,
                 subtitles_srt=subtitles_srt,
                 on_progress=_progress_cb,
+                lower_thirds_enabled=lower_thirds_enabled,
+                lower_thirds_style=lower_thirds_style,
             )
             if result.get("ok"):
                 pipeline_status["message"] = f"Re-render concluido: {output_name}"

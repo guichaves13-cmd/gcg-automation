@@ -178,6 +178,32 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   <input type="text" id="inp-srt" placeholder="C:\\...\\output.srt">
   <label>Nome do output (opcional)</label>
   <input type="text" id="inp-output" placeholder="output_v2.mp4">
+
+  <div style="margin-top: 14px; padding-top: 12px; border-top: 1px solid #30363d;">
+    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+      <input type="checkbox" id="inp-lt-enabled" checked>
+      <span>Lower thirds (texto sobre B-Roll)</span>
+    </label>
+    <label style="margin-top: 8px;">Estilo do lower third</label>
+    <select id="inp-lt-style" style="width: 100%; padding: 7px; background: #0d1117;
+            color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px;
+            font-family: inherit; font-size: 13px;">
+      <option value="modern">Modern (gradient azul, balanceado)</option>
+      <option value="minimal">Minimal (limpo, sutil)</option>
+      <option value="bold">Bold (vermelho, full-width, impactante)</option>
+    </select>
+
+    <!-- Live preview of selected style -->
+    <div id="lt-preview" style="margin-top: 10px; padding: 12px;
+            background: #0d1117; border: 1px solid #30363d; border-radius: 6px;
+            min-height: 60px; position: relative; overflow: hidden;">
+      <div style="color: #6e7681; font-size: 11px; margin-bottom: 6px;">Preview do estilo:</div>
+      <div id="lt-preview-bar" style="display: inline-block; padding: 6px 14px;
+              background: #1E90FF; color: white; font-weight: bold; font-size: 12px;
+              border-radius: 3px;">Keyword do beat aparece aqui</div>
+    </div>
+  </div>
+
   <div class="panel-row">
     <button id="btn-analyze" onclick="doAnalyze()">Pre-visualizar impacto</button>
     <button id="btn-do-apply" onclick="doApply()">Re-renderizar agora</button>
@@ -351,6 +377,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       setStatus('Nenhuma decisao feita ainda.', '#d29922'); return;
     }}
 
+    const ltEnabled = document.getElementById('inp-lt-enabled').checked;
+    const ltStyle = document.getElementById('inp-lt-style').value;
+
     setStatus('Enviando para re-render...', '#e3b341');
     fetch(SERVER + '/api/pipeline/rerender', {{
       method: 'POST',
@@ -362,6 +391,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         output_name: out || undefined,
         decisions: decisions,
         replacements: replacements,
+        lower_thirds_enabled: ltEnabled,
+        lower_thirds_style: ltStyle,
       }})
     }}).then(r => r.json()).then(d => {{
       if (d.started) {{
@@ -383,6 +414,48 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       }}).catch(() => clearInterval(poll));
     }}, 1500);
   }}
+
+  // Live preview of lower_third style
+  function updateLtPreview() {{
+    const style = document.getElementById('inp-lt-style').value;
+    const bar = document.getElementById('lt-preview-bar');
+    const enabled = document.getElementById('inp-lt-enabled').checked;
+    if (!enabled) {{
+      bar.style.opacity = '0.3';
+      bar.textContent = 'Lower thirds DESABILITADOS';
+      bar.style.background = '#30363d';
+      return;
+    }}
+    bar.style.opacity = '1';
+    if (style === 'modern') {{
+      bar.style.background = '#1E90FF';
+      bar.style.color = 'white';
+      bar.style.padding = '6px 14px';
+      bar.style.fontWeight = 'bold';
+      bar.textContent = 'Keyword do beat (Modern)';
+    }} else if (style === 'minimal') {{
+      bar.style.background = 'rgba(255,255,255,0.1)';
+      bar.style.color = '#c9d1d9';
+      bar.style.padding = '5px 12px';
+      bar.style.fontWeight = 'normal';
+      bar.textContent = 'Keyword do beat (Minimal)';
+    }} else if (style === 'bold') {{
+      bar.style.background = '#FF4444';
+      bar.style.color = 'white';
+      bar.style.padding = '8px 18px';
+      bar.style.fontWeight = 'bold';
+      bar.textContent = 'KEYWORD DO BEAT (BOLD)';
+    }}
+  }}
+
+  // Wire up listeners
+  document.addEventListener('DOMContentLoaded', () => {{
+    const styleSel = document.getElementById('inp-lt-style');
+    const enabledCk = document.getElementById('inp-lt-enabled');
+    if (styleSel) styleSel.addEventListener('change', updateLtPreview);
+    if (enabledCk) enabledCk.addEventListener('change', updateLtPreview);
+    updateLtPreview();
+  }});
 
   load();
 </script>

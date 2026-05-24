@@ -3729,6 +3729,121 @@ if generate_picker_html:
 
 
 # =============================================================================
+# MODULO 40 -- UI PICKER lower_thirds style selector
+# =============================================================================
+sep("40. UI PICKER - dropdown style + checkbox + live preview")
+
+if generate_picker_html:
+    with tempfile.TemporaryDirectory() as td:
+        f1 = os.path.join(td,"c.mp4"); open(f1,"wb").write(b"x"*100)
+        beats = [_broll_beat("b1", file=f1, start=0, score=0.7)]
+        tl = _make_timeline(beats)
+        out_html = os.path.join(td, "ui.html")
+        generate_picker_html(tl, out_html)
+        html = open(out_html, encoding="utf-8").read()
+
+        # 40.1 Checkbox lower_thirds_enabled presente
+        assert 'id="inp-lt-enabled"' in html, "checkbox lt-enabled ausente"
+        ok("UI: checkbox lower_thirds_enabled presente")
+
+        # 40.2 Select com 3 options (modern/minimal/bold)
+        assert 'id="inp-lt-style"' in html
+        assert 'value="modern"' in html
+        assert 'value="minimal"' in html
+        assert 'value="bold"' in html
+        ok("UI: select com 3 styles (modern/minimal/bold)")
+
+        # 40.3 Live preview div presente
+        assert 'id="lt-preview"' in html
+        assert 'id="lt-preview-bar"' in html
+        ok("UI: preview div + bar presentes")
+
+        # 40.4 updateLtPreview function JS presente
+        assert "function updateLtPreview" in html
+        assert "addEventListener('change', updateLtPreview)" in html
+        ok("UI: updateLtPreview JS function + event listeners")
+
+        # 40.5 doApply envia os 2 params novos
+        assert "lower_thirds_enabled: ltEnabled" in html
+        assert "lower_thirds_style: ltStyle" in html
+        ok("UI: doApply envia lower_thirds_enabled + style ao server")
+
+# 40.6 Server.py /api/pipeline/rerender LE os 2 novos params
+try:
+    import inspect
+    from studiopilot_web import server as srv
+    rerender_fn = srv.api_pipeline_rerender
+    src = inspect.getsource(rerender_fn)
+    assert 'lower_thirds_enabled' in src
+    assert 'lower_thirds_style' in src
+    # Validacao do style (whitelist)
+    assert '"modern"' in src and '"minimal"' in src and '"bold"' in src
+    ok("UI: server.py /api/pipeline/rerender LE lower_thirds_enabled + style")
+except Exception as e:
+    fail("UI server params", str(e)[:120])
+
+# 40.7 + 40.8 - usa mkdtemp para evitar PermissionError com background thread
+if client:
+    _td40 = tempfile.mkdtemp()
+    try:
+        av = os.path.join(_td40, "av.mp4")
+        br = os.path.join(_td40, "br.mp4")
+        tl_p = os.path.join(_td40, "tl.json")
+        create_synthetic_video(av, 6.0, "blue", True)
+        create_synthetic_video(br, 3.0, "red", False)
+        beats = [_avatar_beat("a1",0,3), _broll_beat("b1",file=br,start=3,duration=3)]
+        beats[1]["keyword"] = "test ui"
+        with open(tl_p,"w",encoding="utf-8") as f: json.dump(_make_timeline(beats),f)
+
+        # 40.7 POST real com os novos params -> 200 started
+        try:
+            srv.active_pipelines = 0
+            srv.pipeline_status["running"] = False
+            srv._pipeline_thread = None
+        except Exception: pass
+        try:
+            r = _post(client, "/api/pipeline/rerender", {
+                "avatar_path": av,
+                "timeline_path": tl_p,
+                "decisions": {"b1": "approved"},
+                "lower_thirds_enabled": True,
+                "lower_thirds_style": "bold",
+                "output_name": "ui_test_output",
+            })
+            assert r.status_code == 200, f"got {r.status_code}: {r.data[:200]}"
+            d = json.loads(r.data)
+            assert d.get("started") == True
+            ok("UI: POST rerender com lower_thirds params -> started=True",
+               f"output={d.get('output_name')}")
+        except Exception as e:
+            fail("UI POST rerender", str(e)[:120])
+
+        # 40.8 Style invalido -> whitelist fallback
+        try:
+            srv.active_pipelines = 0
+            srv.pipeline_status["running"] = False
+            srv._pipeline_thread = None
+        except Exception: pass
+        try:
+            r = _post(client, "/api/pipeline/rerender", {
+                "avatar_path": av,
+                "timeline_path": tl_p,
+                "decisions": {"x": "approved"},
+                "lower_thirds_enabled": True,
+                "lower_thirds_style": "HACKER_STYLE_XYZ",  # invalido
+            })
+            assert r.status_code in (200, 409)
+            ok(f"UI: style invalido -> whitelist fallback handled",
+               f"status={r.status_code}")
+        except Exception as e:
+            fail("UI style invalido", str(e)[:120])
+    finally:
+        # Wait briefly for background thread, then cleanup ignoring errors
+        time.sleep(1.0)
+        shutil.rmtree(_td40, ignore_errors=True)
+
+
+# =============================================================================
 # RESULTADO FINAL
 # =============================================================================
 total = passes + fails
