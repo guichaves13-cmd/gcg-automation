@@ -1,0 +1,15 @@
+flask>=3.0
+flask-cors>=4.0
+pyyaml>=6.0
+rich>=13.0
+Pillow>=10.0
+requests>=2.31
+edge-tts>=6.0
+openai-whisper>=20231117
+google-generativeai>=0.8
+google-auth-oauthlib>=1.0
+google-api-python-client>=2.0
+yt-dlp>=2024.0
+trafilatura>=1.0
+python-pptx>=0.6
+selenium>=4.0
