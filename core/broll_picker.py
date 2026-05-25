@@ -330,7 +330,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
   function toggleApplyPanel() {{
     const panel = document.getElementById('apply-panel');
-    panel.style.display = panel.style.display === 'none' ? '' : 'none';
+    // CSS default is display:none. Check computed style to handle first-click correctly.
+    const currentlyHidden = window.getComputedStyle(panel).display === 'none';
+    panel.style.display = currentlyHidden ? 'block' : 'none';
   }}
 
   function setStatus(msg, color) {{

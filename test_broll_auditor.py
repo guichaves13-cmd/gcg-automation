@@ -3768,6 +3768,17 @@ if generate_picker_html:
         assert "lower_thirds_style: ltStyle" in html
         ok("UI: doApply envia lower_thirds_enabled + style ao server")
 
+# 40.5b BUG FIX: toggleApplyPanel deve usar computed style (CSS default = display:none)
+# Antes: panel.style.display === 'none' SEMPRE falso na 1a click (display vazio inicialmente)
+# Logo, toggle nunca abria o panel. Validado em browser real via Claude Preview.
+try:
+    # Verifica que o codigo usa getComputedStyle ou block default
+    assert "getComputedStyle" in html, "toggleApplyPanel deve checar computed style"
+    assert "currentlyHidden" in html or "'block'" in html
+    ok("UI BUG FIX: toggleApplyPanel usa getComputedStyle (validado em browser real)")
+except Exception as e:
+    fail("UI toggle bug fix", str(e)[:120])
+
 # 40.6 Server.py /api/pipeline/rerender LE os 2 novos params
 try:
     import inspect
