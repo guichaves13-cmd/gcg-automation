@@ -41,7 +41,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   .stat .num {{ font-size: 20px; font-weight: 700; color: #58a6ff; }}
   .stat .lbl {{ font-size: 11px; color: #8b949e; text-transform: uppercase; }}
   main {{ padding: 24px; max-width: 1400px; margin: 0 auto; }}
-  .controls {{ margin-bottom: 16px; display: flex; gap: 8px; flex-wrap: wrap; }}
+  .controls {{ margin-bottom: 16px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }}
+  .controls.advanced {{
+    margin-bottom: 20px; padding: 10px 14px; background: #161b22;
+    border: 1px solid #30363d; border-radius: 8px;
+  }}
+  .controls .ctl-label {{ color: #8b949e; font-size: 12px; font-weight: 600; }}
   .controls button {{
     padding: 6px 14px; border-radius: 6px; border: 1px solid #30363d;
     background: #21262d; color: #e6edf3; cursor: pointer; font-size: 13px;
@@ -156,10 +161,41 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   <div class="controls">
     <button onclick="approveAll()">Aprovar todos</button>
     <button onclick="rejectLowScore()">Rejeitar score &lt; 0.5</button>
+    <button onclick="invertDecisions()">Inverter decis&otilde;es</button>
     <button onclick="resetAll()">Resetar tudo</button>
     <button onclick="filterShow('all')">Mostrar todos</button>
     <button onclick="filterShow('broll')">Apenas B-roll</button>
     <button onclick="filterShow('low')">Score baixo</button>
+  </div>
+
+  <div class="controls advanced">
+    <span class="ctl-label">Score</span>
+    <input type="number" id="score-threshold" value="0.7" min="0" max="1" step="0.05"
+           style="width:70px; padding:5px; background:#0d1117; color:#c9d1d9; border:1px solid #30363d; border-radius:4px;">
+    <button onclick="approveAboveScore()">Aprovar &gt; X</button>
+    <button onclick="rejectBelowScore()">Rejeitar &lt; X</button>
+
+    <span class="ctl-label" style="margin-left:14px;">Mood</span>
+    <select id="filter-mood" onchange="applyFilters()" style="padding:5px;
+            background:#0d1117; color:#c9d1d9; border:1px solid #30363d; border-radius:4px;">
+      <option value="">Todos</option>
+    </select>
+
+    <span class="ctl-label">Shot</span>
+    <select id="filter-shottype" onchange="applyFilters()" style="padding:5px;
+            background:#0d1117; color:#c9d1d9; border:1px solid #30363d; border-radius:4px;">
+      <option value="">Todos</option>
+    </select>
+
+    <span class="ctl-label">Source</span>
+    <select id="filter-source" onchange="applyFilters()" style="padding:5px;
+            background:#0d1117; color:#c9d1d9; border:1px solid #30363d; border-radius:4px;">
+      <option value="">Todos</option>
+    </select>
+
+    <input type="text" id="search-kw" placeholder="Buscar keyword..." oninput="applyFilters()"
+           style="margin-left:14px; padding:5px 10px; background:#0d1117; color:#c9d1d9;
+                  border:1px solid #30363d; border-radius:4px; width:180px;">
   </div>
   <div id="beats">
 {beats_html}
@@ -319,6 +355,87 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     }});
   }}
 
+  // === BULK ACTIONS ADICIONAIS ===
+
+  function approveAboveScore() {{
+    const thr = parseFloat(document.getElementById('score-threshold').value);
+    let n = 0;
+    document.querySelectorAll('.beat[data-type="broll"]').forEach(el => {{
+      const score = parseFloat(el.dataset.score || '0');
+      if (score > thr) {{
+        setDecision(el.dataset.beatId, 'approved');
+        n++;
+      }}
+    }});
+    console.log(`Aprovados ${{n}} beats com score > ${{thr}}`);
+  }}
+
+  function rejectBelowScore() {{
+    const thr = parseFloat(document.getElementById('score-threshold').value);
+    let n = 0;
+    document.querySelectorAll('.beat[data-type="broll"]').forEach(el => {{
+      const score = parseFloat(el.dataset.score || '1');
+      if (score < thr) {{
+        setDecision(el.dataset.beatId, 'rejected');
+        n++;
+      }}
+    }});
+    console.log(`Rejeitados ${{n}} beats com score < ${{thr}}`);
+  }}
+
+  function invertDecisions() {{
+    if (!confirm('Inverter approved <-> rejected?')) return;
+    Object.keys(decisions).forEach(id => {{
+      if (decisions[id] === 'approved') setDecision(id, 'rejected');
+      else if (decisions[id] === 'rejected') setDecision(id, 'approved');
+    }});
+  }}
+
+  // === FILTROS COMBINADOS (mood + shot_type + source + keyword) ===
+  function applyFilters() {{
+    const mood = document.getElementById('filter-mood').value;
+    const shot = document.getElementById('filter-shottype').value;
+    const source = document.getElementById('filter-source').value;
+    const kw = document.getElementById('search-kw').value.toLowerCase().trim();
+
+    document.querySelectorAll('.beat').forEach(el => {{
+      let show = true;
+      if (mood && el.dataset.mood !== mood) show = false;
+      if (shot && el.dataset.shotType !== shot) show = false;
+      if (source && el.dataset.source !== source) show = false;
+      if (kw) {{
+        const text = (el.textContent || '').toLowerCase();
+        if (!text.includes(kw)) show = false;
+      }}
+      el.style.display = show ? '' : 'none';
+    }});
+  }}
+
+  // Popular dropdowns dinamicamente baseado nos beats existentes
+  function populateFilterDropdowns() {{
+    const moods = new Set();
+    const shots = new Set();
+    const sources = new Set();
+    document.querySelectorAll('.beat[data-type="broll"]').forEach(el => {{
+      if (el.dataset.mood) moods.add(el.dataset.mood);
+      if (el.dataset.shotType) shots.add(el.dataset.shotType);
+      if (el.dataset.source) sources.add(el.dataset.source);
+    }});
+    const fill = (id, set) => {{
+      const sel = document.getElementById(id);
+      if (!sel) return;
+      // Mantem opcao 'Todos' e adiciona valores unicos
+      Array.from(set).sort().forEach(v => {{
+        const opt = document.createElement('option');
+        opt.value = v; opt.textContent = v;
+        sel.appendChild(opt);
+      }});
+    }};
+    fill('filter-mood', moods);
+    fill('filter-shottype', shots);
+    fill('filter-source', sources);
+  }}
+
   function exportSelections() {{
     const out = JSON.stringify({{decisions, replacements}}, null, 2);
     const blob = new Blob([out], {{type: 'application/json'}});
@@ -452,6 +569,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
   // Wire up listeners
   document.addEventListener('DOMContentLoaded', () => {{
+    populateFilterDropdowns();
     const styleSel = document.getElementById('inp-lt-style');
     const enabledCk = document.getElementById('inp-lt-enabled');
     if (styleSel) styleSel.addEventListener('change', updateLtPreview);
@@ -531,7 +649,9 @@ def _beat_card_html(beat: dict) -> str:
                oninput="setReplacement('{bid}', this.value)">
       </div>"""
 
-    return f"""    <div class="beat" data-beat-id="{bid}" data-type="{btype}" data-score="{score if score is not None else 1}">
+    # Extra data-attrs for advanced filters (mood/shot_type/source/keyword)
+    _kw_attr = escape(str(beat.get("keyword", "")))
+    return f"""    <div class="beat" data-beat-id="{bid}" data-type="{btype}" data-score="{score if score is not None else 1}" data-mood="{escape(str(mood or ''))}" data-shot-type="{escape(str(shot_type or ''))}" data-source="{escape(str(source or ''))}" data-keyword="{_kw_attr}">
       <div class="preview">{preview}</div>
       <div class="details">
         <div class="badges">

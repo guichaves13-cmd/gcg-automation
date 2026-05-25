@@ -3794,6 +3794,37 @@ try:
 except Exception as e:
     fail("UI replace-file-row bug fix", str(e)[:120])
 
+# 40.5d M41 BULK ACTIONS: 6 novas funcoes/filtros (validado em browser real)
+try:
+    # Checa que TODAS as funcoes novas estao no HTML
+    bulk_fns = ["approveAboveScore", "rejectBelowScore", "invertDecisions",
+                "applyFilters", "populateFilterDropdowns"]
+    missing = [f for f in bulk_fns if "function " + f not in html]
+    assert not missing, f"funcoes ausentes: {missing}"
+    ok("UI BULK: 5 novas funcoes JS presentes",
+       f"approveAboveScore, rejectBelowScore, invertDecisions, applyFilters, populateFilterDropdowns")
+
+    # Checa elementos UI
+    assert 'id="score-threshold"' in html
+    assert 'id="filter-mood"' in html
+    assert 'id="filter-shottype"' in html
+    assert 'id="filter-source"' in html
+    assert 'id="search-kw"' in html
+    ok("UI BULK: 5 controles avancados (score input + 3 dropdowns + search)")
+
+    # Checa data-attrs nos beats (necessario p/ filtros funcionarem)
+    assert 'data-mood=' in html
+    assert 'data-shot-type=' in html
+    assert 'data-source=' in html
+    assert 'data-keyword=' in html
+    ok("UI BULK: data-attrs nos beats (mood/shot-type/source/keyword)")
+
+    # populateFilterDropdowns chamado no DOMContentLoaded
+    assert "populateFilterDropdowns()" in html
+    ok("UI BULK: populateFilterDropdowns chamado no DOMContentLoaded")
+except Exception as e:
+    fail("UI BULK ACTIONS", str(e)[:120])
+
 # 40.6 Server.py /api/pipeline/rerender LE os 2 novos params
 try:
     import inspect
