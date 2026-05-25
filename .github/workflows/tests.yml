@@ -8,9 +8,55 @@ on:
   workflow_dispatch:
 
 jobs:
-  test:
+  # ─────────────────────────────────────────────────────────────────────
+  # Job 1: Lint + smoke (fast, fails fast on import errors)
+  # ─────────────────────────────────────────────────────────────────────
+  lint-smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install minimal deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install flask requests rich pyflakes
+
+      - name: Lint - syntax check all Python files
+        run: |
+          fails=0
+          for f in core/*.py studiopilot_web/*.py test_*.py; do
+            if ! python -m py_compile "$f" 2>&1; then
+              echo "FAIL: $f"; fails=$((fails+1))
+            fi
+          done
+          if [ $fails -gt 0 ]; then exit 1; fi
+
+      - name: Pyflakes (real bugs only, ignore cosmetic)
+        run: |
+          python -m pyflakes core/*.py 2>&1 | \
+            grep -v "imported but unused" | \
+            grep -v "f-string is missing placeholders" | \
+            grep -v "local variable .* is assigned to but never used" | \
+            grep -v "redefinition of unused" | \
+            grep -v "global .* is unused" | \
+            tee /tmp/pyflakes.out
+          test ! -s /tmp/pyflakes.out
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Job 2: Full test suite (6 suites, the main quality gate)
+  # ─────────────────────────────────────────────────────────────────────
+  full-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: lint-smoke
 
     steps:
       - uses: actions/checkout@v4
@@ -26,33 +72,87 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y ffmpeg
 
-      - name: Install minimal Python deps
+      - name: Install Python deps
         run: |
           python -m pip install --upgrade pip
           pip install \
-            requests \
-            flask \
-            rich \
-            pillow \
+            requests flask rich pillow \
             "google-genai" \
             "openai-whisper" \
-            yt-dlp \
-            psutil \
-            coverage \
-            pyflakes
+            "openai" \
+            yt-dlp psutil coverage
 
-      - name: Static checks (pyflakes — real bugs only)
+      # ── Suite 1: smoke (54 core modules import OK)
+      - name: Suite 1 - test_all_modules_smoke.py (35 tests)
+        run: python test_all_modules_smoke.py
+        continue-on-error: true
+        id: smoke
+
+      # ── Suite 2: all 167 server endpoints
+      - name: Suite 2 - test_all_endpoints.py (167 tests, no 500s)
+        run: python test_all_endpoints.py
+        continue-on-error: true
+        id: endpoints
+
+      # ── Suite 3: Title Intelligence
+      - name: Suite 3 - test_ti_full.py (74 tests)
+        run: python test_ti_full.py
+        continue-on-error: true
+        id: ti
+
+      # ── Suite 4: GCG general (146 tests)
+      - name: Suite 4 - test_gcg_full.py (146 tests)
+        run: python test_gcg_full.py
+        continue-on-error: true
+        id: gcg
+
+      # ── Suite 5: Pipeline B-Roll full (4 modos, 107 tests)
+      - name: Suite 5 - test_pipeline_broll_full.py (107 tests)
+        run: python test_pipeline_broll_full.py
+        continue-on-error: true
+        id: pipeline
+
+      # ── Suite 6: Auditor + UI + GLM brutal (245 tests, slowest)
+      - name: Suite 6 - test_broll_auditor.py (245 tests)
+        run: python test_broll_auditor.py
+        continue-on-error: true
+        id: auditor
+
+      # ── Final gate: fail if any suite failed
+      - name: Validate all suites passed
         run: |
-          # Ignore cosmetic warnings (unused imports, f-string placeholders, unused locals)
-          python -m pyflakes core/*.py 2>&1 | \
-            grep -v "imported but unused" | \
-            grep -v "f-string is missing placeholders" | \
-            grep -v "local variable .* is assigned to but never used" | \
-            grep -v "redefinition of unused" | \
-            grep -v "global .* is unused" | \
-            tee /tmp/pyflakes.out
-          # Fail only if real issues remain
-          test ! -s /tmp/pyflakes.out
+          [ "${{ steps.smoke.outcome }}"     = "success" ] || { echo "smoke FAILED"; exit 1; }
+          [ "${{ steps.endpoints.outcome }}" = "success" ] || { echo "endpoints FAILED"; exit 1; }
+          [ "${{ steps.ti.outcome }}"        = "success" ] || { echo "ti FAILED"; exit 1; }
+          [ "${{ steps.gcg.outcome }}"       = "success" ] || { echo "gcg FAILED"; exit 1; }
+          [ "${{ steps.pipeline.outcome }}"  = "success" ] || { echo "pipeline FAILED"; exit 1; }
+          [ "${{ steps.auditor.outcome }}"   = "success" ] || { echo "auditor FAILED"; exit 1; }
+          echo "All 6 suites passed."
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Job 3: Legacy regression (kept for backwards compat)
+  # ─────────────────────────────────────────────────────────────────────
+  legacy-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: lint-smoke
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y ffmpeg
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests flask rich pillow "google-genai" "openai-whisper" yt-dlp psutil coverage
 
       - name: Stress regression (35 tests, ~10s)
         run: python stress_regression.py
@@ -82,3 +182,25 @@ jobs:
           name: coverage-html
           path: coverage_html/
           retention-days: 14
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Job 4: Status report
+  # ─────────────────────────────────────────────────────────────────────
+  report:
+    runs-on: ubuntu-latest
+    needs: [lint-smoke, full-tests, legacy-regression]
+    if: always()
+
+    steps:
+      - name: Final summary
+        run: |
+          echo "## Test Suite Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- lint-smoke: ${{ needs.lint-smoke.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- full-tests (6 suites, ~770 tests): ${{ needs.full-tests.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- legacy-regression (4 suites): ${{ needs.legacy-regression.result }}" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ needs.full-tests.result }}" = "success" ]; then
+            echo "✅ Quality gate passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Quality gate failed - see logs" >> $GITHUB_STEP_SUMMARY
+          fi
