@@ -904,9 +904,9 @@ let _scannedStructures = [];
 
 async function scanViralStructures(){
   const niche=document.getElementById('remix-niche').value.trim();
-  if(!niche){alert('Enter main niche');return}
-  const lang=document.getElementById('remix-lang').value;
   const subs=document.getElementById('remix-subniches').value.split(',').map(s=>s.trim()).filter(s=>s);
+  if(!niche && !subs.length){alert('Enter main niche or subniches to scan');return}
+  const lang=document.getElementById('remix-lang').value;
 
   loading(true,'Phase 1: Scanning viral structures across subniches...');
   const r=await post('/api/scan_viral_structures',{niche,subniches:subs,language:lang});

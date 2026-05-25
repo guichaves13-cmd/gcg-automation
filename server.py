@@ -1169,19 +1169,26 @@ def api_scan_viral_structures():
     for sub in subniches[:4]:
         query = f"{niche} {sub}".strip()
         # Search for recent trending videos in this subniche
-        videos = search_trending(query, key, max_results=5)
-        for v in videos:
-            if v["views"] > 10000: # Only care about somewhat successful videos
-                real_videos.append({
-                    "subniche": sub,
-                    "title": v["title"],
-                    "views": v["views"],
-                    "channel": v["channel_title"],
-                    "url": f"https://youtube.com/watch?v={v['id']}"
-                })
+        videos = search_trending(query, key, max_results=10)
+        
+        # Try to get videos with decent views first
+        filtered = [v for v in videos if v["views"] > 1000]
+        
+        # Fallback: if no videos have >1000 views, just take the top 3 we found
+        if not filtered and videos:
+            filtered = videos[:3]
+            
+        for v in filtered:
+            real_videos.append({
+                "subniche": sub,
+                "title": v["title"],
+                "views": v["views"],
+                "channel": v["channel_title"],
+                "url": f"https://youtube.com/watch?v={v['id']}"
+            })
                 
     if not real_videos:
-        return jsonify({"error": "No viral videos found for these subniches on YouTube."}), 400
+        return jsonify({"error": "No videos found for these subniches on YouTube. Try broader terms."}), 400
         
     videos_text = ""
     for i, v in enumerate(real_videos[:15]):
