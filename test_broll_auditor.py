@@ -3779,6 +3779,21 @@ try:
 except Exception as e:
     fail("UI toggle bug fix", str(e)[:120])
 
+# 40.5c BUG FIX: replace-file-row display='' nao mostra (CSS default = none)
+# Antes: rfRow.style.display = '' caia no CSS '.replace-file-row { display: none }'
+# Logo input de substituicao nunca aparecia ao clicar 'Substituir'. Validado em browser.
+try:
+    # Verifica que TODOS os toggles de replace-file-row usam 'block' explicito
+    bad_pattern = "rfRow.style.display = ''"
+    bad_count = html.count(bad_pattern)
+    assert bad_count == 0, f"ainda tem {bad_count} casos de display='' (deveria ser 'block')"
+    # Verifica que tem 'block' em pelo menos 2 locais (setDecision + load)
+    block_count = html.count("rfRow.style.display = 'block'")
+    assert block_count >= 1, f"esperado >= 1 'block', got {block_count}"
+    ok(f"UI BUG FIX: replace-file-row usa display='block' (era ''), block_count={block_count}")
+except Exception as e:
+    fail("UI replace-file-row bug fix", str(e)[:120])
+
 # 40.6 Server.py /api/pipeline/rerender LE os 2 novos params
 try:
     import inspect

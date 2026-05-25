@@ -227,7 +227,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       if (value) el.classList.add(value);
       // Show/hide replace file input
       const rfRow = el.querySelector('.replace-file-row');
-      if (rfRow) rfRow.style.display = (value === 'replace') ? '' : 'none';
+      if (rfRow) rfRow.style.display = (value === 'replace') ? 'block' : 'none';
     }}
     updateStats();
     persist();
@@ -268,7 +268,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           el.classList.add(v);
           if (v === 'replace') {{
             const rfRow = el.querySelector('.replace-file-row');
-            if (rfRow) rfRow.style.display = '';
+            if (rfRow) rfRow.style.display = 'block';
           }}
         }}
       }});
