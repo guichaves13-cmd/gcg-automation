@@ -374,11 +374,17 @@ section("13. FFPROBE PATH DERIVATION — DIRNAME/BASENAME SAFETY")
 # ============================================================
 
 def _derive_ffprobe(ffmpeg_path):
-    """Replicates the safe derivation pattern used in fixed modules."""
-    ff_dir = os.path.dirname(ffmpeg_path)
-    ff_base = os.path.basename(ffmpeg_path)
+    """Replicates the safe derivation pattern used in fixed modules.
+    Uses ntpath/posixpath explicit to be cross-platform safe (CI runs on Linux,
+    but we need to test the Windows path pattern too)."""
+    import ntpath, posixpath
+    # Detect Windows-style path (drive letter or backslash)
+    is_win = ("\\" in ffmpeg_path) or (len(ffmpeg_path) > 1 and ffmpeg_path[1] == ":")
+    mod = ntpath if is_win else posixpath
+    ff_dir = mod.dirname(ffmpeg_path)
+    ff_base = mod.basename(ffmpeg_path)
     probe_base = ff_base.replace("ffmpeg", "ffprobe")
-    return os.path.join(ff_dir, probe_base) if ff_dir else probe_base
+    return mod.join(ff_dir, probe_base) if ff_dir else probe_base
 
 def test_ffprobe_path_with_ffmpeg_in_dir():
     # The classic broken pattern: path contains 'ffmpeg' as DIRECTORY name
