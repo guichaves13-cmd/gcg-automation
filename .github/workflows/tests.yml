@@ -171,7 +171,16 @@ jobs:
         run: |
           mkdir -p legacy_logs
           python stress_regression.py 2>&1 | tee legacy_logs/stress.log
-          exit ${PIPESTATUS[0]}
+          rc=${PIPESTATUS[0]}
+          if [ $rc -ne 0 ]; then
+            echo ""
+            echo "::error::stress_regression FAILED with rc=$rc"
+            echo ""
+            echo "=== FULL STRESS LOG (visible in workflow UI) ==="
+            cat legacy_logs/stress.log
+            echo "=== END STRESS LOG ==="
+          fi
+          exit $rc
 
       - name: Upload stress log on failure
         if: failure()
