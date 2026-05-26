@@ -165,7 +165,18 @@ jobs:
           pip install requests flask rich pillow "google-genai" "openai-whisper" yt-dlp psutil coverage
 
       - name: Stress regression (35 tests, ~10s)
-        run: python stress_regression.py
+        run: |
+          mkdir -p legacy_logs
+          python stress_regression.py 2>&1 | tee legacy_logs/stress.log
+          exit ${PIPESTATUS[0]}
+
+      - name: Upload stress log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stress-log
+          path: legacy_logs/stress.log
+          retention-days: 14
 
       - name: Enterprise regression (30 tests, ~3min)
         run: python enterprise_regression.py
