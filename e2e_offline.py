@@ -18,8 +18,10 @@ This replaces what would otherwise be a 20-30 min live API run.
 import os, sys, json, tempfile, shutil, subprocess, time
 from unittest import mock
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-sys.path.insert(0, r"C:\Users\Guilherme\Music\automaçao video")
-os.chdir(r"C:\Users\Guilherme\Music\automaçao video")
+# Portable script-relative paths
+_ROOT = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, _ROOT)
+os.chdir(_ROOT)
 
 PASS = 0
 FAIL = 0

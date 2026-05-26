@@ -18,8 +18,10 @@ This is the "hard mode" companion to stress_regression.py.
 import os, sys, io, json, time, random, string, tempfile, shutil, subprocess, threading
 import html as _html, base64 as _b64, struct
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-sys.path.insert(0, r"C:\Users\Guilherme\Music\automaçao video")
-os.chdir(r"C:\Users\Guilherme\Music\automaçao video")
+# Portable script-relative paths
+_ROOT = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, _ROOT)
+os.chdir(_ROOT)
 
 PASS = 0
 FAIL = 0

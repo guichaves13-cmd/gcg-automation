@@ -7,8 +7,10 @@ Advanced stress tests — exercise edge cases that real production hits:
 """
 import os, sys, json, tempfile, shutil, subprocess, threading, time, html as _html
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-sys.path.insert(0, r"C:\Users\Guilherme\Music\automaçao video")
-os.chdir(r"C:\Users\Guilherme\Music\automaçao video")
+# Use script-relative paths (portable Linux/Windows)
+_ROOT = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, _ROOT)
+os.chdir(_ROOT)
 
 PASS = 0
 FAIL = 0
