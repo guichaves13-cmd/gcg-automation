@@ -435,7 +435,9 @@ section("15. ALL CORE MODULES IMPORT")
 # ============================================================
 def test_all_core_imports():
     import importlib
-    mods = [f[:-3] for f in os.listdir(os.path.join(r"C:\Users\Guilherme\Music\automaçao video", "core"))
+    # Use relative path so test works on both Windows and Linux CI
+    core_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "core")
+    mods = [f[:-3] for f in os.listdir(core_dir)
             if f.endswith(".py") and not f.startswith("_")]
     failed = []
     for m in mods:
@@ -444,7 +446,11 @@ def test_all_core_imports():
         except Exception as e:
             failed.append((m, str(e)[:80]))
     assert not failed, f"import failures: {failed}"
-t(f"imports: all core/*.py modules ({sum(1 for f in os.listdir(os.path.join(r'C:\Users\Guilherme\Music\automaçao video','core')) if f.endswith('.py') and not f.startswith('_'))} files)", test_all_core_imports)
+
+# Compute file count using relative path (works on Win and Linux)
+_core_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "core")
+_core_count = sum(1 for f in os.listdir(_core_dir) if f.endswith(".py") and not f.startswith("_"))
+t(f"imports: all core/*.py modules ({_core_count} files)", test_all_core_imports)
 
 
 # ============================================================
