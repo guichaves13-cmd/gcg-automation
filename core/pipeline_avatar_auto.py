@@ -1059,8 +1059,9 @@ def _build_smart_timeline(avatar_duration, mapped_clips, rng,
 
     current_time = 0.0
 
-    # Intro: avatar only (8-15s or 10% of video, whichever is smaller)
-    intro_dur = min(rng.uniform(8, 15), avatar_duration * 0.1)
+    # Intro: avatar only (8-12s, capped at _MAX_AVATAR_CHUNK so the renderer
+    # never gets a single chunk it can't handle; also capped at 10% of video).
+    intro_dur = min(rng.uniform(8, 15), avatar_duration * 0.1, _MAX_AVATAR_CHUNK)
     segments.append({"type": "avatar", "start": 0.0, "duration": round(intro_dur, 2)})
     current_time = intro_dur
 
