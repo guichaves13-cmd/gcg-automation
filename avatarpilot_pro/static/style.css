@@ -2,6 +2,9 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 
 :root {
+  --surface2: #1e1e2e;
+  --surface3: #252538;
+  --muted: #6b7280;
   --bg: #0a0a14;
   --bg2: #0f0f1e;
   --bg3: #161630;

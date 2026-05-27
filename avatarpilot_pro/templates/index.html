@@ -67,7 +67,7 @@
                 <div>Clique para fazer upload</div>
                 <div class="upload-hint">Foto (PNG/JPG) ou Vídeo curto (MP4/MOV) — corpo todo visível</div>
               </div>
-              <img id="img-preview" class="img-preview" style="display:none">
+              <img id="img-preview" class="img-preview" style="display:none" onerror="this.style.display='none';document.getElementById('upload-placeholder').style.display='block';document.getElementById('upload-placeholder').innerHTML='<div style=color:#e94560>Erro ao carregar imagem. Tente fazer upload novamente.</div>'">
               <video id="vid-preview" style="display:none;width:100%;border-radius:8px;max-height:280px" muted autoplay loop playsinline></video>
             </div>
             <div id="avatar-mode-badge" style="display:none;margin-top:6px;padding:6px 10px;border-radius:6px;font-size:12px;font-weight:600"></div>

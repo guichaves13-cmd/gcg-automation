@@ -202,9 +202,8 @@ async function previewAudio() {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
     });
-    if (!r.ok) { toast(`Server error ${r.status}`, 'error'); return; }
     const d = await r.json();
-    if (d.error) { toast(d.error, 'error'); return; }
+    if (!r.ok || d.error) { toast(d.error || `Erro ${r.status}`, 'error'); return; }
     const audio = document.getElementById('audio-preview');
     audio.src = d.audio_url;
     audio.style.display = 'block';
@@ -339,7 +338,7 @@ async function generateAvatar() {
 
   try {
     const r = await fetch('/api/generate', { method: 'POST', body: formData });
-    if (!r.ok) { toast(`Server error ${r.status}`, 'error'); document.getElementById('progress-area').style.display = 'none'; return; }
+    if (!r.ok) { let errMsg = `Erro ${r.status}`; try { const ed = await r.json(); errMsg = ed.error || errMsg; } catch(_) {} toast(errMsg, 'error'); document.getElementById('progress-area').style.display = 'none'; return; }
     const d = await r.json();
     if (d.error) {
       toast(d.error, 'error');
@@ -2354,10 +2353,22 @@ function useAvatarInCreate(path, url) {
   showPage('create');
   // Preview the image
   const preview = document.getElementById('img-preview');
+  const vidEl   = document.getElementById('vid-preview');
   const placeholder = document.getElementById('upload-placeholder');
-  preview.src = url;
+  const badge   = document.getElementById('avatar-mode-badge');
+  // Cache-bust the URL to force browser to reload
+  const cacheBust = url.includes('?') ? url + '&_t=' + Date.now() : url + '?_t=' + Date.now();
+  preview.src = cacheBust;
   preview.style.display = 'block';
+  if (vidEl) vidEl.style.display = 'none';
   placeholder.style.display = 'none';
+  if (badge) {
+    badge.style.display = 'block';
+    badge.style.background = 'rgba(124,58,237,0.1)';
+    badge.style.color = '#a78bfa';
+    badge.style.border = '1px solid #a78bfa';
+    badge.textContent = 'Avatar da biblioteca selecionado';
+  }
   // Store path for form submission
   window._avatarLibraryPath = path;
   window._avatarLibraryUrl  = url;
@@ -2561,7 +2572,7 @@ async function generateSample() {
 
   try {
     const r = await fetch('/api/generate', { method: 'POST', body: formData });
-    if (!r.ok) { toast(`Erro ${r.status}`, 'error'); document.getElementById('progress-area').style.display = 'none'; return; }
+    if (!r.ok) { let em = `Erro ${r.status}`; try { const ed = await r.json(); em = ed.error || em; } catch(_) {} toast(em, 'error'); document.getElementById('progress-area').style.display = 'none'; return; }
     const d = await r.json();
     if (d.error) { toast(d.error, 'error'); document.getElementById('progress-area').style.display = 'none'; return; }
     pollJob(d.job_id);

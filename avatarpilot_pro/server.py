@@ -1238,6 +1238,20 @@ def run_sadtalker_chunked(image_path, audio_path, output_path, settings=None,
         if job_id and job_id in jobs:
             jobs[job_id]["message"] = f"Long audio ({total_dur/60:.1f}min) — GFPGAN disabled for speed..."
 
+    # Auto-disable GFPGAN if insufficient VRAM (needs ~2GB; OOM kills the process)
+    if settings.get("enhancer") in ("gfpgan", "RestoreFormer"):
+        try:
+            import torch as _t
+            if _t.cuda.is_available():
+                _vf = _t.cuda.mem_get_info()[0] / (1024**3)
+                if _vf < 2.5:
+                    print(f"  [SadTalker] {_vf:.1f}GB VRAM free - disabling GFPGAN (OOM protection)", flush=True)
+                    settings["enhancer"] = "none"
+                    if job_id and job_id in jobs:
+                        jobs[job_id]["message"] = f"GFPGAN desativado ({_vf:.1f}GB VRAM insuf.)"
+        except Exception:
+            pass
+
     # Short audio: direct processing
     if total_dur <= chunk_duration + 30:
         return run_sadtalker(image_path, audio_path, output_path, settings)
@@ -2250,6 +2264,17 @@ def apply_gfpgan_to_video(input_path: str, output_path: str, job_id: str = None,
         # bg_upsampler disabled: 2x scaling makes GFPGAN 5-10x slower (e.g. 1280x714 -> 5+ min per minute of video)
         # Final HD encode at 1280x720 already handles upscaling. Trade off background sharpness for speed.
         _bg_upsampler = None
+
+        # VRAM guard: check available memory before loading GFPGAN (prevents OOM crash)
+        try:
+            _vf = _torch.cuda.mem_get_info()[0] / (1024**3)
+            if _vf < 1.5:
+                print(f"  [GFPGAN] Only {_vf:.1f}GB VRAM free - skipping to prevent OOM", flush=True)
+                shutil.copy2(input_path, output_path)
+                return output_path
+            _torch.cuda.empty_cache()  # Free any cached tensors before loading
+        except Exception:
+            pass
 
         restorer = GFPGANer(
             model_path=_gfpgan_model,
@@ -4195,6 +4220,49 @@ def ask_groq(prompt: str, max_tokens: int = 2048, model: str = "llama-3.3-70b-ve
 # ============================================================================
 # FULL PIPELINE
 # ============================================================================
+
+def _safe_pipeline_runner(job_id: str, config: dict):
+    """Run pipeline in this thread with full exception isolation.
+    Catches ALL exceptions so Flask server never dies from a pipeline crash.
+    GPU OOM crashes are caught via the try/except around run_pipeline."""
+    global active_workers
+    try:
+        run_pipeline(job_id, config)
+    except SystemExit as e:
+        print(f"  [SafeRunner] SystemExit in pipeline {job_id[:8]}: {e}", flush=True)
+        try:
+            with jobs_lock:
+                if job_id in jobs:
+                    jobs[job_id].update({"status": "error", "error": f"Pipeline aborted: {e}", "progress": 0, "message": "Pipeline aborted"})
+            db_save_job(job_id, jobs.get(job_id, {}))
+        except Exception: pass
+    except MemoryError as e:
+        print(f"  [SafeRunner] MemoryError (OOM) in pipeline {job_id[:8]}", flush=True)
+        try:
+            with jobs_lock:
+                if job_id in jobs:
+                    jobs[job_id].update({"status": "error", "error": "Memoria insuficiente (OOM). Tente um video mais curto.", "progress": 0, "message": "Erro: memoria insuficiente"})
+            db_save_job(job_id, jobs.get(job_id, {}))
+        except Exception: pass
+    except Exception as e:
+        print(f"  [SafeRunner] Exception in pipeline {job_id[:8]}: {e}", flush=True)
+        try:
+            with jobs_lock:
+                if job_id in jobs:
+                    jobs[job_id].update({"status": "error", "error": str(e), "progress": 0, "message": "Erro no pipeline"})
+            db_save_job(job_id, jobs.get(job_id, {}))
+        except Exception: pass
+    finally:
+        # Always release worker slot regardless of outcome
+        try:
+            with workers_lock:
+                active_workers = max(0, active_workers - 1)
+        except Exception: pass
+        # Always release semaphore (run_pipeline may not have done it if it crashed early)
+        try: release_vram()
+        except Exception: pass
+
+
 def run_pipeline(job_id: str, config: dict):
     """Run full avatar generation pipeline with plan limits."""
     global active_workers
@@ -5179,8 +5247,11 @@ def _advance_batch_queue():
                 return
             next_id = waiting[0]
             cfg = jobs[next_id].get("_config", {})
-        t = Thread(target=run_pipeline, args=(next_id, cfg), daemon=True)
+        t = Thread(target=_safe_pipeline_runner, args=(next_id, cfg), daemon=True)
         t.start()
+        with jobs_lock:
+            if next_id in jobs:
+                jobs[next_id]['_thread'] = t
 
 
 # ============================================================================
@@ -5911,8 +5982,11 @@ def api_generate():
             "message": _queue_msg, "error": "", "_config": config,
         }
     db_save_job(job_id, jobs[job_id])  # persist immediately so job survives restarts
-    t = Thread(target=run_pipeline, args=(job_id, config), daemon=True)
+    t = Thread(target=_safe_pipeline_runner, args=(job_id, config), daemon=True)
     t.start()
+    with jobs_lock:
+        if job_id in jobs:
+            jobs[job_id]['_thread'] = t
     return jsonify({"job_id": job_id, "queued_workers": _cur_workers})
 
 @app.route("/api/job/<job_id>")
@@ -5920,6 +5994,8 @@ def api_job_status(job_id):
     if job_id in jobs:
         j = dict(jobs[job_id])
         j.pop("_config", None)
+        j.pop("_thread", None)   # Thread objects are not JSON serializable
+        j.pop("_cancel", None)   # internal flag, not needed by client
         return jsonify(j)
     # Fallback: look in DB (survives server restarts)
     conn = None
@@ -5995,8 +6071,11 @@ def api_batch():
     # Start first job
     if first_id:
         cfg0 = jobs[first_id]["_config"]
-        t = Thread(target=run_pipeline, args=(first_id, cfg0), daemon=True)
+        t = Thread(target=_safe_pipeline_runner, args=(first_id, cfg0), daemon=True)
         t.start()
+        with jobs_lock:
+            if first_id in jobs:
+                jobs[first_id]['_thread'] = t
 
     return jsonify({"batch_id": uuid.uuid4().hex[:8], "job_ids": job_ids, "total": len(job_ids)})
 
@@ -6504,8 +6583,11 @@ def api_external_generate():
         "created": datetime.now().isoformat(),
         "message": "External job queued", "error": "", "_config": config,
     }
-    t = Thread(target=run_pipeline, args=(job_id, config), daemon=True)
+    t = Thread(target=_safe_pipeline_runner, args=(job_id, config), daemon=True)
     t.start()
+    with jobs_lock:
+        if job_id in jobs:
+            jobs[job_id]['_thread'] = t
     base = request.host_url.rstrip("/")
     return jsonify({
         "job_id": job_id,
@@ -7760,6 +7842,11 @@ def translate_video_pipeline(job_id: str, config: dict):
     except Exception as e:
         jobs[job_id].update({"status": "error", "error": str(e), "message": "Translation failed"})
         print(f"  [TranslVideo] PIPELINE ERROR: {e}")
+    finally:
+        # Release GPU memory and clean intermediates (same as run_pipeline)
+        release_vram()
+        for _tmp_suffix in ("_src_audio.wav", "_src_frame.jpg", "_new_audio.mp3", "_translated.mp4"):
+            _safe_rm(os.path.join(OUTPUT_DIR, f"{job_id}{_tmp_suffix}"))
 
 
 @app.route("/api/video/translate", methods=["POST"])
@@ -8342,7 +8429,7 @@ def _attach_request_id():
 # ── Watchdog thread: detects stuck jobs and auto-recovers them ───────────────
 # 4h: long enough for 1h video on RTX 4060 (SadTalker base ~3min + MuseTalk chunked ~2h
 # + GFPGAN chunked ~30min + HD encode ~20min ≈ 3h total). Tune up for slower hardware.
-_STUCK_JOB_TIMEOUT_MIN = 240
+_STUCK_JOB_TIMEOUT_MIN = 30  # 30min (was 240min - reduced for faster dead-worker detection)
 
 def _auto_cleanup_old_outputs():
     """
@@ -8406,43 +8493,92 @@ def _auto_cleanup_old_outputs():
         print(f"  [AutoCleanup] failed: {_ce}", flush=True)
 
 
+
+def _release_dead_worker_slot(jid):
+    """Release semaphore and worker count for a dead pipeline thread."""
+    global active_workers
+    try:
+        with workers_lock:
+            active_workers = max(0, active_workers - 1)
+        try: _pipeline_semaphore.release()
+        except Exception: pass
+        print(f"  [Watchdog] Released worker slot for dead job {jid[:8]}", flush=True)
+    except Exception as e:
+        print(f"  [Watchdog] Error releasing slot: {e}", flush=True)
+
 def _watchdog_loop():
-    """Runs every 60s. Kills jobs stuck in processing for >4h. Auto-cleanup every 6h."""
+    """Runs every 30s. Detects dead worker threads AND timeout. Auto-cleanup every 6h."""
     import time as _wt
     _last_cleanup = _wt.time()
+    # Track last-seen progress per job to detect stalls
+    _last_progress = {}  # jid -> (progress, timestamp)
+    _STALL_TIMEOUT_SEC = 600  # 10 min with zero progress change = dead
     while True:
         try:
-            _wt.sleep(60)
+            _wt.sleep(30)  # Check every 30s (was 60s)
             _now = datetime.now()
-            stuck = []
+            dead_jobs = []
             with jobs_lock:
                 for jid, jdata in list(jobs.items()):
-                    if jdata.get("status") in ("tts", "generating_video", "compositing",
-                                                "generating_audio", "processing"):
+                    status = jdata.get("status", "")
+                    if status in ("tts", "generating_video", "compositing",
+                                  "generating_audio", "processing"):
+                        # --- CHECK 1: Thread alive? ---
+                        _thread = jdata.get("_thread")
+                        if _thread is not None and not _thread.is_alive():
+                            dead_jobs.append((jid, "dead_thread"))
+                            continue
+                        # --- CHECK 2: Progress stalled? ---
+                        prog = jdata.get("progress", 0)
+                        now_ts = _wt.time()
+                        prev = _last_progress.get(jid)
+                        if prev is None or prev[0] != prog:
+                            _last_progress[jid] = (prog, now_ts)
+                        else:
+                            # Same progress for too long
+                            stall_sec = now_ts - prev[1]
+                            if stall_sec > _STALL_TIMEOUT_SEC:
+                                dead_jobs.append((jid, f"stalled_{int(stall_sec)}s"))
+                                continue
+                        # --- CHECK 3: Absolute timeout ---
                         created_str = jdata.get("created", "")
                         if created_str:
                             try:
-                                # Use total_seconds() — .seconds wraps every 24h (timedelta quirk)
                                 age_min = (_now - datetime.fromisoformat(created_str)).total_seconds() / 60
                                 if age_min > _STUCK_JOB_TIMEOUT_MIN:
-                                    stuck.append(jid)
+                                    dead_jobs.append((jid, f"timeout_{int(age_min)}min"))
                             except Exception:
                                 pass
-            for jid in stuck:
+            # Mark dead jobs as error
+            for jid, reason in dead_jobs:
                 with jobs_lock:
                     if jobs.get(jid, {}).get("status") not in ("done", "error", "cancelled"):
+                        if reason == "dead_thread":
+                            err_msg = "Worker thread morreu inesperadamente (possivel crash de GPU/VRAM). Tente novamente com um script mais curto."
+                        elif reason.startswith("stalled"):
+                            err_msg = f"Job travado sem progresso por mais de {_STALL_TIMEOUT_SEC//60} minutos. Processo pode ter crashado."
+                        else:
+                            err_msg = f"Timeout: job travado por >{_STUCK_JOB_TIMEOUT_MIN}min"
                         jobs[jid]["status"]   = "error"
-                        jobs[jid]["error"]    = f"Timeout: job travado por >{_STUCK_JOB_TIMEOUT_MIN}min"
-                        jobs[jid]["message"]  = "Job cancelado automaticamente (timeout)"
+                        jobs[jid]["error"]    = err_msg
+                        jobs[jid]["message"]  = err_msg
                         jobs[jid]["progress"] = 0
                         db_save_job(jid, jobs[jid])
-                        print(f"  [Watchdog] Job {jid} marcado como error (stuck timeout)", flush=True)
+                        print(f"  [Watchdog] Job {jid[:8]} -> ERROR ({reason}): {err_msg}", flush=True)
+                # Release worker slot if thread is dead
+                if reason == "dead_thread":
+                    _release_dead_worker_slot(jid)
+                # Clean from progress tracker
+                _last_progress.pop(jid, None)
+            # Clean finished jobs from progress tracker
+            done_jids = [j for j in _last_progress if j not in jobs or jobs.get(j, {}).get("status") in ("done", "error", "cancelled")]
+            for j in done_jids:
+                _last_progress.pop(j, None)
             # Memory leak detection
             with jobs_lock:
                 n_jobs = len(jobs)
             if n_jobs > 500:
-                print(f"  [Watchdog] ALERTA: {n_jobs} jobs em memória — possível leak", flush=True)
-                # Aggressive prune of done/error jobs from in-memory dict (they stay in SQLite)
+                print(f"  [Watchdog] ALERTA: {n_jobs} jobs em memoria - possivel leak", flush=True)
                 with jobs_lock:
                     cutoff_ts = (_now - timedelta(hours=2)).isoformat()
                     to_remove = [jid for jid, jd in jobs.items()
