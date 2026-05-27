@@ -2752,13 +2752,21 @@ try:
 except Exception as e:
     fail("GLM validate_clip integration", str(e))
 
-# 32.6 Verifica que _create_shot_list tenta GLM primeiro (via inspect)
+# 32.6 Verifica que _create_shot_list_v2/_match_chunk_to_visuals tenta GLM primeiro (via inspect)
+# V2 refactor: _create_shot_list agora delega para _create_shot_list_v2 que chama
+# _match_chunk_to_visuals que chama _glm_ask diretamente. Checa a cadeia completa.
 try:
     import inspect
-    src = inspect.getsource(VideoIntelligence._create_shot_list)
-    assert "_try_glm_shot_list" in src or "_glm_ask" in src
-    assert "GLM" in src
-    ok("GLM fallback: _create_shot_list tenta GLM antes do Gemini")
+    src_dispatcher = inspect.getsource(VideoIntelligence._create_shot_list)
+    src_v2 = inspect.getsource(VideoIntelligence._create_shot_list_v2)
+    src_matcher = inspect.getsource(VideoIntelligence._match_chunk_to_visuals)
+    # dispatcher deve chamar v2
+    assert "_create_shot_list_v2" in src_dispatcher, "dispatcher nao chama v2"
+    # v2 deve chamar matcher
+    assert "_match_chunk_to_visuals" in src_v2, "v2 nao chama matcher"
+    # matcher deve chamar _glm_ask
+    assert "_glm_ask" in src_matcher, "matcher nao chama _glm_ask"
+    ok("GLM fallback: _create_shot_list->v2->matcher->_glm_ask (cadeia V2 OK)")
 except Exception as e:
     fail("GLM shot_list ordem", str(e))
 
