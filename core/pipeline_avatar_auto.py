@@ -267,6 +267,48 @@ def run_auto(config: dict, on_progress=None):
             console.print("[red]  No clips downloaded! Check API keys.[/red]")
 
         # =============================================
+        # STEP 2.5: ANTI-REUSE TRANSFORMS
+        # Apply subtle visual transformations to each clip so YouTube's
+        # content-matching algorithm can't flag them as reused footage.
+        # =============================================
+        if config.get("anti_reuse_enabled", True) and mapped_clips:
+            console.print("\n[yellow]Step 2.5/6: Applying anti-reuse transforms...[/yellow]")
+            try:
+                from core.anti_reuse import apply_anti_reuse
+                ar_ok = 0
+                ar_fail = 0
+                for clip in mapped_clips:
+                    src = clip.get("file", "")
+                    if not src or not os.path.exists(src):
+                        continue
+                    ext = os.path.splitext(src)[1].lower()
+                    if ext not in (".mp4", ".mov", ".avi", ".mkv"):
+                        continue  # images: skip
+                    ar_out = src.replace(ext, f"_ar{ext}")
+                    try:
+                        apply_anti_reuse(
+                            src, ar_out,
+                            width=width, height=height, fps=fps,
+                            seed=hash(clip.get("keyword", "") + src) & 0xFFFFFF,
+                        )
+                        if os.path.exists(ar_out) and os.path.getsize(ar_out) > 1000:
+                            os.replace(ar_out, src)  # overwrite original
+                            ar_ok += 1
+                        else:
+                            ar_fail += 1
+                    except Exception as ar_e:
+                        console.print(f"    [dim]anti_reuse skip ({ar_e})[/dim]")
+                        ar_fail += 1
+                console.print(
+                    f"  Anti-reuse: [green]{ar_ok} OK[/green] / "
+                    f"[dim]{ar_fail} skipped[/dim] (zoom+crop+color+speed)"
+                )
+            except ImportError:
+                console.print("  [dim]anti_reuse module not available — skipping[/dim]")
+            except Exception as ar_err:
+                console.print(f"  [dim]anti_reuse error (non-fatal): {ar_err}[/dim]")
+
+        # =============================================
         # STEP 3: BUILD TIMELINE
         # =============================================
         if on_progress:
@@ -987,16 +1029,20 @@ def _trim_and_clean(input_path: str, output_path: str,
 def _build_smart_timeline(avatar_duration, mapped_clips, rng,
                            min_broll_dur=4, max_broll_dur=6):
     """Build DYNAMIC timeline — cut rhythm varies by shot type and pacing.
-    
-    InVideo/VidRush-level pacing:
+
+    V2 SYNC: B-roll clips carry `timeline_start` from VideoIntelligence V2
+    (per-chunk timestamps). This function HONORS those timestamps by snapping
+    each B-roll to the exact narration second the AI identified.
+
+    Pacing:
     - Wide shots: 6-9s (establishing)
     - Closeups: 3-5s (detail)
     - Default: 4-7s
-    - Avatar breaks: max 12s before next B-roll
+    - Avatar fills ALL gaps between B-rolls (looped, not capped at 12s)
     - Pattern: 2 B-rolls → avatar break → 2 B-rolls
     """
     segments = []
-    mapped_clips.sort(key=lambda c: c["timeline_start"])
+    mapped_clips.sort(key=lambda c: c.get("timeline_start", 0))
 
     # Shot type → duration ranges
     SHOT_DURATIONS = {
@@ -1007,13 +1053,15 @@ def _build_smart_timeline(avatar_duration, mapped_clips, rng,
         "pov": (4, 6),
         "diagram": (5, 7),
     }
-    MAX_AVATAR_DURATION = 12  # Max seconds of avatar before forcing B-roll
+    # Maximum avatar chunk inserted in ONE segment (keeps segments manageable for
+    # the renderer; longer gaps are split into multiple avatar segments).
+    _MAX_AVATAR_CHUNK = 12
 
     current_time = 0.0
 
-    # Intro: avatar only (8-15s or 10% of video)
+    # Intro: avatar only (8-15s or 10% of video, whichever is smaller)
     intro_dur = min(rng.uniform(8, 15), avatar_duration * 0.1)
-    segments.append({"type": "avatar", "start": 0, "duration": round(intro_dur, 2)})
+    segments.append({"type": "avatar", "start": 0.0, "duration": round(intro_dur, 2)})
     current_time = intro_dur
 
     clip_idx = 0
@@ -1021,42 +1069,57 @@ def _build_smart_timeline(avatar_duration, mapped_clips, rng,
 
     while current_time < avatar_duration - 3 and clip_idx < len(mapped_clips):
         clip = mapped_clips[clip_idx]
+        v2_start = clip.get("timeline_start")   # planned by VideoIntelligence V2
 
-        # Avatar segment before B-roll
-        avatar_end = clip["timeline_start"]
-        if avatar_end > current_time + 2:
-            av_dur = min(avatar_end - current_time, MAX_AVATAR_DURATION)
-            segments.append({
-                "type": "avatar",
-                "start": round(current_time, 2),
-                "duration": round(av_dur, 2),
-            })
-            current_time += av_dur
-            consecutive_brolls = 0
+        # ── Snap to V2 timestamp ───────────────────────────────────────────────
+        # Fill the gap between current_time and clip["timeline_start"] with
+        # avatar segments (split into ≤_MAX_AVATAR_CHUNK chunks so the renderer
+        # never gets a single 60-second avatar segment).
+        # If V2 timestamp is already behind current_time (timeline drifted
+        # forward), skip snapping and use current_time as-is.
+        target_start = current_time  # fallback when no V2 timestamp
+        if v2_start is not None and v2_start > current_time + 1.0:
+            target_start = v2_start
+            gap = v2_start - current_time
+            while gap > 0.5 and current_time < avatar_duration - 3:
+                chunk = min(gap, _MAX_AVATAR_CHUNK)
+                segments.append({
+                    "type": "avatar",
+                    "start": round(current_time, 2),
+                    "duration": round(chunk, 2),
+                })
+                current_time += chunk
+                gap -= chunk
+                consecutive_brolls = 0
+            target_start = current_time  # now == v2_start (within float rounding)
 
-        # Determine B-roll duration based on shot type
-        shot_type = clip.get("shot_type", "wide") if isinstance(clip.get("shot_type"), str) else "wide"
+        # ── Determine B-roll duration ──────────────────────────────────────────
+        shot_type = clip.get("shot_type", "wide")
+        if not isinstance(shot_type, str):
+            shot_type = "wide"
         dur_range = SHOT_DURATIONS.get(shot_type, (min_broll_dur, max_broll_dur))
         broll_dur = rng.uniform(dur_range[0], dur_range[1])
-        broll_dur = min(broll_dur, avatar_duration - current_time)
+        broll_dur = min(broll_dur, avatar_duration - target_start)
 
         if broll_dur >= 3:
             segments.append({
                 "type": "broll",
-                "start": round(current_time, 2),
+                "start": round(target_start, 2),
                 "duration": round(broll_dur, 2),
                 "file": clip["file"],
-                "is_image": clip["file"].lower().endswith((".jpg", ".jpeg", ".png", ".bmp", ".webp")),
+                "is_image": clip["file"].lower().endswith(
+                    (".jpg", ".jpeg", ".png", ".bmp", ".webp")),
                 "keyword": clip.get("keyword", ""),
                 "shot_type": shot_type,
+                # Store V2 planned timestamp for audit / beat_timeline sync report
+                "v2_planned_start": round(v2_start, 2) if v2_start is not None else None,
             })
-            current_time += broll_dur
+            current_time = target_start + broll_dur
             consecutive_brolls += 1
 
-            # After 2 consecutive B-rolls, insert a short avatar break (3-5s)
+            # After 2 consecutive B-rolls → short avatar break (3-5s)
             if consecutive_brolls >= 2 and clip_idx < len(mapped_clips) - 1:
-                break_dur = rng.uniform(3, 5)
-                break_dur = min(break_dur, avatar_duration - current_time)
+                break_dur = min(rng.uniform(3, 5), avatar_duration - current_time)
                 if break_dur >= 2:
                     segments.append({
                         "type": "avatar",
@@ -1068,14 +1131,19 @@ def _build_smart_timeline(avatar_duration, mapped_clips, rng,
 
         clip_idx += 1
 
-    # Outro: remaining avatar
+    # Outro: remaining avatar — split into ≤_MAX_AVATAR_CHUNK chunks so the
+    # renderer never receives a single 60-second avatar segment.
     remaining = avatar_duration - current_time
-    if remaining > 0.5:
+    while remaining > 0.5:
+        chunk = min(remaining, _MAX_AVATAR_CHUNK)
         segments.append({
             "type": "avatar",
             "start": round(current_time, 2),
-            "duration": round(remaining, 2),
+            "duration": round(chunk, 2),
         })
+        current_time += chunk
+        remaining -= chunk
 
     return segments
+
 

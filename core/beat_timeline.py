@@ -82,17 +82,35 @@ def build_beat_timeline(
         return " ".join(out).strip()
 
     def _shot_at(start: float, end: float) -> dict:
-        """Find the shot_list entry that overlaps a time range."""
-        best = None
-        best_overlap = 0
+        """Find the shot_list entry for a time range.
+
+        Priority:
+        1. Exact V2 match: shot whose `start` is within 1.5s of segment start
+           (shot list built per-chunk so starts are narration-anchored).
+        2. Best overlap: largest time overlap with the segment window.
+        3. Empty dict as safe fallback.
+        """
+        exact_best = None
+        exact_dist = 999.0
+        overlap_best = None
+        overlap_best_ov = 0.0
         for shot in shot_list:
             s = float(shot.get("start", 0))
             e = float(shot.get("end", 0))
-            ov = max(0, min(e, end) - max(s, start))
-            if ov > best_overlap:
-                best_overlap = ov
-                best = shot
-        return best or {}
+            # Priority 1: proximity of shot start to segment start
+            dist = abs(s - start)
+            if dist < exact_dist:
+                exact_dist = dist
+                exact_best = shot
+            # Priority 2: overlap area
+            ov = max(0.0, min(e, end) - max(s, start))
+            if ov > overlap_best_ov:
+                overlap_best_ov = ov
+                overlap_best = shot
+        # Use exact match if within 1.5s, otherwise use overlap
+        if exact_best is not None and exact_dist <= 1.5:
+            return exact_best
+        return overlap_best or {}
 
     def _clip_for(start: float, file_path: str) -> dict:
         """Match a segment back to its source clip entry (for source + score)."""
@@ -153,7 +171,11 @@ def build_beat_timeline(
             beat["is_image"] = bool(seg.get("is_image", False))
             beat["source"] = clip_meta.get("source", "")
             beat["keyword"] = seg.get("keyword") or clip_meta.get("keyword", "")
-            # validation_score may have been attached by Phase 2 (future: store it on the clip)
+            # V2 sync: planned timestamp from _build_smart_timeline
+            if seg.get("v2_planned_start") is not None:
+                beat["v2_planned_start"] = seg["v2_planned_start"]
+                beat["sync_drift_seconds"] = round(abs(start - seg["v2_planned_start"]), 2)
+            # validation_score attached by Phase 2 (Gemini Vision post-download)
             if "validation_score" in clip_meta:
                 beat["validation_score"] = clip_meta["validation_score"]
         else:
@@ -161,8 +183,48 @@ def build_beat_timeline(
 
         beats.append(beat)
 
+    # ── Sync Report: V2 planned vs actual placement ───────────────────────
+    # Each B-roll segment may carry `v2_planned_start` (set by _build_smart_timeline).
+    # We measure drift and emit a report so the picker and auditor can flag
+    # beats that drifted more than 2s from the V2 plan.
+    sync_issues = []
+    drift_values = []
+    for b in beats:
+        if b["type"] != "broll":
+            continue
+        v2_planned = b.get("v2_planned_start")
+        if v2_planned is not None:
+            drift = round(abs(b["start"] - v2_planned), 2)
+            drift_values.append(drift)
+            if drift > 2.0:
+                sync_issues.append({
+                    "beat_id": b["id"],
+                    "keyword": b.get("keyword", ""),
+                    "planned_start": v2_planned,
+                    "actual_start": b["start"],
+                    "drift_seconds": drift,
+                })
+    avg_drift = round(sum(drift_values) / len(drift_values), 2) if drift_values else 0.0
+    max_drift = round(max(drift_values), 2) if drift_values else 0.0
+    sync_ok = max_drift <= 2.0
+
+    sync_report = {
+        "measured_beats": len(drift_values),
+        "avg_drift_seconds": avg_drift,
+        "max_drift_seconds": max_drift,
+        "sync_ok": sync_ok,
+        "threshold_seconds": 2.0,
+        "beats_with_drift": sync_issues,
+    }
+    if not sync_ok:
+        print(f"  [beat_timeline] ⚠ Sync drift detected: max={max_drift}s avg={avg_drift}s "
+              f"({len(sync_issues)} beat(s) >2s off V2 plan)")
+    else:
+        print(f"  [beat_timeline] ✓ Sync OK: max_drift={max_drift}s avg={avg_drift}s "
+              f"({len(drift_values)} B-roll beats measured)")
+
     timeline = {
-        "schema_version": "1.0",
+        "schema_version": "1.1",
         "generated_at": datetime.now().isoformat(),
         "video_id": analysis.get("video_id", ""),
         "theme": analysis.get("theme", ""),
@@ -173,6 +235,7 @@ def build_beat_timeline(
         "total_beats": len(beats),
         "broll_count": broll_count,
         "avatar_count": avatar_count,
+        "sync_report": sync_report,
         "beats": beats,
     }
 
