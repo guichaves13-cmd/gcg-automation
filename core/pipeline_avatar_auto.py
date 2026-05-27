@@ -481,26 +481,39 @@ def run_auto(config: dict, on_progress=None):
 
                 ffmpeg = _find_ffmpeg()
                 srt_escaped = srt_path.replace("\\", "/").replace(":", "\\:")
-                enc = _get_encoder()
+                # Force libx264 for subtitles filter (NVENC + subtitles incompatible,
+                # same root cause as motion_graphics drawbox bug)
+                # Use fontfile= explicit (FontName=Arial breaks on Windows ffmpeg
+                # without fontconfig - same fix as motion_graphics)
+                from core.motion_graphics import _find_font
+                font_path = _find_font()
+                if font_path:
+                    font_esc = font_path.replace("\\", "/").replace(":", "\\:")
+                    font_style = f"FontFile='{font_esc}'"
+                else:
+                    font_style = "FontName=Arial"
                 cmd_sub = [
                     ffmpeg, "-y",
-                    "-hwaccel", "auto",
                     "-i", current,
-                    "-vf", f"subtitles='{srt_escaped}':force_style='FontName=Arial,FontSize=22,"
+                    "-vf", f"subtitles='{srt_escaped}':force_style='{font_style},FontSize=22,"
                            f"PrimaryColour={color_hex},OutlineColour=&H00000000,Outline=2,Shadow=1,MarginV=30'",
-                ] + enc + ["-c:a", "copy", "-pix_fmt", "yuv420p", final_in_temp]
+                    "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
+                    "-c:a", "copy", "-pix_fmt", "yuv420p", final_in_temp,
+                ]
+                result = None
                 try:
                     result = subprocess.run(cmd_sub, capture_output=True, text=True, timeout=900)
                 except subprocess.TimeoutExpired:
-                    console.print("  [yellow]Subtitle burn timed out, retrying without hwaccel...[/yellow]")
-                    try:
-                        cmd_sub_no_hw = [ffmpeg, "-y", "-i", current] + cmd_sub[6:]
-                        result = subprocess.run(cmd_sub_no_hw, capture_output=True, text=True, timeout=900)
-                    except subprocess.TimeoutExpired:
-                        result = None
+                    console.print("  [yellow]Subtitle burn timed out (>15min)[/yellow]")
 
                 if result is None or result.returncode != 0 or not _has_video(final_in_temp):
-                    console.print("  [dim]Subtitle burn failed, copying without subs[/dim]")
+                    # Print stderr for diagnostics (sanitize for Windows cp1252)
+                    if result and result.stderr:
+                        err_safe = result.stderr.encode('ascii', 'replace').decode()
+                        console.print(f"  [yellow]Subtitle burn failed (rc={result.returncode}):[/yellow]")
+                        console.print(f"  [dim]{err_safe[-400:]}[/dim]")
+                    else:
+                        console.print("  [dim]Subtitle burn failed (no result), copying without subs[/dim]")
                     shutil.copy2(current, final_in_temp)
                 else:
                     console.print("  [green]Fresh subtitles applied![/green]")
