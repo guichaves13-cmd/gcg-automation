@@ -384,8 +384,220 @@ Return ONLY valid JSON, no markdown, no explanation."""
             "key_moments": [],
         }
     
+    # ─────────────────────────────────────────────────────────────────────
+    # V2: PER-CHUNK + QUOTE-ANCHORED + CHAIN-OF-THOUGHT MATCHING
+    # ─────────────────────────────────────────────────────────────────────
+    # Why: V1 sends WHOLE transcript and asks Gemini to chunk it. Gemini loses
+    # the tight binding between WHAT IS SAID at time T and WHAT IS SHOWN at time T.
+    # V2 sends ONE chunk at a time with its EXACT text and forces chain-of-thought:
+    #   Step 1: Identify literal concept (no metaphors)
+    #   Step 2: Imagine what viewer expects to see
+    #   Step 3: Generate 2 concrete stock queries (wide + closeup)
+    # This dramatically improves precision: "ancient root for memory" actually
+    # gets "elderly hands holding herb root" instead of "person walking".
+    # ─────────────────────────────────────────────────────────────────────
+
+    def _chunk_transcription_aligned(self, transcription: list, target_dur: float = 8.0) -> list:
+        """Group whisper segments into time chunks of ~target_dur seconds,
+        respecting sentence boundaries (period/comma at end).
+        Returns list of {start, end, text} ordered by time."""
+        if not transcription:
+            return []
+        chunks = []
+        current = {"start": float(transcription[0]["start"]), "end": 0.0, "text": ""}
+        for seg in transcription:
+            seg_text = seg.get("text", "").strip()
+            seg_start = float(seg.get("start", 0))
+            seg_end = float(seg.get("end", seg_start))
+            chunk_dur = seg_end - current["start"]
+            # Close chunk if duration target reached AND we have ended a sentence
+            ends_sentence = current["text"].rstrip().endswith((".", "!", "?"))
+            if current["text"] and chunk_dur >= target_dur and (ends_sentence or chunk_dur >= target_dur * 1.5):
+                chunks.append(dict(current))
+                current = {"start": seg_start, "end": seg_end, "text": seg_text}
+            else:
+                current["text"] = (current["text"] + " " + seg_text).strip()
+                current["end"] = seg_end
+        if current["text"].strip():
+            chunks.append(current)
+        return chunks
+
+    def _parse_chunk_shot_json(self, raw: str, chunk: dict) -> dict:
+        """Parse JSON response from chain-of-thought chunk matcher. Returns shot dict or None."""
+        if not raw:
+            return None
+        text = raw.strip()
+        # Strip markdown fences
+        if text.startswith("```"):
+            text = text.split("\n", 1)[1] if "\n" in text else text
+            text = text.rsplit("```", 1)[0] if "```" in text else text
+        text = text.strip()
+        # Find first { and last } (handles trailing commentary)
+        if "{" in text and "}" in text:
+            text = text[text.index("{"):text.rindex("}") + 1]
+        try:
+            data = json.loads(text)
+        except Exception:
+            return None
+        terms = data.get("terms", [])
+        if not isinstance(terms, list):
+            return None
+        terms = [str(t).strip() for t in terms if isinstance(t, (str, int, float)) and len(str(t).strip()) >= 3]
+        if not terms:
+            return None
+        return {
+            "start": float(chunk["start"]),
+            "end": float(chunk["end"]),
+            "search_terms": terms[:2],
+            "shot_type": str(data.get("shot_type", "wide")).lower().strip() or "wide",
+            "mood": str(data.get("mood", "informative")).lower().strip() or "informative",
+            "text_preview": chunk["text"][:120],
+            "visual_concept": data.get("visual_concept", "")[:200],
+            "quote": data.get("quote", chunk["text"][:80])[:200],
+        }
+
+    def _match_chunk_to_visuals(self, chunk: dict, analysis: dict, avoid_shots: list = None) -> dict:
+        """Per-chunk chain-of-thought matcher. Returns shot dict bound to this chunk's
+        exact text. Tries GLM first, then Gemini, then heuristic fallback."""
+        text = chunk["text"].strip()
+        theme = analysis.get("theme", "documentary")
+        emotions = analysis.get("emotions", ["informative"])
+        emotion = (emotions[0] if isinstance(emotions, list) and emotions else "informative")
+        avoid_list = avoid_shots or []
+        avoid_hint = ""
+        if avoid_list:
+            avoid_hint = f"\nDO NOT use shot_type: {', '.join(avoid_list)} (used in previous beats)."
+
+        # Chain-of-thought prompt — forces Gemini to quote + reason + then generate
+        prompt = f"""You are a documentary editor matching B-roll to ONE specific narration moment.
+
+EXACT NARRATION SAID AT THIS MOMENT:
+\"\"\"{text[:600]}\"\"\"
+
+CONTEXT (background only — DO NOT search for these): theme=\"{theme}\" | tone={emotion}
+
+═══ THINK STEP BY STEP ═══
+
+Step 1 — QUOTE: Copy the most VISUALLY CONCRETE phrase from the narration above.
+  ✅ Good: "swollen ankle after surgery", "elderly hands counting pills"
+  ❌ Bad: abstract phrases like "things change", "matters a lot"
+
+Step 2 — VISUAL CONCEPT: Describe in ONE specific sentence what a viewer should literally SEE on screen during this moment. Pick the most TANGIBLE noun/action mentioned (not metaphors).
+  Example narration: "her memory faded like a candle in the wind"
+  → visual_concept: "elderly woman looking confused in a dim room, candle on table"
+
+Step 3 — TWO STOCK QUERIES: Generate 2 search terms for Pexels/Pixabay/YouTube.
+  - Each MUST be 3-6 English words describing a CONCRETE filmable scene
+  - First query: WIDE shot establishing the scene
+  - Second query: CLOSEUP detail of the same concept
+  - Reject vague queries ("person doing thing", "nature view")
+  - Specific is better: "elderly woman pill bottle kitchen" > "person taking medicine"
+
+Reply ONLY valid JSON (no markdown, no extra text):
+{{
+  "quote": "<exact phrase from Step 1>",
+  "visual_concept": "<one sentence from Step 2>",
+  "terms": ["<wide query 3-6 words>", "<closeup query 3-6 words>"],
+  "shot_type": "wide",
+  "mood": "{emotion}"
+}}{avoid_hint}"""
+
+        # Try GLM-5.1 first (better quota than free Gemini)
+        glm_resp = self._glm_ask(prompt, temperature=0.4, enable_thinking=False, timeout=45.0)
+        if glm_resp:
+            shot = self._parse_chunk_shot_json(glm_resp, chunk)
+            if shot:
+                return shot
+
+        # Fallback Gemini
+        if self.client:
+            try:
+                from google.genai import types as _gtypes
+                cfg = _gtypes.GenerateContentConfig(temperature=0.4, response_mime_type="application/json")
+                response = self.client.models.generate_content(
+                    model="gemini-2.5-flash", contents=prompt, config=cfg)
+                if response and response.text:
+                    shot = self._parse_chunk_shot_json(response.text, chunk)
+                    if shot:
+                        return shot
+            except Exception as e:
+                print(f"    [v2 chunk] Gemini fallback err: {str(e)[:80]}")
+
+        # Last resort heuristic
+        return self._heuristic_chunk_shot(chunk, analysis)
+
+    def _heuristic_chunk_shot(self, chunk: dict, analysis: dict) -> dict:
+        """Heuristic fallback when both LLMs fail for a single chunk.
+        Extracts nouns and pairs with theme. Always returns a valid shot."""
+        text = chunk["text"].strip()
+        theme = analysis.get("theme", "documentary")
+        subtopics = analysis.get("subtopics", [])
+        # Use existing _extract_visual_keywords with subtopics if available
+        try:
+            terms = self._extract_visual_keywords_from_text(text, theme, subtopics=subtopics)
+        except Exception:
+            terms = [f"{theme} footage", f"{theme} documentary"]
+        return {
+            "start": float(chunk["start"]),
+            "end": float(chunk["end"]),
+            "search_terms": terms[:2] if terms else [f"{theme} closeup", f"{theme} wide"],
+            "shot_type": "wide",
+            "mood": "informative",
+            "text_preview": text[:120],
+            "visual_concept": f"[heuristic fallback for: {text[:60]}]",
+            "quote": text[:80],
+        }
+
+    def _create_shot_list_v2(self, transcription: list, analysis: dict, duration: float) -> list:
+        """V2 per-chunk + quote-anchored matcher. Drop-in replacement for _create_shot_list.
+        Each chunk gets its OWN Gemini call with EXACT text — no global drift."""
+        chunks = self._chunk_transcription_aligned(transcription, target_dur=8.0)
+        if not chunks:
+            return []
+        print(f"    [v2] Per-chunk analysis: {len(chunks)} chunks")
+        shots = []
+        used_terms = set()
+        for i, chunk in enumerate(chunks):
+            avoid = []
+            if len(shots) >= 2 and shots[-1]["shot_type"] == shots[-2]["shot_type"]:
+                avoid = [shots[-1]["shot_type"]]
+            shot = self._match_chunk_to_visuals(chunk, analysis, avoid_shots=avoid)
+            # Dedupe terms across chunks to avoid same B-roll showing 2x
+            unique_terms = []
+            for t in shot.get("search_terms", []):
+                tl = t.lower().strip()
+                if tl and tl not in used_terms:
+                    used_terms.add(tl)
+                    unique_terms.append(t)
+            if not unique_terms:
+                # All terms duplicate — synthesize new from quote
+                quote = shot.get("quote", chunk["text"][:60])
+                theme = analysis.get("theme", "documentary")
+                unique_terms = [f"{quote.split()[0] if quote.split() else theme} {theme}".strip()]
+            shot["search_terms"] = unique_terms[:2]
+            shots.append(shot)
+            if (i + 1) % 5 == 0:
+                print(f"    [v2] {i+1}/{len(chunks)} chunks matched")
+        print(f"    [v2] -> {len(shots)} shots with quote-anchored matching")
+        return shots
+
     def _create_shot_list(self, transcription: list, analysis: dict, duration: float) -> list:
-        """SEMANTIC shot list — analyzes ENTIRE video with emotion + shot type variety."""
+        """SEMANTIC shot list — analyzes ENTIRE video with emotion + shot type variety.
+        Uses V2 per-chunk matcher by default (use_v1_global=True to force old path)."""
+        # V2 is dramatically better: per-chunk binding instead of global drift
+        if not getattr(self, "use_v1_global", False):
+            try:
+                v2_shots = self._create_shot_list_v2(transcription, analysis, duration)
+                if v2_shots and len(v2_shots) >= 3:
+                    return v2_shots
+                print(f"    [v2] returned only {len(v2_shots)} shots, falling back to v1 global")
+            except Exception as e:
+                print(f"    [v2] failed: {str(e)[:120]}, falling back to v1 global")
+        # V1 global path (original)
+        return self._create_shot_list_v1_global(transcription, analysis, duration)
+
+    def _create_shot_list_v1_global(self, transcription: list, analysis: dict, duration: float) -> list:
+        """V1 ORIGINAL: global shot list (legacy, fallback when v2 fails)."""
         full_text = " ".join(seg["text"] for seg in transcription)
         theme = analysis["theme"]
         emotions = ", ".join(analysis.get("emotions", ["informative"])[:3])
