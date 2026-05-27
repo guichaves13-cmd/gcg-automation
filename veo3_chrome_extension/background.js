@@ -289,30 +289,45 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         
         // Step 3: Insert text using Input.insertText (generates trusted beforeinput events for Slate.js)
         await cdp('Input.insertText', { text: text });
-        await new Promise(r => setTimeout(r, 500));
+        await new Promise(r => setTimeout(r, 200));
+        
+        // Dispatch a spacebar event to ensure the UI framework (React/Angular) registers the change and enables the submit button
+        await cdp('Input.dispatchKeyEvent', { type: 'keyDown', text: ' ', unmodifiedText: ' ', key: ' ', code: 'Space', windowsVirtualKeyCode: 32 });
+        await cdp('Input.dispatchKeyEvent', { type: 'keyUp', key: ' ', code: 'Space', windowsVirtualKeyCode: 32 });
+        await new Promise(r => setTimeout(r, 600));
         
         // Step 4: Find and click submit button (coordinates are fresh, post-infobar)
         const btnResult = await cdp('Runtime.evaluate', {
           expression: `(function() {
             var best = null, bestRect = null;
             
-            // 100% Bulletproof Strategy: Find the button with arrow_forward
+            // 100% Bulletproof Strategy: Find the button with arrow_forward AND Criar/Create near the bottom
             var btns = document.querySelectorAll('button, [role="button"]');
+            var candidates = [];
             for (var i = 0; i < btns.length; i++) {
               var t = (btns[i].textContent || '').trim().toLowerCase();
-              if (t.includes('arrow_forward') || t === 'send') {
-                best = btns[i];
-                bestRect = best.getBoundingClientRect();
-                break;
+              if (t.includes('arrow_forward') || t === 'send' || t.includes('criar') || t.includes('create')) {
+                var rect = btns[i].getBoundingClientRect();
+                if (rect.width > 0 && rect.height > 0 && rect.top > window.innerHeight * 0.6) {
+                  candidates.push({btn: btns[i], rect: rect, text: t});
+                }
               }
             }
             
-            if (!best || !bestRect) return JSON.stringify({found: false});
+            // Prefer the one that has both arrow_forward and criar/create
+            best = candidates.find(c => c.text.includes('arrow_forward') && (c.text.includes('criar') || c.text.includes('create')));
+            if (!best && candidates.length > 0) {
+              // Fallback to the bottom-most right-most button
+              best = candidates.sort((a, b) => b.rect.bottom - a.rect.bottom || b.rect.right - a.rect.right)[0];
+            }
+            
+            if (!best) return JSON.stringify({found: false});
+            bestRect = best.rect;
             return JSON.stringify({
               found: true,
               x: Math.round(bestRect.left + bestRect.width / 2),
               y: Math.round(bestRect.top + bestRect.height / 2),
-              text: (best.textContent || '').trim().substring(0, 30)
+              text: best.text.substring(0, 30)
             });
           })()`,
           returnByValue: true

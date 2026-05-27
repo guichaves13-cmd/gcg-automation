@@ -210,17 +210,40 @@
     return document.documentElement;
   }
 
+  // Extract text around a video to match with prompts
+  function extractPromptTextFromVideo(videoElement) {
+    let bestText = '';
+    let current = videoElement.parentElement;
+    for (let k = 0; k < 8; k++) {
+      if (!current) break;
+      // Stop traversing if we hit a container with multiple videos (e.g. the main grid)
+      if (current.querySelectorAll('video').length > 1) {
+        break;
+      }
+      const text = (current.textContent || '').trim();
+      if (text.length > bestText.length) {
+        bestText = text;
+      }
+      current = current.parentElement;
+    }
+    return bestText;
+  }
+
   // Collect video URLs currently in the DOM into a Set
-  function collectCurrentVideos(seenUrls, videoDataList) {
+  function collectCurrentVideos(seenUrls, videoDataList, currentScrollTop = 0) {
     let newCount = 0;
     document.querySelectorAll('video').forEach(video => {
       const url = video.src || video.querySelector('source')?.src;
       if (url && !seenUrls.has(url)) {
         seenUrls.add(url);
+        const rect = video.getBoundingClientRect();
         videoDataList.push({
           url: url,
           order: videoDataList.length,
-          isBlob: url.startsWith('blob:')
+          isBlob: url.startsWith('blob:'),
+          top: rect.top + currentScrollTop,
+          left: rect.left + window.scrollX,
+          promptText: extractPromptTextFromVideo(video)
         });
         newCount++;
       }
@@ -228,10 +251,15 @@
     document.querySelectorAll('video source').forEach(source => {
       if (source.src && !seenUrls.has(source.src)) {
         seenUrls.add(source.src);
+        const videoParent = source.closest('video');
+        const rect = videoParent ? videoParent.getBoundingClientRect() : { top: 0, left: 0 };
         videoDataList.push({
           url: source.src,
           order: videoDataList.length,
-          isBlob: source.src.startsWith('blob:')
+          isBlob: source.src.startsWith('blob:'),
+          top: rect.top + currentScrollTop,
+          left: rect.left + window.scrollX,
+          promptText: videoParent ? extractPromptTextFromVideo(videoParent) : ''
         });
         newCount++;
       }
@@ -250,29 +278,29 @@
     const originalScroll = scrollContainer.scrollTop;
     
     // First collect what's already visible
-    collectCurrentVideos(seenUrls, videoDataList);
+    collectCurrentVideos(seenUrls, videoDataList, scrollContainer.scrollTop);
     log(`Fase 1: ${videoDataList.length} videos visiveis no DOM`, 'info');
     
     // Scroll to top first
     scrollContainer.scrollTop = 0;
     await delay(400);
-    collectCurrentVideos(seenUrls, videoDataList);
+    collectCurrentVideos(seenUrls, videoDataList, scrollContainer.scrollTop);
     
     // Scroll down through the entire page in steps
-    const scrollHeight = scrollContainer.scrollHeight;
     const viewportHeight = scrollContainer.clientHeight || window.innerHeight;
     const scrollStep = Math.floor(viewportHeight * 0.6);
     let currentScroll = 0;
     let noNewVideoRounds = 0;
+    let dynamicScrollHeight = scrollContainer.scrollHeight;
     
     log(`Scrollando pagina para carregar todos os videos...`, 'info');
     
-    while (currentScroll < scrollHeight + viewportHeight) {
+    while (currentScroll < dynamicScrollHeight + viewportHeight) {
       currentScroll += scrollStep;
       scrollContainer.scrollTop = currentScroll;
       await delay(350);
       
-      const newFound = collectCurrentVideos(seenUrls, videoDataList);
+      const newFound = collectCurrentVideos(seenUrls, videoDataList, scrollContainer.scrollTop);
       
       if (newFound > 0) {
         noNewVideoRounds = 0;
@@ -288,13 +316,14 @@
       
       // Check if scrollHeight changed (dynamic loading)
       const newScrollHeight = scrollContainer.scrollHeight;
-      if (newScrollHeight > scrollHeight + 100) {
+      if (newScrollHeight > dynamicScrollHeight + 50) {
         // Page grew, keep scrolling
         noNewVideoRounds = 0;
+        dynamicScrollHeight = newScrollHeight;
       }
       
       // If we scrolled past the end and found nothing new for 3 rounds, stop
-      if (currentScroll >= scrollContainer.scrollHeight && noNewVideoRounds >= 3) {
+      if (currentScroll >= dynamicScrollHeight && noNewVideoRounds >= 3) {
         break;
       }
     }
@@ -302,15 +331,15 @@
     // Final scroll to very bottom to catch any remaining
     scrollContainer.scrollTop = scrollContainer.scrollHeight;
     await delay(500);
-    collectCurrentVideos(seenUrls, videoDataList);
+    collectCurrentVideos(seenUrls, videoDataList, scrollContainer.scrollTop);
     
     // Restore original scroll position
     scrollContainer.scrollTop = originalScroll;
     
-    // Videos are collected in scroll order: top-to-bottom = newest-to-oldest
-    // Veo 3 grid: top = newest, bottom = oldest
-    // We want: oldest = first prompt = 001
-    // So reverse the collection order
+    // We scroll top-to-bottom, and DOM naturally reads left-to-right.
+    // So the collected list is Top-Down, Left-to-Right (Prompt 3, Prompt 2, Prompt 1).
+    // The user wants Prompt 1 (Bottom Left) to be 001.
+    // Reversing the array perfectly maps them to Prompt 1, Prompt 2, Prompt 3.
     videoDataList.reverse();
     videoDataList.forEach((v, i) => { v.order = i; });
     
@@ -1533,81 +1562,131 @@
         }
       }
       
-      // Fase 2: Detectar e baixar um por um sequencialmente
-      log('Todos os prompts enviados. Iniciando detecção e download sequencial...', 'info');
+      // Fase 2: Detectar e baixar de forma inteligente
+      log('Todos os prompts enviados. Iniciando detecção e download...', 'info');
       
-      const safeFolderName = 'veo3_automation';
       let downloadedCountSeq = 0;
+      const downloadedUrls = new Set();
+      const downloadedIndices = new Set(); // To keep track of which prompt indices we already saved
+      let waitAttempts = 0;
+      let loopsWithoutNewVideos = 0;
+      let lastDownloadedCount = 0;
       
-      for (let i = 0; i < totalPrompts; i++) {
+      // Increased timeout to 400 attempts (~4.5 hours) for massive batches like 200+ videos
+      while (downloadedCountSeq < totalPrompts && waitAttempts < 400) {
         if (shouldStop) break;
         
-        updateProgress(i, totalPrompts, `Aguardando vídeo ${i+1}/${totalPrompts}...`);
-        log(`Aguardando renderização do vídeo ${i+1}...`, 'info');
+        updateProgress(downloadedCountSeq, totalPrompts, `Aguardando vídeos (${downloadedCountSeq}/${totalPrompts})...`);
         
-        let foundVideoUrl = null;
-        let waitAttempts = 0;
+        const allVideos = await detectAllVideosOnPage();
+        const newChronologicalVideos = allVideos.filter(v => !knownVideoUrls.has(v.url));
         
-        // Polling para o vídeo atual
-        while (!foundVideoUrl && waitAttempts < 120) { // Max 60 minutes por vídeo
-          if (shouldStop) break;
-          
-          // Varredura para encontrar a ordem física
-          const allVideos = await scanForVideos();
-          
-          // Filtra os vídeos que já existiam antes da automação
-          const newChronologicalVideos = allVideos.filter(v => !knownVideoUrls.has(v.url));
-          
-          // Remove duplicatas
-          const uniqueNewVideos = [];
-          const seenSorted = new Set();
-          for (const v of newChronologicalVideos) {
-              if (!seenSorted.has(v.url)) {
-                  seenSorted.add(v.url);
-                  uniqueNewVideos.push(v);
-              }
-          }
-          
-          // O vídeo i já existe na página?
-          if (uniqueNewVideos.length > i) {
-              foundVideoUrl = uniqueNewVideos[i].url;
-              const isBlob = uniqueNewVideos[i].isBlob;
-              log(`Vídeo ${i+1} gerado com sucesso! Iniciando download...`, 'success');
-              
-              // Baixar este vídeo imediatamente
-              let downloadUrl = foundVideoUrl;
-              if (isBlob || downloadUrl.startsWith('blob:')) {
-                  try {
-                      downloadUrl = await blobToDataUrlGlobal(downloadUrl);
-                  } catch (e) {
-                      log(`Erro ao converter blob para o vídeo ${i+1}`, 'error');
+        const pendingVideos = [];
+        const seenSorted = new Set();
+        for (const v of newChronologicalVideos) {
+            if (!seenSorted.has(v.url) && !downloadedUrls.has(v.url)) {
+                seenSorted.add(v.url);
+                pendingVideos.push(v);
+            }
+        }
+        
+        if (pendingVideos.length > 0) {
+            for (const v of pendingVideos) {
+                if (shouldStop) break;
+                
+                downloadedUrls.add(v.url);
+                
+                // Tenta descobrir qual prompt é esse buscando o texto pre-capturado
+                let matchedIndex = -1;
+                
+                if (v.promptText && prompts && prompts.length > 0) {
+                  const found = findPromptIndex(v.promptText, prompts);
+                  if (found !== -1) {
+                    matchedIndex = found;
                   }
-              }
-              
-              const paddedIndex = String(i + 1).padStart(3, '0');
-              const filename = `${safeFolderName}/${paddedIndex}.mp4`;
-              
-              const result = await downloadViaBackgroundGlobal(downloadUrl, filename);
-              if (result && result.success) {
-                  log(`Vídeo ${i+1} salvo como ${filename}`, 'success');
-                  downloadedCountSeq++;
-              } else {
-                  log(`Falha no download do vídeo ${i+1}: ${result?.error || 'erro desconhecido'}`, 'error');
-              }
-              
-              // Aguarda exatamente 2 segundos antes de passar para a detecção do próximo (conforme pedido)
-              await delay(2000);
-              
-          } else {
-              // Se o vídeo i ainda não existe, espera 30 segundos
-              await waitWithCountdown(30, `Aguardando renderização do vídeo ${i+1} (${uniqueNewVideos.length}/${totalPrompts} prontos)`);
-              waitAttempts++;
-          }
+                }
+                
+                // Se não achou pelo texto, tenta achar pela posição na lista detectada (que foi revertida para cronológica)
+                if (matchedIndex === -1) {
+                  // find the original index of this video in newChronologicalVideos
+                  const arrIndex = newChronologicalVideos.findIndex(nv => nv.url === v.url);
+                  if (arrIndex !== -1 && !downloadedIndices.has(arrIndex)) {
+                     matchedIndex = arrIndex;
+                  } else {
+                     for (let p = 0; p < totalPrompts; p++) {
+                         if (!downloadedIndices.has(p)) {
+                             matchedIndex = p;
+                             break;
+                         }
+                     }
+                  }
+                }
+                
+                if (matchedIndex !== -1) {
+                    downloadedIndices.add(matchedIndex);
+                }
+                
+                const finalIndex = matchedIndex !== -1 ? matchedIndex : downloadedCountSeq;
+                const paddedIndex = String(finalIndex + 1).padStart(3, '0');
+                const filename = `prompt_${paddedIndex}.mp4`; // direto pra pasta de downloads (sem barra)
+                
+                log(`Vídeo detectado! (Prompt ${finalIndex + 1}) Baixando...`, 'info');
+                
+                let downloadUrl = v.url;
+                
+                if (v.isBlob || downloadUrl.startsWith('blob:')) {
+                    try {
+                      const response = await fetch(downloadUrl);
+                      const blobData = await response.blob();
+                      const safeBlobUrl = URL.createObjectURL(blobData);
+                      
+                      const a = document.createElement('a');
+                      a.href = safeBlobUrl;
+                      a.download = filename;
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      setTimeout(() => URL.revokeObjectURL(safeBlobUrl), 15000);
+                    } catch(e) {
+                      log(`Falha ao baixar blob: ${e.message}`, 'error');
+                    }
+                    downloadedCountSeq++;
+                    log(`Salvo como ${filename}`, 'success');
+                } else {
+                    // Fallback para background script se não for blob
+                    const result = await downloadViaBackgroundGlobal(downloadUrl, filename);
+                    if (result && result.success) {
+                        log(`Salvo como ${filename}`, 'success');
+                        downloadedCountSeq++;
+                    } else {
+                        log(`Falha no download: ${result?.error || 'erro desconhecido'}`, 'error');
+                    }
+                }
+                
+                await delay(2000);
+            }
+        } else {
+            await waitWithCountdown(30, `Aguardando renderização (${downloadedCountSeq}/${totalPrompts} prontos)`);
+            waitAttempts++;
+            
+            // Update idle tracker
+            if (downloadedCountSeq === lastDownloadedCount) {
+                loopsWithoutNewVideos++;
+            } else {
+                loopsWithoutNewVideos = 0;
+                lastDownloadedCount = downloadedCountSeq;
+            }
+            
+            // Se ficar 15 turnos (~7.5 minutos) sem achar NENHUM vídeo novo, assume que o Flow terminou e os restantes falharam
+            if (loopsWithoutNewVideos >= 15) {
+                log(`Nenhum vídeo novo gerado nos últimos 7 minutos. O Google Flow provavelmente falhou os ${totalPrompts - downloadedCountSeq} vídeos restantes. Encerrando espera.`, 'warning');
+                break;
+            }
         }
-        
-        if (!foundVideoUrl && !shouldStop) {
-            log(`Tempo esgotado aguardando o vídeo ${i+1}. Pulando...`, 'error');
-        }
+      }
+      
+      if (downloadedCountSeq < totalPrompts && !shouldStop) {
+          log(`Tempo esgotado! Apenas ${downloadedCountSeq}/${totalPrompts} vídeos foram concluídos.`, 'warning');
       }
 
       updateProgress(totalPrompts, totalPrompts, 'Concluído!');
@@ -1688,94 +1767,7 @@
     });
   }
 
-  // Scan for video elements on the page with scrolling
-  async function scanForVideos() {
-    const seenUrls = new Set();
-    const videos = [];
-    
-    // Find scrollable container
-    const scrollContainer = document.querySelector('[role="main"]') || 
-                           document.querySelector('.overflow-y-auto') ||
-                           document.documentElement;
-    
-    const originalScroll = scrollContainer.scrollTop;
-    const scrollHeight = scrollContainer.scrollHeight;
-    const viewportHeight = scrollContainer.clientHeight || window.innerHeight;
-    const scrollStep = viewportHeight * 0.8;
-    
-    // Function to collect videos
-    const collectVideos = () => {
-      // Look for video elements
-      document.querySelectorAll('video').forEach((video, index) => {
-        const url = video.src || video.querySelector('source')?.src;
-        if (url && !seenUrls.has(url)) {
-          seenUrls.add(url);
-          const rect = video.getBoundingClientRect();
-          videos.push({ 
-            url, 
-            index: videos.length, 
-            isBlob: url.startsWith('blob:'),
-            position: rect.top + window.scrollY
-          });
-        }
-      });
-
-      // Look for download buttons/links with video URLs
-      document.querySelectorAll('a[href*=".mp4"], a[href*="video"], a[download]').forEach(link => {
-        if (link.href && !seenUrls.has(link.href)) {
-          seenUrls.add(link.href);
-          const rect = link.getBoundingClientRect();
-          videos.push({ 
-            url: link.href, 
-            index: videos.length,
-            position: rect.top + window.scrollY
-          });
-        }
-      });
-
-      // Look for elements with data attributes containing video URLs
-      document.querySelectorAll('[data-video-url], [data-src*="video"], [data-download-url]').forEach(el => {
-        const url = el.getAttribute('data-video-url') || 
-                    el.getAttribute('data-src') || 
-                    el.getAttribute('data-download-url');
-        if (url && !seenUrls.has(url)) {
-          seenUrls.add(url);
-          const rect = el.getBoundingClientRect();
-          videos.push({ 
-            url, 
-            index: videos.length,
-            position: rect.top + window.scrollY
-          });
-        }
-      });
-    };
-    
-    // Scroll through entire page
-    scrollContainer.scrollTop = 0;
-    await delay(200);
-    collectVideos();
-    
-    let currentScroll = 0;
-    while (currentScroll < scrollHeight) {
-      currentScroll += scrollStep;
-      scrollContainer.scrollTop = currentScroll;
-      await delay(200);
-      collectVideos();
-    }
-    
-    // Final scroll to bottom
-    scrollContainer.scrollTop = scrollHeight;
-    await delay(300);
-    collectVideos();
-    
-    // Restore scroll
-    scrollContainer.scrollTop = originalScroll;
-    
-    // Sort by position (top first = first prompts = 001)
-    videos.sort((a, b) => a.position - b.position);
-
-    return videos;
-  }
+  // scanForVideos function removed (merged into detectAllVideosOnPage)
 
   // Download a single video
   async function downloadVideo(url, filename) {
@@ -1836,10 +1828,12 @@
       // Check if video text starts with prompt beginning (first 100 chars)
       const promptStart = promptNorm.substring(0, 100);
       const videoStart = videoTextNorm.substring(0, 100);
+      const promptSnippet = promptNorm.substring(0, 40); // Shorter snippet for robust includes search
       
       if (promptStart === videoStart || 
           promptNorm.startsWith(videoStart) || 
-          videoTextNorm.startsWith(promptStart)) {
+          videoTextNorm.startsWith(promptStart) ||
+          (promptSnippet.length > 10 && videoTextNorm.includes(promptSnippet))) {
         return i;
       }
     }
@@ -1893,12 +1887,24 @@
     // Priority 3: Detect videos on page right now
     else {
       const detected = await detectAllVideosOnPage();
-      videosToDownload = detected.map((v, i) => ({
-        url: v.url,
-        promptIndex: i,
-        isBlob: v.isBlob
-      }));
-      log(`Detectados ${videosToDownload.length} videos na pagina`, 'info');
+      videosToDownload = detected.map((v, i) => {
+        let matchedIndex = i; // Fallback to chronological order (1=Bottom, 2=TopRight)
+        
+        // Advanced Text Matching logic overrides grid position if successful!
+        if (v.promptText && originalPrompts && originalPrompts.length > 0) {
+          const found = findPromptIndex(v.promptText, originalPrompts);
+          if (found !== -1) {
+            matchedIndex = found;
+          }
+        }
+        
+        return {
+          url: v.url,
+          promptIndex: matchedIndex,
+          isBlob: v.isBlob
+        };
+      });
+      log(`Detectados ${videosToDownload.length} videos na pagina (Mapeados por texto/posicao)`, 'info');
     }
     
     if (videosToDownload.length === 0) {
@@ -1906,13 +1912,13 @@
     }
 
     const totalToDownload = videosToDownload.length;
-    log(`Baixando exatamente ${totalToDownload} videos para pasta: ${safeFolderName}`, 'info');
+    log(`Baixando exatamente ${totalToDownload} videos para a raiz de Downloads`, 'info');
 
     const downloadBatch = videosToDownload.map((video, i) => {
       const paddedIndex = String(video.promptIndex + 1).padStart(3, '0');
       return {
         url: video.url,
-        filename: `${safeFolderName}/${paddedIndex}.mp4`,
+        filename: `prompt_${paddedIndex}.mp4`, // SEM PASTA
         isBlob: video.isBlob
       };
     });
@@ -1955,27 +1961,41 @@
       try {
         let downloadUrl = video.url;
 
-        // Convert blob URLs to data URLs so background script can handle them
-        if (video.isBlob) {
+        // Direct download for blobs (Object URL to prevent .crdownload stuck/revoked bugs)
+        if (video.isBlob || downloadUrl.startsWith('blob:')) {
           try {
-            log(`Video ${i + 1}/${totalToDownload}: convertendo blob...`, 'info');
-            downloadUrl = await blobToDataUrl(video.url);
-          } catch (blobErr) {
+            log(`Buscando blob para o video ${i + 1}/${totalToDownload}...`, 'info');
+            const response = await fetch(downloadUrl);
+            const blobData = await response.blob();
+            const safeBlobUrl = URL.createObjectURL(blobData);
+            
+            const a = document.createElement('a');
+            a.href = safeBlobUrl;
+            a.download = video.filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            
+            downloadedCount++;
+            log(`Video ${i + 1}/${totalToDownload} baixado (ObjectURL): ${video.filename}`, 'success');
+            
+            // Clean up memory after browser starts download
+            setTimeout(() => URL.revokeObjectURL(safeBlobUrl), 15000);
+          } catch(err) {
             failedCount++;
-            log(`Erro ao converter blob video ${i + 1}: ${blobErr.message}`, 'error');
-            continue;
+            log(`Falha critica no blob ${i + 1}: ${err.message}`, 'error');
           }
-        }
-
-        // Use chrome.downloads API via background script (no browser throttle)
-        const result = await downloadViaBackground(downloadUrl, video.filename);
-
-        if (result && result.success) {
-          downloadedCount++;
-          log(`Video ${i + 1}/${totalToDownload} baixado: ${video.filename}`, 'success');
         } else {
-          failedCount++;
-          log(`Falha ao baixar video ${i + 1}/${totalToDownload}: ${result?.error || 'erro desconhecido'}`, 'error');
+          // Use chrome.downloads API via background script for normal URLs
+          const result = await downloadViaBackground(downloadUrl, video.filename);
+
+          if (result && result.success) {
+            downloadedCount++;
+            log(`Video ${i + 1}/${totalToDownload} baixado: ${video.filename}`, 'success');
+          } else {
+            failedCount++;
+            log(`Falha ao baixar video ${i + 1}/${totalToDownload}: ${result?.error || 'erro desconhecido'}`, 'error');
+          }
         }
         
         // Wait between downloads to avoid overwhelming the browser
