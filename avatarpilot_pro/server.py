@@ -94,6 +94,10 @@ def _detect_safe_max_workers() -> int:
 
 MAX_WORKERS = _detect_safe_max_workers()
 active_workers = 0
+def _reset_active_workers():
+    global active_workers
+    with workers_lock:
+        active_workers = 0
 # Semaphore enforces real concurrency limit (prevents VRAM/CPU oversubscription
 # when many users submit simultaneously). active_workers stays for UI display.
 _pipeline_semaphore = threading.Semaphore(MAX_WORKERS)
@@ -465,7 +469,7 @@ def db_load_incomplete_jobs():
     try:
         conn = sqlite3.connect(DB_PATH)
         rows = conn.execute(
-            "SELECT id, config, created_at FROM jobs_db WHERE status NOT IN ('done','error','queued')"
+            "SELECT id, config, created_at FROM jobs_db WHERE status NOT IN ('done','error','cancelled')"
         ).fetchall()
         for row in rows:
             conn.execute("UPDATE jobs_db SET status='error', error='Server restarted' WHERE id=?", (row[0],))
@@ -473,6 +477,17 @@ def db_load_incomplete_jobs():
         conn.close()
         if rows:
             print(f"  [DB] Marked {len(rows)} interrupted jobs as failed on startup")
+        # Reset in-memory state: all worker threads died on restart
+        global active_workers
+        with workers_lock:
+            active_workers = 0
+        with jobs_lock:
+            _orphans = [jid for jid, j in jobs.items() if j.get('status') not in ('done', 'error', 'cancelled')]
+            for _oj in _orphans:
+                jobs[_oj]['status'] = 'error'
+                jobs[_oj]['error'] = 'Server restarted'
+            if _orphans:
+                print(f"  [DB] Cleaned {len(_orphans)} orphaned in-memory jobs")
     except Exception as e:
         print(f"  [DB] load_incomplete_jobs error: {e}")
 
@@ -834,7 +849,7 @@ def realesrgan_upscale_video(input_path: str, output_path: str,
             _v_only = os.path.join(_tmp, "v.mp4")
             subprocess.run([ff, "-y", "-framerate", str(int(fps)),
                             "-i", os.path.join(frames_dir, "f_%06d.png"),
-                            "-c:v", "libx264", "-preset", "fast", "-crf", "16",
+                            "-c:v", "libx264", "-preset", "slow", "-crf", "16",
                             "-pix_fmt", "yuv420p", _v_only],
                            capture_output=True, timeout=max(600, total))
             subprocess.run([ff, "-y", "-i", _v_only, "-i", input_path,
@@ -1402,7 +1417,7 @@ def run_sadtalker_chunked(image_path, audio_path, output_path, settings=None,
             r = subprocess.run([
                 ffmpeg, "-y", "-f", "concat", "-safe", "0",
                 "-i", concat_txt,
-                "-c:v", "libx264", "-preset", "fast", "-crf", "20",
+                "-c:v", "libx264", "-preset", "slow", "-crf", "20",
                 "-c:a", "aac", "-b:a", "192k",
                 safe_out
             ], capture_output=True, timeout=600)
@@ -1477,7 +1492,7 @@ def _make_seamless_loop_source(video_path: str, out_path: str, crossfade: float 
         [ff, "-y", "-i", video_path,
          "-filter_complex", filter_complex,
          "-map", "[out]",
-         "-c:v", "libx264", "-preset", "fast", "-crf", "17",
+         "-c:v", "libx264", "-preset", "slow", "-crf", "17",
          "-pix_fmt", "yuv420p", out_path],
         capture_output=True, timeout=max(300, int(vdur * 5))
     )
@@ -1533,7 +1548,7 @@ def _loop_video_to_duration(video_path: str, audio_path: str, out_path: str) -> 
         # 1. Escalar vídeo fonte para resolução alvo
         scaled_src = os.path.join(_loop_tmp, "scaled.mp4")
         subprocess.run([ff, "-y", "-i", video_path, "-an", "-vf", vf,
-                        "-c:v", "libx264", "-preset", "fast", "-crf", "17",
+                        "-c:v", "libx264", "-preset", "slow", "-crf", "17",
                         "-pix_fmt", "yuv420p", scaled_src],
                        capture_output=True, timeout=max(300, int(vdur * 4)))
 
@@ -1551,7 +1566,7 @@ def _loop_video_to_duration(video_path: str, audio_path: str, out_path: str) -> 
             "-i", seamless_src,
             "-t", str(adur),
             "-an",
-            "-c:v", "libx264", "-preset", "fast", "-crf", "17",
+            "-c:v", "libx264", "-preset", "slow", "-crf", "17",
             "-pix_fmt", "yuv420p",
             out_path
         ], capture_output=True, timeout=max(600, int(adur * 4)))
@@ -1564,7 +1579,7 @@ def _loop_video_to_duration(video_path: str, audio_path: str, out_path: str) -> 
         r2 = subprocess.run([
             ff, "-y", "-stream_loop", str(loops), "-i", video_path,
             "-t", str(adur), "-an", "-vf", vf,
-            "-c:v", "libx264", "-preset", "fast", "-crf", "16",
+            "-c:v", "libx264", "-preset", "slow", "-crf", "16",
             "-pix_fmt", "yuv420p", out_path
         ], capture_output=True, timeout=max(600, int(adur * 4)))
 
@@ -1865,7 +1880,7 @@ def run_wav2lip(image_path: str, audio_path: str, output_path: str,
                     vf = "scale=trunc(iw/2)*2:trunc(ih/2)*2"
                 safe_face = os.path.join(tmp_root, "face.mp4")
                 subprocess.run([ff, "-y", "-i", image_path, "-an", "-vf", vf,
-                                "-c:v", "libx264", "-preset", "fast", "-crf", "17",
+                                "-c:v", "libx264", "-preset", "slow", "-crf", "17",
                                 "-pix_fmt", "yuv420p", safe_face],
                                capture_output=True, timeout=max(600, int(vid_dur * 3)))
             print(f"  [Wav2Lip] VIDEO mode — body/hand movement preserved from source")
@@ -2034,7 +2049,7 @@ def run_wav2lip(image_path: str, audio_path: str, output_path: str,
                 f"[1:v]scale={_crop_w}:{_crop_h}:flags=lanczos[fg];"
                 f"[bg][fg]overlay={_crop_x1}:{_crop_y1}:shortest=1[out]",
                 "-map", "[out]", "-map", "1:a",
-                "-c:v", "libx264", "-preset", "fast", "-crf", "17",
+                "-c:v", "libx264", "-preset", "slow", "-crf", "17",
                 "-pix_fmt", "yuv420p", "-t", str(audio_dur_s),
                 _comp_out
             ], capture_output=True, timeout=600)
@@ -2197,7 +2212,7 @@ def apply_codeformer_to_video(input_path: str, output_path: str, job_id: str = N
         _safe_v = os.path.join(_tmp, "video.mp4")
         subprocess.run([_ff, "-y", "-framerate", str(int(fps)),
                         "-i", os.path.join(out_frames_dir, "f_%06d.png"),
-                        "-c:v", "libx264", "-preset", "fast", "-crf", "16",
+                        "-c:v", "libx264", "-preset", "slow", "-crf", "16",
                         "-pix_fmt", "yuv420p", _safe_v],
                        capture_output=True, timeout=max(600, total // 2))
 
@@ -2369,7 +2384,7 @@ def apply_gfpgan_chunked(input_path: str, output_path: str,
             "-vf", f"scale={out_w}:{out_h}:force_original_aspect_ratio=decrease,"
                    f"pad={out_w}:{out_h}:(ow-iw)/2:(oh-ih)/2,"
                    f"unsharp=5:5:1.5:5:5:0.0",
-            "-c:v", "libx264", "-crf", "16", "-preset", "fast",
+            "-c:v", "libx264", "-crf", "16", "-preset", "slow",
             "-b:v", "2500k", "-maxrate", "4000k", "-bufsize", "8000k",
             "-pix_fmt", "yuv420p",
             "-c:a", "copy", part2_enh
@@ -2637,7 +2652,7 @@ def remove_background_from_video(video_path: str, bg_image: str, output_path: st
         subprocess.run([ffmpeg, "-y", "-framerate", str(fps),
                         "-i", os.path.join(out_dir, "frame_%05d.png"),
                         "-i", video_path, "-map", "0:v", "-map", "1:a?",
-                        "-c:v", "libx264", "-preset", "fast", "-crf", "16",
+                        "-c:v", "libx264", "-preset", "slow", "-crf", "16",
                         "-c:a", "aac", "-shortest", output_path],
                        capture_output=True, timeout=600)
         print(f"  [rembg video] Done → {output_path}")
@@ -2717,7 +2732,7 @@ def burn_captions(video_path: str, srt_content: str, output_path: str,
         r = subprocess.run([
             ffmpeg, "-y", "-i", video_path,
             "-vf", f"subtitles='{srt_escaped}':force_style='{style_str}'",
-            "-c:v", "libx264", "-preset", "fast", "-crf", "16",
+            "-c:v", "libx264", "-preset", "slow", "-crf", "16",
             "-c:a", "copy", output_path
         ], capture_output=True, timeout=600)
         if r.returncode != 0:
@@ -3675,7 +3690,7 @@ def apply_output_format(input_path: str, output_path: str, fmt: str = "landscape
     cmd = [
         ffmpeg, "-y", "-i", input_path,
         "-vf", vf,
-        "-c:v", "libx264", "-preset", "fast", "-crf", "20",
+        "-c:v", "libx264", "-preset", "slow", "-crf", "20",
         "-c:a", "copy",
         output_path
     ]
@@ -3721,7 +3736,7 @@ def add_watermark(input_path: str, output_path: str,
     cmd = [
         ffmpeg, "-y", "-i", input_path,
         "-vf", drawtext,
-        "-c:v", "libx264", "-preset", "fast", "-crf", "20",
+        "-c:v", "libx264", "-preset", "slow", "-crf", "20",
         "-c:a", "copy",
         output_path
     ]
@@ -3777,7 +3792,7 @@ def composite_with_background(avatar_video, bg_image, output_path,
         "-i", avatar_video,
         "-filter_complex", filter_complex,
         "-map", "[vout]", "-map", "1:a:0",
-        "-c:v", "libx264", "-preset", "fast", "-crf", "20",
+        "-c:v", "libx264", "-preset", "slow", "-crf", "20",
         "-c:a", "aac", "-b:a", "192k",
         "-shortest", output_path
     ]
@@ -3837,7 +3852,7 @@ def apply_fade(video_path: str, output_path: str,
     cmd = [
         ffmpeg, "-y", "-i", video_path,
         "-vf", vf, "-af", af,
-        "-c:v", "libx264", "-preset", "fast", "-crf", "20",
+        "-c:v", "libx264", "-preset", "slow", "-crf", "20",
         "-c:a", "aac", "-b:a", "192k",
         output_path
     ]
@@ -3864,7 +3879,7 @@ def export_additional_format(video_path: str, output_dir: str,
                "-c:a", "libopus", "-b:a", "128k", out_path]
     elif fmt == "mov":
         cmd = [ffmpeg, "-y", "-i", video_path,
-               "-c:v", "libx264", "-preset", "fast", "-crf", "16",
+               "-c:v", "libx264", "-preset", "slow", "-crf", "16",
                "-c:a", "aac", "-b:a", "192k",
                "-movflags", "+faststart", out_path]
     elif fmt == "gif":
@@ -4152,12 +4167,26 @@ def run_pipeline(job_id: str, config: dict):
     # Job stays "queued" in DB; user polling sees "queued" status until slot opens.
     _semaphore_acquired = False
     try:
-        # First, update UI to show "queued" while waiting for slot
-        with jobs_lock:
-            if job_id in jobs and jobs[job_id].get("status") == "queued":
-                jobs[job_id]["message"] = f"Aguardando vaga (max {MAX_WORKERS} jobs simultâneos)..."
-        _pipeline_semaphore.acquire()  # BLOCKS until slot available
-        _semaphore_acquired = True
+        # Poll-based concurrency: count ACTUALLY RUNNING jobs from dict.
+        # A job is "running" if status is generating_audio/tts/generating_video/compositing.
+        # This is immune to orphan active_workers counter issues.
+        _wait_start = time.time()
+        _RUNNING_STATUSES = {"generating_audio", "tts", "generating_video", "compositing"}
+        while True:
+            with jobs_lock:
+                _running = sum(1 for jid, j in jobs.items()
+                              if jid != job_id and j.get("status") in _RUNNING_STATUSES)
+            if _running < MAX_WORKERS:
+                break  # slot available
+            with jobs_lock:
+                if job_id in jobs and jobs[job_id].get("status") == "queued":
+                    jobs[job_id]["message"] = f"Aguardando vaga (max {MAX_WORKERS} jobs, {_running} rodando)..."
+            time.sleep(2)
+            # Safety: if waiting > 2min, break anyway (orphan recovery)
+            if time.time() - _wait_start > 120:
+                print(f"  [Pipeline] Forced start after 2min wait for job {job_id[:8]}", flush=True)
+                break
+        _semaphore_acquired = True  # kept for compatibility with finally block
 
         # Check if user cancelled while we were waiting
         with jobs_lock:
@@ -4451,6 +4480,25 @@ def run_pipeline(job_id: str, config: dict):
                         except Exception as _mst_s_err:
                             print(f"  [MuseTalk] Short-clip falhou ({_mst_s_err}) — mantendo SadTalker")
                     jobs[job_id]["progress"] = 70
+                    # TEMPORAL CONSISTENCY: eliminate frame-to-frame flicker from AI generation
+                    jobs[job_id]["message"] = "Temporal consistency: eliminando flicker..."
+                    _tc_out = os.path.join(OUTPUT_DIR, f"{job_id}_temporal.mp4")
+                    _tc_vf = "tmix=frames=3:weights='1 2 1',deflicker=size=5:mode=am"
+                    _tc_cmd = [_find_ffmpeg(), "-y", "-i", avatar_video,
+                               "-vf", _tc_vf,
+                               "-c:v", "libx264", "-crf", "17", "-preset", "fast",
+                               "-c:a", "copy",
+                               _tc_out]
+                    try:
+                        _tc_r = subprocess.run(_tc_cmd, capture_output=True, timeout=max(120, int(dur*3)))
+                        if os.path.exists(_tc_out) and os.path.getsize(_tc_out) > 10000:
+                            _safe_rm(avatar_video)
+                            _safe_rename(_tc_out, avatar_video)
+                            print(f"  [Temporal] Anti-flicker applied (tmix+deflicker)")
+                        else:
+                            print(f"  [Temporal] Skipped (output invalid)")
+                    except Exception as _tc_err:
+                        print(f"  [Temporal] Skipped ({_tc_err})")
                     # GFPGAN externo pós-SadTalker (auto-adapta frames pelo tamanho)
                     jobs[job_id]["message"] = "GFPGAN: restaurando qualidade facial..."
                     _st_gfpgan_out = os.path.join(OUTPUT_DIR, f"{job_id}_gfpgan.mp4")
@@ -4458,7 +4506,40 @@ def run_pipeline(job_id: str, config: dict):
                     if os.path.exists(_st_gfpgan_out) and os.path.getsize(_st_gfpgan_out) > 10000:
                         _safe_rm(avatar_video)
                         _safe_rename(_st_gfpgan_out, avatar_video)
-                    # Validar output do SadTalker+GFPGAN antes do body sway
+                    # CODEFORMER PASS: identity-preserving texture refinement after GFPGAN
+                    if dur <= 120:  # CodeFormer for clips <= 2min (GPU intensive)
+                        try:
+                            jobs[job_id]["message"] = "CodeFormer: refinando textura facial..."
+                            _cf_out = os.path.join(OUTPUT_DIR, f"{job_id}_codeformer.mp4")
+                            apply_codeformer_to_video(avatar_video, _cf_out, job_id=job_id, fidelity_weight=0.7)
+                            if os.path.exists(_cf_out) and os.path.getsize(_cf_out) > 10000:
+                                _safe_rm(avatar_video)
+                                _safe_rename(_cf_out, avatar_video)
+                                print("  [CodeFormer] Texture refinement applied (fidelity=0.7)")
+                            else:
+                                print("  [CodeFormer] Skipped (output invalid)")
+                        except Exception as _cf_err:
+                            print(f"  [CodeFormer] Skipped ({_cf_err})")
+                    # FACE EDGE SOFTENING: smooth face boundaries with smartblur
+                    jobs[job_id]["message"] = "Face blending: suavizando bordas faciais..."
+                    _fb_out = os.path.join(OUTPUT_DIR, f"{job_id}_faceblend.mp4")
+                    _fb_vf = "smartblur=lr=1.0:ls=-0.9:lt=-5:cr=0.8:cs=-0.8:ct=-4"
+                    _fb_cmd = [_find_ffmpeg(), "-y", "-i", avatar_video,
+                               "-vf", _fb_vf,
+                               "-c:v", "libx264", "-crf", "17", "-preset", "fast",
+                               "-c:a", "copy",
+                               _fb_out]
+                    try:
+                        _fb_r = subprocess.run(_fb_cmd, capture_output=True, timeout=max(60, int(dur*2)))
+                        if os.path.exists(_fb_out) and os.path.getsize(_fb_out) > 10000:
+                            _safe_rm(avatar_video)
+                            _safe_rename(_fb_out, avatar_video)
+                            print("  [FaceBlend] Edge softening applied")
+                        else:
+                            print("  [FaceBlend] Skipped (output invalid)")
+                    except Exception as _fb_err:
+                        print(f"  [FaceBlend] Skipped ({_fb_err})")
+                    # Validar output do SadTalker+GFPGAN+CodeFormer+FaceBlend antes do body sway
                     _sg_ok, _sg_reason = _validate_video_output(avatar_video, expected_dur=dur)
                     print(f"  [Pipeline] SadTalker+GFPGAN validação: {_sg_reason}")
                     # Fix A/V sync após SadTalker (pode ter pequeno drift)
@@ -4656,7 +4737,7 @@ def run_pipeline(job_id: str, config: dict):
                     _mux_r = subprocess.run([
                         _ffmpeg_path(), "-y", "-i", _base_video, "-i", audio_path,
                         "-map", "0:v:0", "-map", "1:a:0",
-                        "-c:v", "copy", "-c:a", "aac", "-b:a", "256k", "-shortest", _mux_fb
+                        "-c:v", "copy", "-c:a", "aac", "-af", "highpass=f=80,lowpass=f=12000,acompressor=threshold=-20dB:ratio=3:attack=5:release=50", "-b:a", "256k", "-shortest", _mux_fb
                     ], capture_output=True, timeout=max(300, int(dur * 2)))
                     if _mux_r.returncode == 0 and os.path.exists(_mux_fb) and os.path.getsize(_mux_fb) > 10000:
                         shutil.copy2(_mux_fb, avatar_video)
@@ -4680,7 +4761,7 @@ def run_pipeline(job_id: str, config: dict):
                             _ds_out = _base_video.replace(".mp4", "_720p.mp4")
                             _ds_cmd = [_ffmpeg_path(), "-y", "-i", _base_video,
                                        "-vf", "scale='if(gt(iw,ih),min(1280,iw),-2)':'if(gt(iw,ih),-2,min(1280,ih))'",
-                                       "-c:v", "libx264", "-preset", "fast", "-crf", "20",
+                                       "-c:v", "libx264", "-preset", "slow", "-crf", "20",
                                        "-pix_fmt", "yuv420p", "-an", _ds_out]
                             subprocess.run(_ds_cmd, capture_output=True, timeout=max(300, int(dur * 2)))
                             if os.path.exists(_ds_out) and os.path.getsize(_ds_out) > 10000:
@@ -5033,22 +5114,51 @@ def run_pipeline(job_id: str, config: dict):
 
             _needs_hd = True
             if _needs_hd:
+                # SMOOTH MOTION: interpolate to 30fps for natural playback
+                if dur <= 300:  # Only for clips <= 5min (minterpolate is CPU intensive)
+                    jobs[job_id]["message"] = "Smooth motion: interpolando para 30fps..."
+                    _mi_out = os.path.join(_hd_tmp, "smooth_30fps.mp4")
+                    _mi_vf = "minterpolate='fps=30:mi_mode=blend:mc_mode=aobmc:me_mode=bidir:vsbmc=1'"
+                    _mi_cmd = [_find_ffmpeg(), "-y", "-i", _safe_in,
+                               "-vf", _mi_vf,
+                               "-c:v", "libx264", "-crf", "18", "-preset", "fast",
+                               "-c:a", "copy",
+                               _mi_out]
+                    try:
+                        _mi_r = subprocess.run(_mi_cmd, capture_output=True, timeout=max(300, int(dur*8)))
+                        if os.path.exists(_mi_out) and os.path.getsize(_mi_out) > 10000:
+                            _safe_in = _mi_out
+                            print(f"  [SmoothMotion] 25fps -> 30fps interpolation applied")
+                        else:
+                            print(f"  [SmoothMotion] Skipped (output invalid)")
+                    except Exception as _mi_err:
+                        print(f"  [SmoothMotion] Skipped ({_mi_err})")
                 jobs[job_id]["message"] = f"HD final: {_cur_w}×{_cur_h}→{_tw}×{_th} @ {_vbr}..."
-                _hd_preset  = "medium" if dur > 300 else "slow"
+                _hd_preset  = "slow"  # always slow for maximum quality (2-pass equivalent)
                 # Timeout realista: libx264 fast = ~100fps CPU → 4× vídeo + 5min buffer for 1080p
                 _hd_timeout = max(300, int(dur * 4) + 300)
                 # scale+crop + denoise + sharpen + color grade for HeyGen-class look
+                # HeyGen-level professional post-processing pipeline
                 _vf = (f"scale={_tw}:{_th}:force_original_aspect_ratio=increase:flags=lanczos,"
                        f"crop={_tw}:{_th},"
-                       "hqdn3d=1.5:1.5:3:3,"
-                       "unsharp=5:5:1.2:5:5:0.0,"
-                       "eq=contrast=1.06:brightness=0.002:saturation=1.12:gamma=1.01")
+                       "hqdn3d=2:1.5:4:3,"              # temporal denoise (anti-flicker)
+                       "smartblur=lr=1.0:ls=-0.9:lt=-5:cr=0.8:cs=-0.8:ct=-4,"  # face edge softening
+                       "unsharp=5:5:0.6:5:5:0.0,"        # gentle sharpen (HeyGen-level softness)
+                       "eq=contrast=1.04:brightness=0.003:saturation=1.08:gamma=1.02,"  # subtle color
+                       "colorbalance=rs=0.01:gs=-0.01:bs=-0.02:"  # warm skin tones
+                       "rm=0.01:gm=-0.01:bm=-0.01:"
+                       "rh=0.005:gh=-0.005:bh=-0.01,"    # warm highlights
+                       "curves=m='0/0 0.25/0.23 0.5/0.52 0.75/0.79 1/1'"  # subtle S-curve (cinema)
+                       )
                 _hd_cmd = [_ff2, "-y", "-i", _safe_in,
                            "-vf", _vf,
-                           "-c:v", "libx264", "-preset", _hd_preset, "-crf", "16",
+                           "-c:v", "libx264", "-preset", _hd_preset, "-tune", "film",
+                           "-crf", "16",
                            "-b:v", _vbr, "-minrate", _vmin, "-maxrate", _vmax, "-bufsize", _vbuf,
+                           "-colorspace", "bt709", "-color_trc", "bt709", "-color_primaries", "bt709",
                            "-c:a", "aac", "-b:a", "256k", "-ar", "48000",
                            "-pix_fmt", "yuv420p",
+                           "-r", "30",  # 30fps for smooth playback
                            "-movflags", "+faststart",
                            _safe_out]
                 # Bitrate-controlled encode com retry automático em caso de timeout
@@ -5299,7 +5409,7 @@ def add_body_sway_to_video(input_path: str, output_path: str, intensity: float =
         r = subprocess.run(
             [ff, "-y", "-i", _safe_in,
              "-vf", vf,
-             "-c:v", "libx264", "-preset", "fast", "-crf", "17",
+             "-c:v", "libx264", "-preset", "slow", "-crf", "17",
              "-b:v", "2500k", "-maxrate", "4000k", "-bufsize", "8000k",
              "-c:a", "copy",
              "-pix_fmt", "yuv420p", _safe_tmp],
@@ -5412,7 +5522,7 @@ def _build_long_gesture_sequence(audio_dur: float, templates: list,
         ascii_out = os.path.join(tmp, "out.mp4")
         cmd = [ff, "-y", "-f", "concat", "-safe", "0", "-i", concat_txt,
                "-t", str(round(audio_dur + 0.5, 3)),
-               "-c:v", "libx264", "-preset", "fast", "-crf", "20",
+               "-c:v", "libx264", "-preset", "slow", "-crf", "20",
                "-pix_fmt", "yuv420p", "-an", ascii_out]
         r = subprocess.run(cmd, capture_output=True,
                            timeout=max(600, int(audio_dur * 2)))
@@ -8597,6 +8707,26 @@ def error_500(e):
     print(f"[Flask 500] req={rid} {e}", flush=True)
     return jsonify({"error": "Erro interno do servidor. Verifique os logs."}), 500
 
+
+@app.route("/api/debug/jobs")
+def api_debug_jobs():
+    """Diagnostic: show in-memory jobs dict and semaphore state."""
+    with jobs_lock:
+        all_jobs = {jid: {"status": j.get("status"), "message": j.get("message","")[:60], "progress": j.get("progress",0)} for jid, j in jobs.items()}
+    with workers_lock:
+        aw = active_workers
+    # Try to check semaphore availability
+    sem_free = _pipeline_semaphore.acquire(blocking=False)
+    if sem_free:
+        _pipeline_semaphore.release()  # give it back
+    return jsonify({
+        "jobs_in_memory": all_jobs,
+        "jobs_count": len(all_jobs),
+        "active_workers": aw,
+        "max_workers": MAX_WORKERS,
+        "semaphore_available": sem_free,
+    })
+
 @app.errorhandler(Exception)
 def error_unhandled(e):
     import traceback
@@ -8643,5 +8773,40 @@ if __name__ == "__main__":
     print("=" * 60)
     _init_admin_token()
     _run_startup_diagnostics()
+    # DEFINITIVE: Reset active_workers to 0 on every startup
+    # All worker threads from previous session are dead after restart.
+    _reset_active_workers()  # properly resets the global
+    print(f"  Workers: {MAX_WORKERS} max concurrent | active_workers reset to 0")
     _start_watchdog()
-    app.run(host="0.0.0.0", port=5052, debug=False, threaded=True)
+
+    # ── Production server: Waitress (handles 1000+ concurrent pollers) ──────
+    # Flask's built-in dev server (app.run) is single-process WSGI and is NOT
+    # designed for production load — under hundreds of users polling job status
+    # it degrades and can drop connections. Waitress is a battle-tested pure-
+    # Python WSGI server that handles high concurrency safely on Windows.
+    # Job processing runs in background threads and is unaffected by the HTTP
+    # layer choice. Set AVP_DEV=1 to force the Flask dev server (debugging).
+    _force_dev = os.environ.get("AVP_DEV", "").strip().lower() in ("1", "true", "yes")
+    _served = False
+    if not _force_dev:
+        try:
+            from waitress import serve
+            print(f"  Server:  Waitress (production WSGI) — threads=32, conn_limit=1000")
+            print("=" * 60, flush=True)
+            serve(
+                app, host="0.0.0.0", port=5052,
+                threads=32,             # generous for polling-heavy workload
+                connection_limit=1000,  # support many concurrent users
+                channel_timeout=300,    # allow slow downloads of large MP4s
+                max_request_body_size=2 * 1024 * 1024 * 1024,  # 2GB uploads (video avatars)
+                ident="AvatarPilotPro",
+            )
+            _served = True
+        except ImportError:
+            print("  [WARN] Waitress não instalado — usando Flask dev server.")
+            print("         Para produção rode: pip install waitress")
+            print("=" * 60, flush=True)
+        except Exception as _e:
+            print(f"  [WARN] Waitress falhou ({_e}) — fallback p/ Flask dev server.", flush=True)
+    if not _served:
+        app.run(host="0.0.0.0", port=5052, debug=False, threaded=True)
