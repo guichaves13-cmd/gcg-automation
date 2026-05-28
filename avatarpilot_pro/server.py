@@ -196,13 +196,13 @@ VOICE_PRESETS = {
         "category": "English",
     },
     "sales_pitch": {
-        "edge_voice": "en-US-DavisNeural", "rate": "+15%", "pitch": "+5Hz",
+        "edge_voice": "en-US-AndrewNeural", "rate": "+15%", "pitch": "+5Hz",
         "description": "Energetic, persuasive sales voice",
         "best_for": ["sales", "marketing", "ads", "promos"],
         "category": "English",
     },
     "corporate_trainer": {
-        "edge_voice": "en-US-TonyNeural", "rate": "-5%", "pitch": "+0Hz",
+        "edge_voice": "en-US-EricNeural", "rate": "-5%", "pitch": "+0Hz",
         "description": "Clear, professional e-learning narration",
         "best_for": ["e-learning", "training", "tutorial", "courses"],
         "category": "English",
@@ -256,7 +256,7 @@ VOICE_PRESETS = {
         "category": "Special",
     },
     "energetic_host": {
-        "edge_voice": "en-US-DavisNeural", "rate": "+20%", "pitch": "+15Hz",
+        "edge_voice": "en-US-BrianNeural", "rate": "+20%", "pitch": "+15Hz",
         "description": "High-energy game show / event host",
         "best_for": ["events", "gaming", "entertainment", "promo"],
         "category": "Special",
@@ -5724,16 +5724,35 @@ def api_voices():
 def api_preview_audio():
     data   = request.json or {}
     script = data.get("script", "")[:500]
-    voice  = data.get("voice", "en-US-GuyNeural")
+    voice  = data.get("voice", "") or ""
     engine = data.get("engine", "edge-tts")
+    voice_preset = data.get("voice_preset", "")
     if not script:
         return jsonify({"error": "No script"}), 400
+
+    # Resolve voice preset (rate/pitch + default voice) so the PREVIEW matches
+    # exactly what the final generation will produce. Without this, picking a
+    # preset like "documentary_narrator" in the UI and clicking preview failed
+    # (empty voice → Edge-TTS 500). Now preview honors presets just like /generate.
+    voice_rate, voice_pitch = "+0%", "+0Hz"
+    if voice_preset and voice_preset in VOICE_PRESETS:
+        p = VOICE_PRESETS[voice_preset]
+        if not voice:
+            voice = p.get("edge_voice", voice)
+        voice_rate  = p.get("rate", "+0%")
+        voice_pitch = p.get("pitch", "+0Hz")
+    # Graceful fallback: never call Edge-TTS with an empty/blank voice (→ 500).
+    if not str(voice).strip():
+        voice = load_settings().get("default_voice", "en-US-GuyNeural") or "en-US-GuyNeural"
+
     pid        = uuid.uuid4().hex[:8]
     audio_path = os.path.join(OUTPUT_DIR, f"preview_{pid}.mp3")
     try:
         if engine == "elevenlabs":
             s = load_settings()
             elevenlabs_generate(script, data.get("voice_id", ""), s.get("elevenlabs_key", ""), audio_path)
+        elif voice_rate != "+0%" or voice_pitch != "+0Hz":
+            edge_tts_generate_advanced(script, voice, audio_path, rate=voice_rate, pitch=voice_pitch)
         else:
             edge_tts_generate(script, voice, audio_path)
         return jsonify({"audio_url": f"/outputs/preview_{pid}.mp3"})
