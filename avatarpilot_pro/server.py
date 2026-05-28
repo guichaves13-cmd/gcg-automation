@@ -4484,7 +4484,7 @@ def run_pipeline(job_id: str, config: dict):
                     jobs[job_id]["message"] = "Temporal consistency: eliminando flicker..."
                     _tc_out = os.path.join(OUTPUT_DIR, f"{job_id}_temporal.mp4")
                     _tc_vf = "tmix=frames=3:weights='1 2 1',deflicker=size=5:mode=am"
-                    _tc_cmd = [_find_ffmpeg(), "-y", "-i", avatar_video,
+                    _tc_cmd = [_ffmpeg_path(), "-y", "-i", avatar_video,
                                "-vf", _tc_vf,
                                "-c:v", "libx264", "-crf", "17", "-preset", "fast",
                                "-c:a", "copy",
@@ -4524,7 +4524,7 @@ def run_pipeline(job_id: str, config: dict):
                     jobs[job_id]["message"] = "Face blending: suavizando bordas faciais..."
                     _fb_out = os.path.join(OUTPUT_DIR, f"{job_id}_faceblend.mp4")
                     _fb_vf = "smartblur=lr=1.0:ls=-0.9:lt=-5:cr=0.8:cs=-0.8:ct=-4"
-                    _fb_cmd = [_find_ffmpeg(), "-y", "-i", avatar_video,
+                    _fb_cmd = [_ffmpeg_path(), "-y", "-i", avatar_video,
                                "-vf", _fb_vf,
                                "-c:v", "libx264", "-crf", "17", "-preset", "fast",
                                "-c:a", "copy",
@@ -5119,7 +5119,7 @@ def run_pipeline(job_id: str, config: dict):
                     jobs[job_id]["message"] = "Smooth motion: interpolando para 30fps..."
                     _mi_out = os.path.join(_hd_tmp, "smooth_30fps.mp4")
                     _mi_vf = "minterpolate='fps=30:mi_mode=blend:mc_mode=aobmc:me_mode=bidir:vsbmc=1'"
-                    _mi_cmd = [_find_ffmpeg(), "-y", "-i", _safe_in,
+                    _mi_cmd = [_ffmpeg_path(), "-y", "-i", _safe_in,
                                "-vf", _mi_vf,
                                "-c:v", "libx264", "-crf", "18", "-preset", "fast",
                                "-c:a", "copy",
