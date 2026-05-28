@@ -834,7 +834,7 @@ def realesrgan_upscale_video(input_path: str, output_path: str,
             _v_only = os.path.join(_tmp, "v.mp4")
             subprocess.run([ff, "-y", "-framerate", str(int(fps)),
                             "-i", os.path.join(frames_dir, "f_%06d.png"),
-                            "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+                            "-c:v", "libx264", "-preset", "fast", "-crf", "16",
                             "-pix_fmt", "yuv420p", _v_only],
                            capture_output=True, timeout=max(600, total))
             subprocess.run([ff, "-y", "-i", _v_only, "-i", input_path,
@@ -1564,7 +1564,7 @@ def _loop_video_to_duration(video_path: str, audio_path: str, out_path: str) -> 
         r2 = subprocess.run([
             ff, "-y", "-stream_loop", str(loops), "-i", video_path,
             "-t", str(adur), "-an", "-vf", vf,
-            "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+            "-c:v", "libx264", "-preset", "fast", "-crf", "16",
             "-pix_fmt", "yuv420p", out_path
         ], capture_output=True, timeout=max(600, int(adur * 4)))
 
@@ -2197,7 +2197,7 @@ def apply_codeformer_to_video(input_path: str, output_path: str, job_id: str = N
         _safe_v = os.path.join(_tmp, "video.mp4")
         subprocess.run([_ff, "-y", "-framerate", str(int(fps)),
                         "-i", os.path.join(out_frames_dir, "f_%06d.png"),
-                        "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+                        "-c:v", "libx264", "-preset", "fast", "-crf", "16",
                         "-pix_fmt", "yuv420p", _safe_v],
                        capture_output=True, timeout=max(600, total // 2))
 
@@ -2223,26 +2223,10 @@ def apply_codeformer_to_video(input_path: str, output_path: str, job_id: str = N
 def apply_gfpgan_to_video(input_path: str, output_path: str, job_id: str = None,
                           max_process_frames: int = 0) -> str:
     """
-    Apply GFPGAN v1.4 face restoration to a video.
-    Uses smart frame-skip for long videos: processes 1-in-N key frames via GFPGAN.
-    max_process_frames=0 → auto-adaptado pela duração do vídeo:
-      ≤60s  → 1500 frames (todos)
-      ≤180s → 750 frames
-      ≤600s → 400 frames
-      >600s → 200 frames
+    Apply GFPGAN v1.4 face restoration via isolated subprocess.
+    Runs gfpgan_worker.py in a separate process so OOM cannot kill Flask.
+    If GFPGAN fails or OOM occurs, falls back to copying input unchanged.
     """
-    import tempfile as _tf
-    import cv2 as _cv
-    import numpy as _np
-    import torch as _torch
-
-    try:
-        from gfpgan import GFPGANer
-    except ImportError:
-        print("  [GFPGAN] not installed — skipping")
-        shutil.copy2(input_path, output_path)
-        return output_path
-
     # Find model
     _gfpgan_candidates = [
         os.path.join(BASE_DIR, "venv311", "Lib", "site-packages", "gfpgan", "weights", "GFPGANv1.4.pth"),
@@ -2251,165 +2235,62 @@ def apply_gfpgan_to_video(input_path: str, output_path: str, job_id: str = None,
     ]
     _gfpgan_model = next((p for p in _gfpgan_candidates if os.path.exists(p)), None)
     if not _gfpgan_model:
-        print("  [GFPGAN] model not found — skipping")
+        print("  [GFPGAN] model not found - skipping", flush=True)
         shutil.copy2(input_path, output_path)
         return output_path
 
-    _tmp = _tf.mkdtemp(prefix="gfpgan_avp_")
-    try:
-        if job_id and job_id in jobs:
-            jobs[job_id]["message"] = "GFPGAN: restaurando qualidade facial..."
-        print(f"  [GFPGAN] Loading model: {os.path.basename(_gfpgan_model)}")
-
-        # bg_upsampler disabled: 2x scaling makes GFPGAN 5-10x slower (e.g. 1280x714 -> 5+ min per minute of video)
-        # Final HD encode at 1280x720 already handles upscaling. Trade off background sharpness for speed.
-        _bg_upsampler = None
-
-        # VRAM guard: check available memory before loading GFPGAN (prevents OOM crash)
-        try:
-            _vf = _torch.cuda.mem_get_info()[0] / (1024**3)
-            if _vf < 1.5:
-                print(f"  [GFPGAN] Only {_vf:.1f}GB VRAM free - skipping to prevent OOM", flush=True)
-                shutil.copy2(input_path, output_path)
-                return output_path
-            _torch.cuda.empty_cache()  # Free any cached tensors before loading
-        except Exception:
-            pass
-
-        restorer = GFPGANer(
-            model_path=_gfpgan_model,
-            upscale=1,          # upscale=1: só restauração facial, sem explodir resolução
-            arch='clean',
-            channel_multiplier=2,
-            bg_upsampler=_bg_upsampler,
-        )
-
-        _ff  = _ffmpeg_path()
-        _ffp = _ffprobe_path()
-        cap  = _cv.VideoCapture(input_path)
-        fps  = cap.get(_cv.CAP_PROP_FPS) or 25
-        w    = int(cap.get(_cv.CAP_PROP_FRAME_WIDTH))
-        h    = int(cap.get(_cv.CAP_PROP_FRAME_HEIGHT))
-        total_frames = int(cap.get(_cv.CAP_PROP_FRAME_COUNT))
-        # cv2 frame count unreliable for some codecs — use ffprobe as fallback
-        if total_frames < 10:
-            _dur_str = subprocess.run(
-                [_ffp, "-v", "error", "-show_entries", "format=duration",
-                 "-of", "default=noprint_wrappers=1:nokey=1", input_path],
-                capture_output=True, timeout=15
-            ).stdout.decode().strip()
-            _dur = float(_dur_str) if _dur_str else 0.0
-            if _dur > 0:
-                total_frames = int(_dur * fps)
-        print(f"  [GFPGAN] {total_frames} frames @ {fps:.0f}fps | {w}x{h}")
-
-        # Auto-adapt max_process_frames pela duração → qualidade consistente sem flickering
-        if max_process_frames <= 0:
-            _vid_sec = total_frames / max(fps, 1)
-            if _vid_sec <= 60:
-                max_process_frames = total_frames   # full quality for short clips
-            elif _vid_sec <= 300:
-                max_process_frames = 3000           # ~1 of every 3 frames for 5min clip
-            elif _vid_sec <= 1800:
-                max_process_frames = 2000           # skip=~14 for 30min clip
-            else:
-                max_process_frames = 1000           # skip=~54 for 1h clip — still no flicker
-            print(f"  [GFPGAN] Auto max_frames={max_process_frames} para vídeo de {_vid_sec:.0f}s")
-
-        # Determine skip factor: process at most max_process_frames through GFPGAN
-        skip = max(1, int(_np.ceil(total_frames / max_process_frames)))
-        if skip > 1:
-            print(f"  [GFPGAN] Frame-skip mode: 1 of every {skip} frames (video too long for full processing)")
-
-        # Read first frame to determine ACTUAL upscaled output dimensions
-        ret0, frame0 = cap.read()
-        if not ret0:
-            raise Exception("Cannot read video frames")
-        _, _, restored0 = restorer.enhance(frame0, has_aligned=False, only_center_face=False, paste_back=True, weight=0.5)
-        if restored0 is None: restored0 = frame0
-        out_h, out_w = restored0.shape[:2]
-        print(f"  [GFPGAN] Output size: {out_w}x{out_h} (upscale {out_w//w}x)")
-
-        # VideoWriter with CORRECT output dimensions (upscaled)
-        raw_avi = os.path.join(_tmp, "raw.avi")
-        fourcc  = _cv.VideoWriter_fourcc(*"MJPG")
-        writer  = _cv.VideoWriter(raw_avi, fourcc, fps, (out_w, out_h))
-        writer.write(restored0)
-
-        frame_idx = 1
-        last_restored = restored0  # for interpolation between key frames
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                break
-            if frame_idx % skip == 0:
-                # Key frame — run GFPGAN
-                _, _, restored = restorer.enhance(frame, has_aligned=False, only_center_face=False, paste_back=True, weight=0.5)
-                if restored is None:
-                    restored = _cv.resize(frame, (out_w, out_h))
-                last_restored = restored
-            else:
-                # Non-key frame — sem blend com frame GFPGAN antigo (evita face piscando)
-                # Com upscale=1 o frame já tem a resolução certa, apenas copia
-                if frame.shape[:2] == (out_h, out_w):
-                    restored = frame
-                else:
-                    restored = _cv.resize(frame, (out_w, out_h), interpolation=_cv.INTER_LANCZOS4)
-            writer.write(restored)
-            frame_idx += 1
-            if frame_idx % 100 == 0:
-                pct = int(frame_idx / max(total_frames, 1) * 100)
-                print(f"  [GFPGAN] {frame_idx}/{total_frames} ({pct}%)")
-                if job_id and job_id in jobs:
-                    jobs[job_id]["message"] = f"GFPGAN: {pct}% — {out_w}x{out_h}"
-                    # Progress: 70→80% durante GFPGAN (não fica preso em 68%)
-                    jobs[job_id]["progress"] = 70 + int(10 * pct / 100)
-        cap.release()
-        writer.release()
-
-        # Free GPU memory immediately
-        del restorer
-        import gc; gc.collect()
-        _torch.cuda.empty_cache()
-
-        # Extract audio
-        audio_tmp = os.path.join(_tmp, "audio.aac")
-        subprocess.run(
-            [_ff, "-y", "-i", input_path, "-vn", "-acodec", "copy", audio_tmp],
-            capture_output=True, timeout=60
-        )
-
-        # Re-encode AVI → MP4 at high quality
-        video_tmp = os.path.join(_tmp, "video_only.mp4")
-        subprocess.run(
-            [_ff, "-y", "-i", raw_avi,
-             "-c:v", "libx264", "-crf", "16", "-preset", "fast",
-             "-b:v", "2500k", "-maxrate", "4000k", "-bufsize", "8000k",
-             "-pix_fmt", "yuv420p", video_tmp],
-            capture_output=True, timeout=3600
-        )
-
-        # Merge audio + enhanced video
-        if os.path.exists(audio_tmp):
-            subprocess.run(
-                [_ff, "-y", "-i", video_tmp, "-i", audio_tmp,
-                 "-c:v", "copy", "-c:a", "aac", "-shortest", output_path],
-                capture_output=True, timeout=120
-            )
-        else:
-            shutil.copy2(video_tmp, output_path)
-
-        if not os.path.exists(output_path) or os.path.getsize(output_path) < 10000:
-            print("  [GFPGAN] output failed — using original")
-            shutil.copy2(input_path, output_path)
-        else:
-            print(f"  [GFPGAN] Done → {os.path.getsize(output_path)//1024}KB")
-
-    except Exception as _ge:
-        print(f"  [GFPGAN] Error (non-fatal): {_ge}")
+    worker_script = os.path.join(BASE_DIR, "gfpgan_worker.py")
+    if not os.path.exists(worker_script):
+        print("  [GFPGAN] worker script not found - skipping", flush=True)
         shutil.copy2(input_path, output_path)
-    finally:
-        shutil.rmtree(_tmp, ignore_errors=True)
+        return output_path
+
+    python_exe = os.path.join(BASE_DIR, "venv311", "Scripts", "python.exe")
+    if not os.path.exists(python_exe):
+        python_exe = sys.executable
+
+    if job_id and job_id in jobs:
+        jobs[job_id]["message"] = "GFPGAN: restaurando qualidade facial..."
+    print(f"  [GFPGAN] Running in subprocess (isolated from Flask)", flush=True)
+    import json as _gj
+    try:
+        proc = subprocess.Popen(
+            [python_exe, worker_script, input_path, output_path, _gfpgan_model, str(max_process_frames)],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            cwd=BASE_DIR, text=True, encoding="utf-8", errors="replace",
+        )
+        _gfpgan_start = time.time()
+        for _gline in proc.stdout:
+            _gline = _gline.strip()
+            if not _gline: continue
+            try:
+                _gdata = _gj.loads(_gline)
+                if _gdata.get("progress") is not None and job_id and job_id in jobs:
+                    _gp = int(_gdata["progress"] * 100 / max(1, _gdata.get("total", 1)))
+                    jobs[job_id]["message"] = f"GFPGAN: restaurando qualidade ({_gp}%)..."
+                    jobs[job_id]["progress"] = 70 + int(_gp * 0.1)
+                elif _gdata.get("success"):
+                    print(f"  [GFPGAN] Done: {_gdata.get('frames_processed',0)} frames", flush=True)
+                elif _gdata.get("error"):
+                    print(f"  [GFPGAN] Worker: {_gdata['error']}", flush=True)
+            except Exception:
+                if _gline: print(f"  [GFPGAN] {_gline[:100]}", flush=True)
+            if time.time() - _gfpgan_start > 600:
+                proc.kill(); print("  [GFPGAN] 10min timeout", flush=True); break
+        proc.wait(timeout=30)
+        if proc.returncode != 0 and not os.path.exists(output_path):
+            shutil.copy2(input_path, output_path)
+        elif not os.path.exists(output_path):
+            shutil.copy2(input_path, output_path)
+
+    except subprocess.TimeoutExpired:
+        print("  [GFPGAN] Timeout - using original", flush=True)
+        if not os.path.exists(output_path): shutil.copy2(input_path, output_path)
+    except Exception as e:
+        print(f"  [GFPGAN] error: {e}", flush=True)
+        if not os.path.exists(output_path): shutil.copy2(input_path, output_path)
+
+    return output_path
 
     return output_path
 
@@ -2488,7 +2369,7 @@ def apply_gfpgan_chunked(input_path: str, output_path: str,
             "-vf", f"scale={out_w}:{out_h}:force_original_aspect_ratio=decrease,"
                    f"pad={out_w}:{out_h}:(ow-iw)/2:(oh-ih)/2,"
                    f"unsharp=5:5:1.5:5:5:0.0",
-            "-c:v", "libx264", "-crf", "18", "-preset", "fast",
+            "-c:v", "libx264", "-crf", "16", "-preset", "fast",
             "-b:v", "2500k", "-maxrate", "4000k", "-bufsize", "8000k",
             "-pix_fmt", "yuv420p",
             "-c:a", "copy", part2_enh
@@ -2756,7 +2637,7 @@ def remove_background_from_video(video_path: str, bg_image: str, output_path: st
         subprocess.run([ffmpeg, "-y", "-framerate", str(fps),
                         "-i", os.path.join(out_dir, "frame_%05d.png"),
                         "-i", video_path, "-map", "0:v", "-map", "1:a?",
-                        "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+                        "-c:v", "libx264", "-preset", "fast", "-crf", "16",
                         "-c:a", "aac", "-shortest", output_path],
                        capture_output=True, timeout=600)
         print(f"  [rembg video] Done → {output_path}")
@@ -2836,7 +2717,7 @@ def burn_captions(video_path: str, srt_content: str, output_path: str,
         r = subprocess.run([
             ffmpeg, "-y", "-i", video_path,
             "-vf", f"subtitles='{srt_escaped}':force_style='{style_str}'",
-            "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+            "-c:v", "libx264", "-preset", "fast", "-crf", "16",
             "-c:a", "copy", output_path
         ], capture_output=True, timeout=600)
         if r.returncode != 0:
@@ -3983,7 +3864,7 @@ def export_additional_format(video_path: str, output_dir: str,
                "-c:a", "libopus", "-b:a", "128k", out_path]
     elif fmt == "mov":
         cmd = [ffmpeg, "-y", "-i", video_path,
-               "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+               "-c:v", "libx264", "-preset", "fast", "-crf", "16",
                "-c:a", "aac", "-b:a", "192k",
                "-movflags", "+faststart", out_path]
     elif fmt == "gif":
@@ -4508,7 +4389,7 @@ def run_pipeline(job_id: str, config: dict):
                     apply_gfpgan_chunked(avatar_video, gfpgan_out, job_id=job_id, max_gfpgan_seconds=300)
                     if os.path.exists(gfpgan_out) and os.path.getsize(gfpgan_out) > 10000:
                         _safe_rm(avatar_video)
-                        os.rename(gfpgan_out, avatar_video)
+                        _safe_rename(gfpgan_out, avatar_video)
                 print(f"  [Gesture] Pipeline concluído com gestos reais")
             except Exception as _gest_err:
                 print(f"  [Gesture] Falhou ({_gest_err}) — fallback para SadTalker")
@@ -4565,7 +4446,7 @@ def run_pipeline(job_id: str, config: dict):
                             run_musetalk(avatar_video, audio_path, _mst_short_out, job_id=None)
                             if os.path.exists(_mst_short_out) and os.path.getsize(_mst_short_out) > 10000:
                                 _safe_rm(avatar_video)
-                                os.rename(_mst_short_out, avatar_video)
+                                _safe_rename(_mst_short_out, avatar_video)
                                 print("  [MuseTalk] Short-clip lip sync OK")
                         except Exception as _mst_s_err:
                             print(f"  [MuseTalk] Short-clip falhou ({_mst_s_err}) — mantendo SadTalker")
@@ -4576,7 +4457,7 @@ def run_pipeline(job_id: str, config: dict):
                     apply_gfpgan_chunked(avatar_video, _st_gfpgan_out, job_id=job_id, max_gfpgan_seconds=600)
                     if os.path.exists(_st_gfpgan_out) and os.path.getsize(_st_gfpgan_out) > 10000:
                         _safe_rm(avatar_video)
-                        os.rename(_st_gfpgan_out, avatar_video)
+                        _safe_rename(_st_gfpgan_out, avatar_video)
                     # Validar output do SadTalker+GFPGAN antes do body sway
                     _sg_ok, _sg_reason = _validate_video_output(avatar_video, expected_dur=dur)
                     print(f"  [Pipeline] SadTalker+GFPGAN validação: {_sg_reason}")
@@ -4585,7 +4466,7 @@ def run_pipeline(job_id: str, config: dict):
                         _sync_st = os.path.join(OUTPUT_DIR, f"{job_id}_sync.mp4")
                         if _fix_av_sync(avatar_video, _sync_st):
                             _safe_rm(avatar_video)
-                            os.rename(_sync_st, avatar_video)
+                            _safe_rename(_sync_st, avatar_video)
                     # Body sway: adiciona movimento natural de respiração/balanço
                     if _sg_ok and os.path.exists(avatar_video) and os.path.getsize(avatar_video) > 10000:
                         jobs[job_id]["message"] = "Body sway: adicionando movimento corporal natural..."
@@ -4593,7 +4474,7 @@ def run_pipeline(job_id: str, config: dict):
                         add_body_sway_to_video(avatar_video, _sway_out, intensity=1.0)
                         if os.path.exists(_sway_out) and os.path.getsize(_sway_out) > 10000:
                             _safe_rm(avatar_video)
-                            os.rename(_sway_out, avatar_video)
+                            _safe_rename(_sway_out, avatar_video)
                 except Exception as _st_err:
                     _st_done.set()
                     print(f"  [SadTalker] Falhou ({_st_err}) — fallback para Wav2Lip")
@@ -4614,17 +4495,17 @@ def run_pipeline(job_id: str, config: dict):
                         gfpgan_out = os.path.join(OUTPUT_DIR, f"{job_id}_gfpgan.mp4")
                         apply_gfpgan_chunked(avatar_video, gfpgan_out, job_id=job_id, max_gfpgan_seconds=180)
                         if os.path.exists(gfpgan_out) and os.path.getsize(gfpgan_out) > 10000:
-                            _safe_rm(avatar_video); os.rename(gfpgan_out, avatar_video)
+                            _safe_rm(avatar_video); _safe_rename(gfpgan_out, avatar_video)
                     # A/V sync fix
                     _fb_sync = os.path.join(OUTPUT_DIR, f"{job_id}_sync.mp4")
                     if _fix_av_sync(avatar_video, _fb_sync):
-                        _safe_rm(avatar_video); os.rename(_fb_sync, avatar_video)
+                        _safe_rm(avatar_video); _safe_rename(_fb_sync, avatar_video)
                     # Body sway (igual ao caminho SadTalker)
                     if os.path.exists(avatar_video) and os.path.getsize(avatar_video) > 10000:
                         _fb_sway = os.path.join(OUTPUT_DIR, f"{job_id}_sway.mp4")
                         add_body_sway_to_video(avatar_video, _fb_sway, intensity=1.0)
                         if os.path.exists(_fb_sway) and os.path.getsize(_fb_sway) > 10000:
-                            _safe_rm(avatar_video); os.rename(_fb_sway, avatar_video)
+                            _safe_rm(avatar_video); _safe_rename(_fb_sway, avatar_video)
 
                 # Validar output final do SadTalker path
                 _av_ok, _av_reason = _validate_video_output(avatar_video, expected_dur=dur)
@@ -4642,6 +4523,7 @@ def run_pipeline(job_id: str, config: dict):
                 _ffmpeg_bin = _ffmpeg_path()
                 _base_video = ""
                 _loop_dir = ""
+                _gesture_lipsync_done = False
 
                 # Try gesture pack first (HeyGen-quality path)
                 _gesture_pack = _list_gesture_templates()
@@ -4655,15 +4537,47 @@ def run_pipeline(job_id: str, config: dict):
                         jobs[job_id]["message"] = f"Gesture Pack: {len(_gesture_pack)} templates disponíveis. Montando..."
                         _seq_video = os.path.join(_loop_dir, "sequence.mp4")
                         _build_long_gesture_sequence(dur, _gesture_pack, _seq_video, job_id=job_id)
-                        # Face swap onto the assembled gesture sequence
-                        jobs[job_id]["message"] = "Face swap: aplicando rosto do cliente em todos os gestos..."
+                        # NEW ORDER: lip sync FIRST on original actor face (Wav2Lip detects it fine),
+                        # then face swap. This fixes Wav2Lip code-1 failures on swapped faces.
+                        jobs[job_id]["message"] = f"MuseTalk/Wav2Lip: sincronizando labios no video original ({dur:.0f}s)..."
+                        _lip_synced = os.path.join(_loop_dir, "lip_synced.mp4")
+                        _ls_ok = False
+                        # Try MuseTalk first (best quality), fallback to Wav2Lip
+                        if check_musetalk():
+                            try:
+                                run_musetalk_chunked(
+                                    _seq_video, audio_path, _lip_synced,
+                                    settings={}, chunk_duration=300, job_id=job_id
+                                )
+                                _ls_v, _ls_r = _validate_video_output(_lip_synced, expected_dur=dur)
+                                if _ls_v:
+                                    _ls_ok = True
+                                    print(f"  [Pipeline] MuseTalk gesture lip sync OK", flush=True)
+                            except Exception as _mst_gs_e:
+                                print(f"  [Pipeline] MuseTalk gesture falhou ({_mst_gs_e}) -> Wav2Lip", flush=True)
+                        if not _ls_ok:
+                            try:
+                                run_wav2lip_chunked(
+                                    _seq_video, audio_path, _lip_synced,
+                                    settings={}, chunk_duration=300, job_id=job_id
+                                )
+                                _ls_v2, _ls_r2 = _validate_video_output(_lip_synced, expected_dur=dur)
+                                if _ls_v2:
+                                    _ls_ok = True
+                                    print(f"  [Pipeline] Wav2Lip gesture lip sync OK", flush=True)
+                            except Exception as _w2l_gs_e:
+                                print(f"  [Pipeline] Wav2Lip gesture falhou ({_w2l_gs_e}) -> usando seq original", flush=True)
+                        _face_src_for_swap = _lip_synced if (_ls_ok and os.path.exists(_lip_synced)) else _seq_video
+                        # NOW face swap (on lip-synced or original sequence)
+                        jobs[job_id]["message"] = "Face Swap: aplicando rosto no video lip-synced..."
                         _swapped = os.path.join(_loop_dir, "swapped.mp4")
                         swap_face_on_gesture_video(
-                            config["image_path"], _seq_video, _swapped, job_id=job_id
+                            config["image_path"], _face_src_for_swap, _swapped, job_id=job_id
                         )
                         if os.path.exists(_swapped) and os.path.getsize(_swapped) > 100_000:
                             _base_video = _swapped
-                            print(f"  [Pipeline] Gesture pack OK ({len(_gesture_pack)} tpls): {_swapped}")
+                            _gesture_lipsync_done = True  # skip second lip sync step
+                            print(f"  [Pipeline] Gesture pack OK ({len(_gesture_pack)} tpls, lip_sync_first={_ls_ok}): {_swapped}")
                     except Exception as _gpe:
                         print(f"  [Pipeline] Gesture pack falhou ({_gpe}) — fallback SadTalker loop")
                         _base_video = ""
@@ -4690,7 +4604,7 @@ def run_pipeline(job_id: str, config: dict):
                         # Higher source = better final output (avoids "240p look" from stretching).
                         _st_base_settings = {
                             "preprocess": "full", "still": False,
-                            "expression_scale": 1.0, "enhancer": "none", "size": 512,
+                            "expression_scale": 1.4, "enhancer": "none", "size": 512,
                         }
                         run_sadtalker(config["image_path"], _base_audio, _base_out, _st_base_settings)
 
@@ -4735,6 +4649,24 @@ def run_pipeline(job_id: str, config: dict):
                 # on RTX 4060 — auto-skip to Wav2Lip which handles 1h in ~30min with good quality.
                 _face_src = _base_video if _base_video else config["image_path"]
                 _mode_label = "vídeo animado" if _base_video else "imagem estática"
+                # Skip lip sync if already done in gesture-first path
+                if _gesture_lipsync_done and _base_video and os.path.exists(_base_video):
+                    # Mux audio onto face-swapped+lip-synced video and jump to GFPGAN
+                    _mux_fb = os.path.join(OUTPUT_DIR, f"{job_id}_muxed.mp4")
+                    _mux_r = subprocess.run([
+                        _ffmpeg_path(), "-y", "-i", _base_video, "-i", audio_path,
+                        "-map", "0:v:0", "-map", "1:a:0",
+                        "-c:v", "copy", "-c:a", "aac", "-b:a", "256k", "-shortest", _mux_fb
+                    ], capture_output=True, timeout=max(300, int(dur * 2)))
+                    if _mux_r.returncode == 0 and os.path.exists(_mux_fb) and os.path.getsize(_mux_fb) > 10000:
+                        shutil.copy2(_mux_fb, avatar_video)
+                        _safe_rm(_mux_fb)
+                    else:
+                        shutil.copy2(_base_video, avatar_video)
+                    _av_ok3, _av_reason3 = _validate_video_output(avatar_video, expected_dur=dur)
+                    print(f"  [Pipeline] Gesture+LipSync+Swap direto: {_av_reason3}", flush=True)
+                    if not _av_ok3:
+                        raise Exception(f"Gesture pipeline falhou: {_av_reason3}")
                 # Downscale face-swapped video to 720p before lip sync (MuseTalk/Wav2Lip OOM at 1080p on 8GB VRAM)
                 if _base_video:
                     try:
@@ -4788,13 +4720,38 @@ def run_pipeline(job_id: str, config: dict):
                 else:
                     jobs[job_id]["message"] = f"Wav2Lip: sincronizando lábios em {_mode_label} ({dur:.0f}s)..."
                     print(f"  [Pipeline] Wav2Lip em {_mode_label}")
-                    run_wav2lip_chunked(
-                        _face_src, audio_path, avatar_video,
-                        settings={}, chunk_duration=300, job_id=job_id
-                    )
+                    _w2l_gesture_ok = False
+                    try:
+                        run_wav2lip_chunked(
+                            _face_src, audio_path, avatar_video,
+                            settings={}, chunk_duration=300, job_id=job_id
+                        )
+                        _av_ok, _av_reason = _validate_video_output(avatar_video, expected_dur=dur)
+                        if _av_ok:
+                            _w2l_gesture_ok = True
+                        else:
+                            print(f"  [Pipeline] Wav2Lip output inválido ({_av_reason}) — usando face-swap direto", flush=True)
+                    except Exception as _w2l_ge:
+                        print(f"  [Pipeline] Wav2Lip falhou ({_w2l_ge}) — fallback: muxando áudio no face-swap", flush=True)
+                    if not _w2l_gesture_ok:
+                        # Graceful fallback: mux the audio onto the face-swapped base video
+                        # The lips won't be perfectly synced, but the video is still HeyGen-quality
+                        _fb_out = os.path.join(OUTPUT_DIR, f"{job_id}_fb.mp4")
+                        _mux_r = subprocess.run([
+                            _ffmpeg_path(), "-y", "-i", _face_src, "-i", audio_path,
+                            "-map", "0:v:0", "-map", "1:a:0",
+                            "-c:v", "copy", "-c:a", "aac", "-b:a", "256k",
+                            "-shortest", _fb_out
+                        ], capture_output=True, timeout=max(300, int(dur * 2)))
+                        if _mux_r.returncode == 0 and os.path.exists(_fb_out) and os.path.getsize(_fb_out) > 10000:
+                            shutil.copy2(_fb_out, avatar_video)
+                            _safe_rm(_fb_out)
+                            print(f"  [Pipeline] Fallback mux OK — gesture+face_swap sem lip sync extra", flush=True)
+                        else:
+                            raise Exception(f"Wav2Lip e fallback mux falharam")
                     _av_ok, _av_reason = _validate_video_output(avatar_video, expected_dur=dur)
                     if not _av_ok:
-                        raise Exception(f"Wav2Lip falhou: {_av_reason}")
+                        raise Exception(f"Avatar video inválido após lip sync: {_av_reason}")
 
                 # Step 4: GFPGAN (escala com duração)
                 if os.path.exists(avatar_video) and os.path.getsize(avatar_video) > 10000:
@@ -4804,18 +4761,18 @@ def run_pipeline(job_id: str, config: dict):
                     apply_gfpgan_chunked(avatar_video, gfpgan_out, job_id=job_id, max_gfpgan_seconds=_gfpgan_time)
                     if os.path.exists(gfpgan_out) and os.path.getsize(gfpgan_out) > 10000:
                         _safe_rm(avatar_video)
-                        os.rename(gfpgan_out, avatar_video)
+                        _safe_rename(gfpgan_out, avatar_video)
                 # A/V sync fix
                 _w2l_sync = os.path.join(OUTPUT_DIR, f"{job_id}_sync.mp4")
                 if _fix_av_sync(avatar_video, _w2l_sync):
-                    _safe_rm(avatar_video); os.rename(_w2l_sync, avatar_video)
+                    _safe_rm(avatar_video); _safe_rename(_w2l_sync, avatar_video)
                 # Body sway no topo do SadTalker loop — adiciona variação extra
                 if os.path.exists(avatar_video) and os.path.getsize(avatar_video) > 10000:
                     jobs[job_id]["message"] = "Body sway: finalizando movimento corporal..."
                     _w2l_sway = os.path.join(OUTPUT_DIR, f"{job_id}_sway.mp4")
                     add_body_sway_to_video(avatar_video, _w2l_sway, intensity=0.5)
                     if os.path.exists(_w2l_sway) and os.path.getsize(_w2l_sway) > 10000:
-                        _safe_rm(avatar_video); os.rename(_w2l_sway, avatar_video)
+                        _safe_rm(avatar_video); _safe_rename(_w2l_sway, avatar_video)
                 # Validar output final
                 _av_ok2, _av_reason2 = _validate_video_output(avatar_video, expected_dur=dur)
                 print(f"  [Pipeline] Long-clip validação: {_av_reason2}")
@@ -4859,7 +4816,7 @@ def run_pipeline(job_id: str, config: dict):
             _sync_out = os.path.join(OUTPUT_DIR, f"{job_id}_sync.mp4")
             if _fix_av_sync(avatar_video, _sync_out):
                 _safe_rm(avatar_video)
-                os.rename(_sync_out, avatar_video)
+                _safe_rename(_sync_out, avatar_video)
                 print("  [AVSync] Sync fix aplicado ao vídeo")
             # NÃO aplicar GFPGAN — vídeo original já tem boa qualidade
             jobs[job_id]["progress"] = 72
@@ -4916,7 +4873,7 @@ def run_pipeline(job_id: str, config: dict):
                     }
                     burn_captions(final_output, srt_content, captioned, style=caption_style)
                     _safe_rm(final_output)
-                    os.rename(captioned, final_output)
+                    _safe_rename(captioned, final_output)
                     # Save SRT alongside output
                     srt_out = os.path.join(OUTPUT_DIR, f"{job_id}.srt")
                     with open(srt_out, "w", encoding="utf-8") as _sf:
@@ -4951,7 +4908,7 @@ def run_pipeline(job_id: str, config: dict):
             apply_output_format(final_output, fmt_out, fmt=output_fmt)
             if os.path.exists(fmt_out) and os.path.getsize(fmt_out) > 1000:
                 _safe_rm(final_output)
-                os.rename(fmt_out, final_output)
+                _safe_rename(fmt_out, final_output)
 
         # ── Step 3d: Watermark ─────────────────────────────────────────────
         wm_settings = load_settings()
@@ -4967,7 +4924,7 @@ def run_pipeline(job_id: str, config: dict):
                           opacity=float(config.get("watermark_opacity", 0.7)))
             if os.path.exists(wm_out) and os.path.getsize(wm_out) > 1000:
                 _safe_rm(final_output)
-                os.rename(wm_out, final_output)
+                _safe_rename(wm_out, final_output)
 
         # ── Step 3e: Background music ──────────────────────────────────────
         music_src = config.get("music_url", "")
@@ -4988,7 +4945,7 @@ def run_pipeline(job_id: str, config: dict):
                                      music_volume=float(config.get("music_volume", 0.15)))
                 if os.path.exists(music_out) and os.path.getsize(music_out) > 1000:
                     _safe_rm(final_output)
-                    os.rename(music_out, final_output)
+                    _safe_rename(music_out, final_output)
 
         # ── Step 3f: Fade in/out ───────────────────────────────────────────
         if config.get("enable_fade", False):
@@ -5000,7 +4957,7 @@ def run_pipeline(job_id: str, config: dict):
                        fade_out=float(config.get("fade_out", 0.5)))
             if os.path.exists(fade_out_path) and os.path.getsize(fade_out_path) > 1000:
                 _safe_rm(final_output)
-                os.rename(fade_out_path, final_output)
+                _safe_rename(fade_out_path, final_output)
 
         # ── Step 3g: Additional export format ─────────────────────────────
         extra_fmt = config.get("export_format", "")
@@ -5045,7 +5002,7 @@ def run_pipeline(job_id: str, config: dict):
             if _target_res == "720p":
                 _tw, _th, _vbr, _vmin, _vmax, _vbuf = 1280, 720, "2500k", "2000k", "4000k", "5000k"
             else:
-                _tw, _th, _vbr, _vmin, _vmax, _vbuf = 1920, 1080, "5000k", "4000k", "8000k", "10000k"
+                _tw, _th, _vbr, _vmin, _vmax, _vbuf = 1920, 1080, "8000k", "6000k", "12000k", "16000k"
 
             # AI UPSCALE: if source is small (<720p), use Real-ESRGAN x2 to *generate detail*
             # instead of just stretching (which causes the "240p look" complaint).
@@ -5053,7 +5010,7 @@ def run_pipeline(job_id: str, config: dict):
             _use_ai_upscale = config.get("ai_upscale", "auto")
             if _use_ai_upscale == "auto":
                 # Auto-enable for short clips with small source
-                _use_ai_upscale = (dur <= 120 and max(_cur_w, _cur_h) < 800)
+                _use_ai_upscale = (dur <= 600 and max(_cur_w, _cur_h) < 1080)  # AI upscale for <=10min videos
             if _use_ai_upscale:
                 jobs[job_id]["message"] = "AI Upscale (Real-ESRGAN x2): aumentando detalhe..."
                 _ai_out = os.path.join(_hd_tmp, "ai_upscaled.mp4")
@@ -5077,20 +5034,20 @@ def run_pipeline(job_id: str, config: dict):
             _needs_hd = True
             if _needs_hd:
                 jobs[job_id]["message"] = f"HD final: {_cur_w}×{_cur_h}→{_tw}×{_th} @ {_vbr}..."
-                _hd_preset  = "fast" if dur > 120 else "medium"
+                _hd_preset  = "medium" if dur > 300 else "slow"
                 # Timeout realista: libx264 fast = ~100fps CPU → 4× vídeo + 5min buffer for 1080p
                 _hd_timeout = max(300, int(dur * 4) + 300)
                 # scale+crop + denoise + sharpen + color grade for HeyGen-class look
                 _vf = (f"scale={_tw}:{_th}:force_original_aspect_ratio=increase:flags=lanczos,"
                        f"crop={_tw}:{_th},"
                        "hqdn3d=1.5:1.5:3:3,"
-                       "unsharp=5:5:1.0:5:5:0.0,"
-                       "eq=contrast=1.05:brightness=0.003:saturation=1.08:gamma=1.01")
+                       "unsharp=5:5:1.2:5:5:0.0,"
+                       "eq=contrast=1.06:brightness=0.002:saturation=1.12:gamma=1.01")
                 _hd_cmd = [_ff2, "-y", "-i", _safe_in,
                            "-vf", _vf,
-                           "-c:v", "libx264", "-preset", _hd_preset, "-crf", "18",
+                           "-c:v", "libx264", "-preset", _hd_preset, "-crf", "16",
                            "-b:v", _vbr, "-minrate", _vmin, "-maxrate", _vmax, "-bufsize", _vbuf,
-                           "-c:a", "aac", "-b:a", "192k", "-ar", "44100",
+                           "-c:a", "aac", "-b:a", "256k", "-ar", "48000",
                            "-pix_fmt", "yuv420p",
                            "-movflags", "+faststart",
                            _safe_out]
@@ -5237,6 +5194,26 @@ def _safe_rm(path):
             os.remove(path)
     except OSError:
         pass
+
+def _safe_rename(src, dst):
+    """Windows-safe rename: handles WinError 183 (dest already exists) with retry + fallback.
+    On Windows, os.rename raises if dst exists, even after _safe_rm if file was just closed.
+    Retry 5x with 300ms sleep before falling back to copy+delete."""
+    for attempt in range(5):
+        try:
+            if os.path.exists(dst):
+                os.remove(dst)
+            os.rename(src, dst)
+            return
+        except OSError:
+            if attempt < 4:
+                time.sleep(0.3)
+    # Final fallback: copy then delete
+    try:
+        shutil.copy2(src, dst)
+        _safe_rm(src)
+    except Exception as _e:
+        print(f"  [_safe_rename] WARN: fallback copy also failed: {_e}", flush=True)
 
 def _advance_batch_queue():
     """Start next batch job if any is waiting."""
@@ -5449,175 +5426,92 @@ def _build_long_gesture_sequence(audio_dur: float, templates: list,
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-def swap_face_on_gesture_video(
-    src_photo: str, gesture_video: str, output_path: str,
-    job_id: str = None
-) -> str:
+def swap_face_on_gesture_video(source_img: str, gesture_video: str, output_path: str,
+                                job_id: str = None) -> str:
     """
-    Troca o rosto do usuário (src_photo) em cada frame do gesture_video.
-    Usa InsightFace inswapper_128 — mesmo motor que os serviços profissionais.
-    Retorna output_path com o vídeo face-swapped.
+    Swap the user face onto every frame of a gesture video using InsightFace.
+    NOW runs in an isolated subprocess to prevent OOM from killing Flask server.
+    Falls back to original gesture video if swap fails.
     """
-    import tempfile as _tfgs
-    import cv2 as _cv2
-    import numpy as _np
-
-    ff  = _ffmpeg_path()
-    ffp = _ffprobe_path()
-
-    _tmp = _tfgs.mkdtemp(prefix="fswap_vid_")
-    try:
-        # ── Carregar InsightFace ─────────────────────────────────────────────
-        try:
-            import insightface
-            from insightface.app import FaceAnalysis
-        except ImportError:
-            raise Exception("InsightFace não instalado. Execute: pip install insightface onnxruntime-gpu")
-
-        if job_id and job_id in jobs:
-            jobs[job_id]["message"] = "Face Swap: carregando modelo InsightFace..."
-
-        # Force CUDA providers for InsightFace (10-50x speedup vs CPU).
-        # Falls back to CPU automatically if CUDA unavailable.
-        _onnx_providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
-        face_app = FaceAnalysis(name="buffalo_l", providers=_onnx_providers)
-        face_app.prepare(ctx_id=0, det_size=(640, 640))
-
-        # Carregar modelo inswapper
-        _inswapper_paths = [
-            os.path.join(MODELS_DIR, "inswapper_128.onnx"),
-            os.path.join(MODELS_DIR, "SadTalker", "inswapper_128.onnx"),
-        ]
-        _inswapper_path = next((p for p in _inswapper_paths if os.path.exists(p)), None)
-        if not _inswapper_path:
-            # InsightFace baixa automaticamente
-            swapper = insightface.model_zoo.get_model("inswapper_128.onnx", root=MODELS_DIR)
-        else:
-            swapper = insightface.model_zoo.get_model(_inswapper_path)
-
-        # ── Detectar rosto na foto do usuário ────────────────────────────────
-        src_raw = open(src_photo, "rb").read()
-        src_img = _cv2.imdecode(_np.frombuffer(src_raw, dtype=_np.uint8), _cv2.IMREAD_COLOR)
-        if src_img is None:
-            raise Exception("Não foi possível ler a foto do usuário")
-
-        src_faces = face_app.get(src_img)
-        if not src_faces:
-            raise Exception("Nenhum rosto detectado na foto do usuário. Use foto com rosto frontal.")
-        src_face = max(src_faces, key=lambda f: f.bbox[2] * f.bbox[3])  # maior rosto
-
-        # ── Extrair frames do gesture video ─────────────────────────────────
-        if job_id and job_id in jobs:
-            jobs[job_id]["message"] = "Face Swap: extraindo frames do vídeo de gestos..."
-
-        frames_dir = os.path.join(_tmp, "frames")
-        os.makedirs(frames_dir, exist_ok=True)
-
-        # Pegar info do vídeo
-        _probe = subprocess.run(
-            [ffp,"-v","error","-select_streams","v:0",
-             "-show_entries","stream=width,height,r_frame_rate","-of","csv=p=0", gesture_video],
-            capture_output=True, timeout=15
-        )
-        _info = _probe.stdout.decode().strip().split(",")
-        vid_w  = int(_info[0]) if len(_info) > 0 else 1280
-        vid_h  = int(_info[1]) if len(_info) > 1 else 720
-        # r_frame_rate pode vir como "25/1"
-        _fps_str = _info[2] if len(_info) > 2 else "25/1"
-        try:
-            _fps_parts = _fps_str.split("/")
-            fps = float(_fps_parts[0]) / float(_fps_parts[1])
-        except Exception:
-            fps = 25.0
-
-        subprocess.run(
-            [ff, "-y", "-i", gesture_video,
-             "-vf", f"scale={vid_w}:{vid_h}",
-             os.path.join(frames_dir, "frame_%06d.png")],
-            capture_output=True, timeout=max(600, int(_get_duration_safe(gesture_video) * 10))
-        )
-
-        frame_files = sorted([f for f in os.listdir(frames_dir) if f.endswith(".png")])
-        if not frame_files:
-            raise Exception("Nenhum frame extraído do gesture video")
-
-        total_frames = len(frame_files)
-        print(f"  [FaceSwap] {total_frames} frames @ {fps:.0f}fps | {vid_w}×{vid_h}")
-
-        # ── Swap rosto em cada frame ─────────────────────────────────────────
-        out_frames_dir = os.path.join(_tmp, "out_frames")
-        os.makedirs(out_frames_dir, exist_ok=True)
-
-        for i, fname in enumerate(frame_files):
-            frame_path = os.path.join(frames_dir, fname)
-            out_frame_path = os.path.join(out_frames_dir, fname)
-
-            frame = _cv2.imread(frame_path)
-            if frame is None:
-                shutil.copy2(frame_path, out_frame_path)
-                continue
-
-            tgt_faces = face_app.get(frame)
-            if tgt_faces:
-                # Swap maior rosto no frame
-                tgt_face = max(tgt_faces, key=lambda f: f.bbox[2] * f.bbox[3])
-                try:
-                    frame = swapper.get(frame, tgt_face, src_face, paste_back=True)
-                except Exception as _fsf:
-                    if i % 100 == 0:
-                        print(f"  [FaceSwap] Frame {i}: swap failed ({_fsf})")
-
-            _cv2.imwrite(out_frame_path, frame)
-
-            if i % 25 == 0:
-                pct = int(i / total_frames * 60) + 10
-                if job_id and job_id in jobs:
-                    jobs[job_id]["message"] = f"Face Swap: {i}/{total_frames} frames ({pct}%)..."
-                    jobs[job_id]["progress"] = pct
-
-        # ── Reconstruir vídeo ────────────────────────────────────────────────
-        if job_id and job_id in jobs:
-            jobs[job_id]["message"] = "Face Swap: reconstruindo vídeo..."
-
-        raw_video = os.path.join(_tmp, "raw_swapped.mp4")
-        subprocess.run(
-            [ff, "-y",
-             "-framerate", str(fps),
-             "-i", os.path.join(out_frames_dir, "frame_%06d.png"),
-             "-c:v", "libx264", "-preset", "fast", "-crf", "17",
-             "-pix_fmt", "yuv420p", raw_video],
-            capture_output=True, timeout=max(600, int(total_frames * 0.5))
-        )
-
-        if not os.path.exists(raw_video) or os.path.getsize(raw_video) < 10000:
-            raise Exception("Reconstrução do vídeo face-swapped falhou")
-
-        # Copiar áudio do gesture video original (se houver) — será substituído pelo Wav2Lip depois
-        final_tmp = os.path.join(_tmp, "final.mp4")
-        _audio_check = subprocess.run(
-            [ffp,"-v","error","-select_streams","a:0","-show_entries","stream=codec_name",
-             "-of","csv=p=0", gesture_video], capture_output=True, timeout=10
-        )
-        if _audio_check.stdout.decode().strip():
-            subprocess.run(
-                [ff,"-y","-i",raw_video,"-i",gesture_video,
-                 "-map","0:v","-map","1:a","-c:v","copy","-c:a","aac","-shortest",final_tmp],
-                capture_output=True, timeout=300
-            )
-        else:
-            shutil.copy2(raw_video, final_tmp)
-
-        if os.path.exists(final_tmp) and os.path.getsize(final_tmp) > 10000:
-            shutil.copy2(final_tmp, output_path)
-        else:
-            shutil.copy2(raw_video, output_path)
-
-        print(f"  [FaceSwap] Concluído → {output_path} ({os.path.getsize(output_path)//1024}KB)")
+    worker_script = os.path.join(BASE_DIR, "face_swap_worker.py")
+    if not os.path.exists(worker_script):
+        print("  [FaceSwap] worker script not found - skipping swap", flush=True)
+        shutil.copy2(gesture_video, output_path)
         return output_path
 
-    finally:
-        # Limpar frames (podem ser muitos arquivos grandes)
-        shutil.rmtree(_tmp, ignore_errors=True)
+    # Find inswapper model
+    _swap_candidates = [
+        os.path.join(MODELS_DIR, "inswapper_128.onnx"),
+        os.path.join(MODELS_DIR, "SadTalker", "inswapper_128.onnx"),
+    ]
+    swap_model = next((p for p in _swap_candidates if os.path.exists(p)), None)
+    if not swap_model:
+        print("  [FaceSwap] inswapper_128.onnx not found - skipping", flush=True)
+        shutil.copy2(gesture_video, output_path)
+        return output_path
+
+    python_exe = os.path.join(BASE_DIR, "venv311", "Scripts", "python.exe")
+    if not os.path.exists(python_exe):
+        python_exe = sys.executable
+
+    if job_id and job_id in jobs:
+        jobs[job_id]["message"] = "Face Swap: aplicando rosto (subprocess isolado)..."
+    print(f"  [FaceSwap] Running in subprocess (isolated from Flask)", flush=True)
+
+    try:
+        import json as _j
+        # Use Popen for real-time progress reading (prevents watchdog stall-kill)
+        proc = subprocess.Popen(
+            [python_exe, worker_script, source_img, gesture_video, output_path, swap_model],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            cwd=BASE_DIR, text=True, encoding="utf-8", errors="replace",
+        )
+        _start_t = time.time()
+        _timeout = 3600  # 60 min max for large face swaps
+        _last_update = time.time()
+        for line in proc.stdout:
+            line = line.strip()
+            if not line: continue
+            try:
+                data = _j.loads(line)
+                if data.get("progress") is not None and job_id and job_id in jobs:
+                    pct = int(data["progress"] * 100 / max(1, data.get("total", 1)))
+                    jobs[job_id]["message"] = f"Face Swap: {data['progress']}/{data.get('total',0)} frames ({pct}%)..."
+                    jobs[job_id]["progress"] = 35 + int(pct * 0.3)  # 35-65% range
+                    _last_update = time.time()
+                elif data.get("error"):
+                    print(f"  [FaceSwap] Worker: {data['error']}", flush=True)
+                elif data.get("success"):
+                    print(f"  [FaceSwap] Done: {data.get('frames',0)} frames", flush=True)
+            except Exception:
+                print(f"  [FaceSwap] {line}", flush=True)
+            # Timeout guard
+            if time.time() - _start_t > _timeout:
+                proc.kill()
+                print("  [FaceSwap] Timeout 30min - killed", flush=True)
+                break
+        proc.wait(timeout=60)
+
+        if proc.returncode != 0 and not os.path.exists(output_path):
+            print(f"  [FaceSwap] Worker failed (code {proc.returncode}) - using original", flush=True)
+            shutil.copy2(gesture_video, output_path)
+        elif not os.path.exists(output_path):
+            shutil.copy2(gesture_video, output_path)
+        else:
+            print(f"  [FaceSwap] Done: {output_path}", flush=True)
+
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        print("  [FaceSwap] Timeout - using original gesture video", flush=True)
+        if not os.path.exists(output_path):
+            shutil.copy2(gesture_video, output_path)
+    except Exception as e:
+        print(f"  [FaceSwap] subprocess error: {e} - using original", flush=True)
+        if not os.path.exists(output_path):
+            shutil.copy2(gesture_video, output_path)
+
+    return output_path
+
 
 # ============================================================================
 # ROUTES — CORE
@@ -8429,7 +8323,7 @@ def _attach_request_id():
 # ── Watchdog thread: detects stuck jobs and auto-recovers them ───────────────
 # 4h: long enough for 1h video on RTX 4060 (SadTalker base ~3min + MuseTalk chunked ~2h
 # + GFPGAN chunked ~30min + HD encode ~20min ≈ 3h total). Tune up for slower hardware.
-_STUCK_JOB_TIMEOUT_MIN = 30  # 30min (was 240min - reduced for faster dead-worker detection)
+_STUCK_JOB_TIMEOUT_MIN = 240  # 240min (4h) - Face Swap(23min)+Wav2Lip+GFPGAN+HD encode
 
 def _auto_cleanup_old_outputs():
     """
@@ -8512,7 +8406,7 @@ def _watchdog_loop():
     _last_cleanup = _wt.time()
     # Track last-seen progress per job to detect stalls
     _last_progress = {}  # jid -> (progress, timestamp)
-    _STALL_TIMEOUT_SEC = 600  # 10 min with zero progress change = dead
+    _STALL_TIMEOUT_SEC = 3600  # 60 min with zero progress = dead (GPU ops can take 30min+)
     while True:
         try:
             _wt.sleep(30)  # Check every 30s (was 60s)
