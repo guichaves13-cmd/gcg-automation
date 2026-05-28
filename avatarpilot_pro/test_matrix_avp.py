@@ -29,6 +29,7 @@ OUTPUTS  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "outputs")
 PHASE = (sys.argv[1].lower() if len(sys.argv) > 1 else "all")
 RUN_FAST  = PHASE in ("fast", "all")
 RUN_HEAVY = PHASE in ("heavy", "all")
+RUN_XLONG = PHASE in ("xlong",)  # vídeos enormes (5min) — só sob demanda (~1-2h)
 
 passes = fails = 0
 fail_log = []
@@ -309,7 +310,9 @@ if RUN_HEAVY:
             result = wait(jid, timeout_s=tmo, poll=15)
             elapsed = time.time() - t0
             out = result.get("output_path","")
-            info = validate_mp4(out, min_dur=min_dur, min_kb=50)
+            # Assertar 1920x1080: pega regressões de resolução (ex: bug _find_ffmpeg
+            # que deixava o output em 720x400 quando o HD encode falhava silenciosamente)
+            info = validate_mp4(out, min_dur=min_dur, min_kb=50, expect_w=1920, expect_h=1080)
             ok(f"{tid} — job ~{target_s}s OK em {elapsed/60:.1f}min",
                f"{info['dur']:.1f}s {info['w']}x{info['h']} {info['kb']}KB")
         except Exception as e:
@@ -404,6 +407,41 @@ if RUN_HEAVY:
             fail("M5.4 — consistência", "menos de 2 repetições completaram")
     except Exception as e:
         fail("M5.4 — consistência", str(e)[:150])
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+if RUN_XLONG:
+    sep("M6 — VÍDEO ENORME (5min/300s — stress de duração extrema)")
+# ══════════════════════════════════════════════════════════════════════════════
+# Vídeo muito longo (>90s aciona gesture pack + Wav2Lip chunked). RESUMO estima
+# ~2h de processamento p/ 5min. Valida que o pipeline aguenta durações extremas
+# sem OOM/timeout e ainda entrega 1920x1080.
+
+if RUN_XLONG:
+    try:
+        target_s = 300
+        script = script_for_seconds(target_s)
+        print(f"  [M6.1] Submetendo vídeo ENORME de ~{target_s}s ({len(script)} chars)...")
+        print("  [Nota: pode levar 1-2h — gesture pack + Wav2Lip chunked + HD encode]")
+        with open(IMG, "rb") as f:
+            r = post("/api/generate",
+                     data={"script": script, "voice": "pt-BR-FranciscaNeural",
+                           "engine": "edge-tts", "enhancer": "none"},
+                     files={"image": (os.path.basename(IMG), f, "image/jpeg")},
+                     timeout=30)
+        if r.status_code != 200:
+            fail("M6.1 — submit ~300s", f"HTTP {r.status_code}: {r.text[:80]}")
+        else:
+            jid = r.json().get("job_id","")
+            t0 = time.time()
+            result = wait(jid, timeout_s=10800, poll=30)  # 3h max
+            elapsed = time.time() - t0
+            out = result.get("output_path","")
+            info = validate_mp4(out, min_dur=240.0, min_kb=10000, expect_w=1920, expect_h=1080)
+            ok(f"M6.1 — vídeo ~300s OK em {elapsed/60:.1f}min",
+               f"{info['dur']:.1f}s {info['w']}x{info['h']} {info['kb']}KB")
+    except Exception as e:
+        fail("M6.1 — vídeo enorme 300s", str(e)[:200])
 
 
 # ══════════════════════════════════════════════════════════════════════════════
