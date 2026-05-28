@@ -8823,14 +8823,28 @@ if __name__ == "__main__":
             from waitress import serve
             print(f"  Server:  Waitress (production WSGI) — threads=32, conn_limit=1000")
             print("=" * 60, flush=True)
-            serve(
-                app, host="0.0.0.0", port=5052,
-                threads=32,             # generous for polling-heavy workload
-                connection_limit=1000,  # support many concurrent users
-                channel_timeout=300,    # allow slow downloads of large MP4s
-                max_request_body_size=2 * 1024 * 1024 * 1024,  # 2GB uploads (video avatars)
-                ident="AvatarPilotPro",
-            )
+            # listen on BOTH IPv4 and IPv6. On Windows `localhost` resolves to
+            # ::1 (IPv6) first; if we bound IPv4-only, every NEW connection via
+            # localhost paid a ~2s IPv6→IPv4 fallback penalty (measured). Dual-
+            # stack makes every fresh connection ~13ms instead of ~2000ms.
+            try:
+                serve(
+                    app, listen="0.0.0.0:5052 [::]:5052",
+                    threads=32,             # generous for polling-heavy workload
+                    connection_limit=1000,  # support many concurrent users
+                    channel_timeout=300,    # allow slow downloads of large MP4s
+                    max_request_body_size=2 * 1024 * 1024 * 1024,  # 2GB uploads
+                    ident="AvatarPilotPro",
+                )
+            except OSError:
+                # Some hosts can't dual-bind (e.g. [::] already covers IPv4);
+                # fall back to IPv4-only which still serves correctly.
+                serve(
+                    app, host="0.0.0.0", port=5052,
+                    threads=32, connection_limit=1000, channel_timeout=300,
+                    max_request_body_size=2 * 1024 * 1024 * 1024,
+                    ident="AvatarPilotPro",
+                )
             _served = True
         except ImportError:
             print("  [WARN] Waitress não instalado — usando Flask dev server.")
