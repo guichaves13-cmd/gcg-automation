@@ -1074,10 +1074,11 @@ try:
         r11 = get("/api/history?limit=200")
         d11 = r11.json()
         videos11 = d11.get("videos", []) if isinstance(d11, dict) else d11
+        # History records use "id" (not "job_id") and "filename" (not "output_path")
         found11 = next((v for v in (videos11 if isinstance(videos11,list) else [])
-                        if str(v.get("job_id","")) == job_id), None)
+                        if str(v.get("id", v.get("job_id",""))) == job_id), None)
         assert found11 is not None, f"job T1 {job_id[:8]} não encontrado no history"
-        assert found11.get("output_path") or found11.get("file"), "sem output_path"
+        assert found11.get("filename") or found11.get("output_path"), "sem filename/output_path"
         ok(f"T11.4 — Job T1 no history com output_path", f"job={job_id[:8]}")
     else:
         ok(f"T11.4 — T1 não rodou, skip")
@@ -1090,9 +1091,9 @@ try:
     r11b = get("/api/history?limit=5&offset=5")
     v11a = r11a.json().get("videos",[]) if isinstance(r11a.json(),dict) else r11a.json()
     v11b = r11b.json().get("videos",[]) if isinstance(r11b.json(),dict) else r11b.json()
-    ids_a = {v.get("job_id","") for v in (v11a if isinstance(v11a,list) else [])}
-    ids_b = {v.get("job_id","") for v in (v11b if isinstance(v11b,list) else [])}
-    duplicates = ids_a & ids_b - {""}
+    ids_a = {v.get("id", v.get("job_id","")) for v in (v11a if isinstance(v11a,list) else [])}
+    ids_b = {v.get("id", v.get("job_id","")) for v in (v11b if isinstance(v11b,list) else [])}
+    duplicates = (ids_a & ids_b) - {""}
     assert len(duplicates) == 0, f"duplicatas entre páginas: {duplicates}"
     ok(f"T11.5 — Paginação sem duplicatas", f"p1={len(ids_a)} p2={len(ids_b)}")
 except Exception as e:

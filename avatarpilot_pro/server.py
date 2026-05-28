@@ -6102,10 +6102,28 @@ def api_batch_status():
 @app.route("/api/history")
 def api_history():
     history = load_history()
+    total = len(history)
     total_size = sum(r.get("size_mb", 0) for r in history)
+    # Optional pagination — honored only when the client passes limit/offset.
+    # Without params, returns the full list (preserves existing frontend behavior).
+    # With thousands of jobs across 1000+ users this lets clients page efficiently.
+    try:
+        offset = max(0, int(request.args.get("offset", 0)))
+    except (ValueError, TypeError):
+        offset = 0
+    limit_raw = request.args.get("limit")
+    videos = history
+    if limit_raw is not None:
+        try:
+            limit = int(limit_raw)
+            videos = history[offset:offset + limit] if limit >= 0 else history[offset:]
+        except (ValueError, TypeError):
+            videos = history[offset:]
+    elif offset:
+        videos = history[offset:]
     return jsonify({
-        "videos": history,
-        "total": len(history),
+        "videos": videos,
+        "total": total,
         "total_size_mb": round(total_size, 2),
     })
 
@@ -8730,6 +8748,18 @@ def api_debug_jobs():
 @app.errorhandler(Exception)
 def error_unhandled(e):
     import traceback
+    from werkzeug.exceptions import HTTPException
+    # Preserve real HTTP errors (405 Method Not Allowed, 400 Bad Request from
+    # malformed JSON, 404, etc.) — do NOT mask them as 500. A catch-all that
+    # turns every HTTPException into 500 hides client errors and breaks REST
+    # semantics for the 1000+ users hitting the API.
+    if isinstance(e, HTTPException):
+        if request.path.startswith("/api/"):
+            return jsonify({
+                "error": e.description or e.name,
+                "code":  e.code,
+            }), (e.code or 500)
+        return e  # let Flask render its default page for non-API routes
     rid = request.environ.get("X-Request-ID", "?")
     print(f"[Flask Unhandled] req={rid}\n{traceback.format_exc()}", flush=True)
     if request.path.startswith("/api/"):
