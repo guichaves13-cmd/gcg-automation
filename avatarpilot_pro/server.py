@@ -4623,8 +4623,14 @@ def run_pipeline(job_id: str, config: dict):
                         jobs[job_id]["message"] = f"MuseTalk/Wav2Lip: sincronizando labios no video original ({dur:.0f}s)..."
                         _lip_synced = os.path.join(_loop_dir, "lip_synced.mp4")
                         _ls_ok = False
-                        # Try MuseTalk first (best quality), fallback to Wav2Lip
-                        if check_musetalk():
+                        # Try MuseTalk first (best quality), fallback to Wav2Lip.
+                        # IMPORTANTE: em 8GB VRAM o MuseTalk (difusão latente) TRAVA sem
+                        # progresso em sequências de gesture longas (>~120s) — o watchdog
+                        # mata o job após 60min. Como o hang não lança exceção, o fallback
+                        # nunca dispara. Por isso, acima de 120s vamos DIRETO p/ Wav2Lip
+                        # (rápido, baixa VRAM) — alinhado com o fix 99bee04.
+                        _musetalk_gesture_ok = check_musetalk() and dur <= 120
+                        if _musetalk_gesture_ok:
                             try:
                                 run_musetalk_chunked(
                                     _seq_video, audio_path, _lip_synced,
