@@ -133,6 +133,11 @@ def _check_rate_limit(ip: str) -> bool:
 DISK_WARN_MB    = 500    # warn when free disk < 500MB
 DISK_BLOCK_MB   = 100    # block new jobs when < 100MB free
 VRAM_MIN_GB     = 1.5    # minimum free VRAM to start MuseTalk
+# Cap de script (TTS). ~14 chars/s → 15000 chars ≈ 18min de vídeo. Configurável via
+# env p/ vídeos mais longos: AVP_MAX_SCRIPT_CHARS=50000 (~60min) com enhance_face=false
+# + AVP_STUCK_TIMEOUT_MIN alto. Em 8GB VRAM, vídeos muito longos levam horas — prefira
+# RTX 4090/cloud p/ produção de longa duração.
+MAX_SCRIPT_CHARS = int(os.environ.get("AVP_MAX_SCRIPT_CHARS", "15000"))
 _temp_prefixes  = ("mst_avp_", "mst_chunk_", "avp_loop_", "avp_hd_", "sway_",
                    "avp_sad_", "wav2lip_", "fswap_vid_",
                    "echo_avp_", "codeformer_avp_", "gfpgan_avp_",
@@ -2329,15 +2334,30 @@ def apply_gfpgan_to_video(input_path: str, output_path: str, job_id: str = None,
 
 
 def apply_gfpgan_chunked(input_path: str, output_path: str,
-                         job_id: str = None, max_gfpgan_seconds: int = 600) -> str:
+                         job_id: str = None, max_gfpgan_seconds: int = 600,
+                         enhance_face: bool = True) -> str:
     """
     GFPGAN for any duration:
     - ≤ max_gfpgan_seconds: full GFPGAN frame-by-frame
     - > max_gfpgan_seconds: GFPGAN on first max_gfpgan_seconds, FFmpeg unsharp on rest, then concat
     This keeps processing time reasonable for long videos while still delivering
     sharp lip area for the most-watched portion.
+
+    enhance_face=False: PULA o GFPGAN (passo mais lento — restaura cada frame).
+    Essencial p/ habilitar vídeos longos: desligar o GFPGAN deixa o pipeline 2-3x
+    mais rápido, viabilizando durações que de outra forma estouram o watchdog.
     """
     import tempfile as _gch_tmp
+    if not enhance_face:
+        # Skip face restoration — apenas copia o vídeo (muito mais rápido p/ vídeos longos)
+        try:
+            shutil.copy2(input_path, output_path)
+            if job_id and jobs.get(job_id):
+                jobs[job_id]["message"] = "GFPGAN pulado (enhance_face=false) — modo rápido p/ vídeo longo"
+            print(f"  [GFPGAN] Pulado (enhance_face=false) — modo rápido", flush=True)
+            return output_path
+        except Exception as _ge:
+            print(f"  [GFPGAN] copy skip falhou ({_ge}) — seguindo com GFPGAN normal", flush=True)
     _ff  = _ffmpeg_path()
     _ffp = _ffprobe_path()
 
@@ -4433,7 +4453,7 @@ def run_pipeline(job_id: str, config: dict):
                 if os.path.exists(avatar_video) and os.path.getsize(avatar_video) > 10000:
                     jobs[job_id]["progress"] = 72
                     gfpgan_out = os.path.join(OUTPUT_DIR, f"{job_id}_gfpgan.mp4")
-                    apply_gfpgan_chunked(avatar_video, gfpgan_out, job_id=job_id, max_gfpgan_seconds=300)
+                    apply_gfpgan_chunked(avatar_video, gfpgan_out, job_id=job_id, max_gfpgan_seconds=300, enhance_face=config.get("enhance_face", True))
                     if os.path.exists(gfpgan_out) and os.path.getsize(gfpgan_out) > 10000:
                         _safe_rm(avatar_video)
                         _safe_rename(gfpgan_out, avatar_video)
@@ -4520,7 +4540,7 @@ def run_pipeline(job_id: str, config: dict):
                     # GFPGAN externo pós-SadTalker (auto-adapta frames pelo tamanho)
                     jobs[job_id]["message"] = "GFPGAN: restaurando qualidade facial..."
                     _st_gfpgan_out = os.path.join(OUTPUT_DIR, f"{job_id}_gfpgan.mp4")
-                    apply_gfpgan_chunked(avatar_video, _st_gfpgan_out, job_id=job_id, max_gfpgan_seconds=600)
+                    apply_gfpgan_chunked(avatar_video, _st_gfpgan_out, job_id=job_id, max_gfpgan_seconds=600, enhance_face=config.get("enhance_face", True))
                     if os.path.exists(_st_gfpgan_out) and os.path.getsize(_st_gfpgan_out) > 10000:
                         _safe_rm(avatar_video)
                         _safe_rename(_st_gfpgan_out, avatar_video)
@@ -4592,7 +4612,7 @@ def run_pipeline(job_id: str, config: dict):
                     # GFPGAN leve para qualidade do fallback
                     if os.path.exists(avatar_video) and os.path.getsize(avatar_video) > 10000:
                         gfpgan_out = os.path.join(OUTPUT_DIR, f"{job_id}_gfpgan.mp4")
-                        apply_gfpgan_chunked(avatar_video, gfpgan_out, job_id=job_id, max_gfpgan_seconds=180)
+                        apply_gfpgan_chunked(avatar_video, gfpgan_out, job_id=job_id, max_gfpgan_seconds=180, enhance_face=config.get("enhance_face", True))
                         if os.path.exists(gfpgan_out) and os.path.getsize(gfpgan_out) > 10000:
                             _safe_rm(avatar_video); _safe_rename(gfpgan_out, avatar_video)
                     # A/V sync fix
@@ -4863,7 +4883,7 @@ def run_pipeline(job_id: str, config: dict):
                     _gfpgan_time = max(300, min(3600, int(dur * 1.5)))
                     jobs[job_id]["message"] = "GFPGAN: restaurando qualidade facial..."
                     gfpgan_out = os.path.join(OUTPUT_DIR, f"{job_id}_gfpgan.mp4")
-                    apply_gfpgan_chunked(avatar_video, gfpgan_out, job_id=job_id, max_gfpgan_seconds=_gfpgan_time)
+                    apply_gfpgan_chunked(avatar_video, gfpgan_out, job_id=job_id, max_gfpgan_seconds=_gfpgan_time, enhance_face=config.get("enhance_face", True))
                     if os.path.exists(gfpgan_out) and os.path.getsize(gfpgan_out) > 10000:
                         _safe_rm(avatar_video)
                         _safe_rename(gfpgan_out, avatar_video)
@@ -5845,9 +5865,9 @@ def api_generate():
         return jsonify({
             "error": "Roteiro vazio: digite o texto que o avatar deve falar (mínimo uma palavra)."
         }), 400
-    if script and len(script) > 15000:
+    if script and len(script) > MAX_SCRIPT_CHARS:
         return jsonify({
-            "error": f"Roteiro muito longo ({len(script)} chars). Máximo: 15.000 caracteres."
+            "error": f"Roteiro muito longo ({len(script)} chars). Máximo: {MAX_SCRIPT_CHARS} caracteres."
         }), 400
     voice           = request.form.get("voice", "en-US-GuyNeural")
     # Legacy: "engine" param was TTS engine. New: prefer "tts_engine" + "video_engine"
@@ -5886,8 +5906,8 @@ def api_generate():
     plan              = load_settings().get("plan", DEFAULT_PLAN)
 
     # Validate script length
-    if len(script) > 15000:
-        return jsonify({"error": "Script muito longo (máximo 15.000 caracteres)"}), 400
+    if len(script) > MAX_SCRIPT_CHARS:
+        return jsonify({"error": f"Script muito longo (máximo {MAX_SCRIPT_CHARS} caracteres)"}), 400
 
     # Safe numeric parsing — never crash on invalid client input
     try:
@@ -8530,7 +8550,11 @@ def _attach_request_id():
 # ── Watchdog thread: detects stuck jobs and auto-recovers them ───────────────
 # 4h: long enough for 1h video on RTX 4060 (SadTalker base ~3min + MuseTalk chunked ~2h
 # + GFPGAN chunked ~30min + HD encode ~20min ≈ 3h total). Tune up for slower hardware.
-_STUCK_JOB_TIMEOUT_MIN = 240  # 240min (4h) - Face Swap(23min)+Wav2Lip+GFPGAN+HD encode
+# Configurável via env p/ vídeos longos/hardware lento. O stall-timeout de 60min
+# (sem progresso) já pega jobs realmente travados, então subir este teto absoluto
+# é seguro — só permite que vídeos longos legítimos terminem. Ex: AVP_STUCK_TIMEOUT_MIN=720
+# (12h) p/ rodar vídeos de horas com enhance_face=false.
+_STUCK_JOB_TIMEOUT_MIN = int(os.environ.get("AVP_STUCK_TIMEOUT_MIN", "240"))
 
 def _auto_cleanup_old_outputs():
     """
