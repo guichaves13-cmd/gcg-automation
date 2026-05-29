@@ -5147,8 +5147,11 @@ def run_pipeline(job_id: str, config: dict):
 
             _needs_hd = True
             if _needs_hd:
-                # SMOOTH MOTION: interpolate to 30fps for natural playback
-                if dur <= 300:  # Only for clips <= 5min (minterpolate is CPU intensive)
+                # SMOOTH MOTION: interpolate to 30fps for natural playback.
+                # Limitado a clips curtos: minterpolate é MUITO lento (~20min p/ 150s) e
+                # em vídeos longos produz output inválido + expõe os temps a uma janela de
+                # cleanup/race que fazia o HD encode falhar (visto no M3.4). Curtos só.
+                if dur <= 60:  # minterpolate é CPU-intensivo demais p/ clips longos
                     jobs[job_id]["message"] = "Smooth motion: interpolando para 30fps..."
                     _mi_out = os.path.join(_hd_tmp, "smooth_30fps.mp4")
                     _mi_vf = "minterpolate='fps=30:mi_mode=blend:mc_mode=aobmc:me_mode=bidir:vsbmc=1'"
@@ -5227,7 +5230,31 @@ def run_pipeline(job_id: str, config: dict):
                             print(f"  [HD] Timeout após {_elapsed:.0f}s — sem output (attempt {_hd_attempt+1}/2)")
                         break
                 if not _hd_ok:
-                    print(f"  [HD] HD encode falhou — mantendo output pré-HD (qualidade inferior)")
+                    # ÚLTIMO RECURSO: re-encode SIMPLES (preset rápido, sem filtros pesados)
+                    # lendo do final_output REAL — o in.mp4 temp pode ter sumido por cleanup
+                    # durante encodes longos. Garante 1920x1080 mesmo se o encode "bonito" falhar.
+                    try:
+                        import tempfile as _tmpSF
+                        _sf_dir = _tmpSF.mkdtemp(prefix="avp_hdsimple_")
+                        _simple_out = os.path.join(_sf_dir, "simple.mp4")
+                        _simple_vf = (f"scale={_tw}:{_th}:force_original_aspect_ratio=increase:flags=lanczos,"
+                                      f"crop={_tw}:{_th}")
+                        _simple_cmd = [_ff2, "-y", "-i", final_output, "-vf", _simple_vf,
+                                       "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+                                       "-b:v", _vbr, "-maxrate", _vmax, "-bufsize", _vbuf,
+                                       "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
+                                       "-pix_fmt", "yuv420p", "-movflags", "+faststart", _simple_out]
+                        _sr = subprocess.run(_simple_cmd, capture_output=True,
+                                             timeout=max(300, int(dur*3) + 120))
+                        if os.path.exists(_simple_out) and os.path.getsize(_simple_out) > 10000:
+                            shutil.copy2(_simple_out, final_output)
+                            print(f"  [HD] Fallback simples OK → {_tw}×{_th} (preset veryfast)")
+                            _hd_ok = True
+                        shutil.rmtree(_sf_dir, ignore_errors=True)
+                    except Exception as _sfe:
+                        print(f"  [HD] Fallback simples exception: {_sfe}")
+                    if not _hd_ok:
+                        print(f"  [HD] HD encode falhou — mantendo output pré-HD (qualidade inferior)")
             else:
                 print(f"  [HD] já está {_cur_w}×{_cur_h} @ {_cur_br//1000}kbps — sem re-encode")
 
