@@ -1634,6 +1634,15 @@ def run_musetalk(image_path: str, audio_path: str, output_path: str,
     if not check_musetalk():
         raise Exception("MuseTalk not ready. Models missing — run download_weights.bat.")
 
+    # GUARD: mesma proteção do run_musetalk_chunked — MuseTalk trava em 8GB VRAM com
+    # áudio longo. Acima do limite, lança p/ acionar o fallback Wav2Lip do chamador.
+    _mst_dur = _get_duration_safe(audio_path)
+    _MUSETALK_MAX_DUR = float(os.environ.get("AVP_MUSETALK_MAX_DUR", "130"))
+    if _mst_dur > _MUSETALK_MAX_DUR:
+        raise Exception(
+            f"MuseTalk pulado: áudio {_mst_dur:.0f}s > {_MUSETALK_MAX_DUR:.0f}s "
+            f"(limite seguro p/ VRAM) — usar Wav2Lip")
+
     _vram_free = _free_vram_gb()
     if _vram_free < VRAM_MIN_GB:
         raise Exception(f"VRAM insuficiente para MuseTalk: {_vram_free:.1f}GB livres (mínimo {VRAM_MIN_GB}GB). Feche outros programas que usam GPU.")
@@ -1736,6 +1745,15 @@ def run_musetalk_chunked(image_path: str, audio_path: str, output_path: str,
     import tempfile as _tmpmod
 
     dur = _get_duration_safe(audio_path)
+    # GUARD CENTRAL: MuseTalk (difusão latente) TRAVA/OOM em 8GB VRAM com áudio longo.
+    # Acima de ~130s ele estagna sem progresso e o watchdog mata o job após 60min
+    # (visto no teste M3.4 de 180s). Lança aqui p/ que o fallback Wav2Lip de CADA
+    # call site dispare automaticamente — cobre todos os caminhos do pipeline.
+    _MUSETALK_MAX_DUR = float(os.environ.get("AVP_MUSETALK_MAX_DUR", "130"))
+    if dur > _MUSETALK_MAX_DUR:
+        raise Exception(
+            f"MuseTalk pulado: áudio {dur:.0f}s > {_MUSETALK_MAX_DUR:.0f}s "
+            f"(limite seguro p/ VRAM) — usar Wav2Lip")
     if dur <= chunk_duration:
         return run_musetalk(image_path, audio_path, output_path, settings, job_id)
 
