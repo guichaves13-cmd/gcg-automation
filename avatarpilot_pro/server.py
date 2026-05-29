@@ -5080,7 +5080,16 @@ def run_pipeline(job_id: str, config: dict):
             # 1080p Full HD output by default — HeyGen-class deliverable.
             # User can override via config["output_resolution"] = "720p" if needed for size.
             _target_res = config.get("output_resolution", "1080p")
-            if _target_res == "720p":
+            _out_fmt    = config.get("output_format", "landscape")
+            # Respect aspect ratio from output_format. This final HD pass is the
+            # authoritative encode — if it always forced 1920x1080 it would undo
+            # the portrait/square reformat done in Step 3c (the bug that made
+            # output_format=portrait/square silently produce landscape video).
+            if _out_fmt == "portrait":
+                _tw, _th, _vbr, _vmin, _vmax, _vbuf = 1080, 1920, "8000k", "6000k", "12000k", "16000k"
+            elif _out_fmt == "square":
+                _tw, _th, _vbr, _vmin, _vmax, _vbuf = 1080, 1080, "8000k", "6000k", "12000k", "16000k"
+            elif _target_res == "720p":
                 _tw, _th, _vbr, _vmin, _vmax, _vbuf = 1280, 720, "2500k", "2000k", "4000k", "5000k"
             else:
                 _tw, _th, _vbr, _vmin, _vmax, _vbuf = 1920, 1080, "8000k", "6000k", "12000k", "16000k"
