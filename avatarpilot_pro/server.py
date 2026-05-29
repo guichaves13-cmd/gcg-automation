@@ -138,6 +138,15 @@ VRAM_MIN_GB     = 1.5    # minimum free VRAM to start MuseTalk
 # + AVP_STUCK_TIMEOUT_MIN alto. Em 8GB VRAM, vídeos muito longos levam horas — prefira
 # RTX 4090/cloud p/ produção de longa duração.
 MAX_SCRIPT_CHARS = int(os.environ.get("AVP_MAX_SCRIPT_CHARS", "15000"))
+
+# ── Sistema de licenças desktop (hardware-bound Ed25519) ─────────────────────
+try:
+    import license_system as _lic
+    _LICENSE_AVAILABLE = True
+except Exception as _lic_e:
+    _LICENSE_AVAILABLE = False
+    print(f"  [License] módulo indisponível ({_lic_e}) — rodando sem licenciamento", flush=True)
+_LICENSE_STATE = {"active": False, "plan": "trial"}  # preenchido no boot
 _temp_prefixes  = ("mst_avp_", "mst_chunk_", "avp_loop_", "avp_hd_", "sway_",
                    "avp_sad_", "wav2lip_", "fswap_vid_",
                    "echo_avp_", "codeformer_avp_", "gfpgan_avp_",
@@ -7477,7 +7486,119 @@ def stripe_webhook():
         email_ok = _send_key_email(email, name, api_key, plan) if email else False
         print(f"  [Stripe] Pagamento {amount/100:.2f} {currency} — {name} ({plan})"
               f" → key criada, email={'OK' if email_ok else 'SKIP'}", flush=True)
+        # ── Licença desktop: se o cliente informou o hardware_id no checkout,
+        #    assina a licença e envia por email. Senão, envia instruções de ativação.
+        if _LICENSE_AVAILABLE:
+            try:
+                _hwid = (meta.get("hardware_id") or "").strip()
+                _days = {"starter": 365, "pro": 365, "unlimited": 0}.get(plan, 365)
+                if _hwid:
+                    _license = _lic.sign_license(_hwid, plan=plan, days=_days, customer=name)
+                    _send_license_email(email, name, _license, plan) if email else None
+                    print(f"  [License] assinada p/ hwid={_hwid[:12]}... plan={plan}", flush=True)
+                else:
+                    print(f"  [License] sem hardware_id no checkout — cliente deve ativar manualmente", flush=True)
+            except Exception as _le:
+                print(f"  [License] falha ao assinar: {_le}", flush=True)
     return jsonify({"received": True})
+
+
+# ============================================================================
+# ROUTES — LICENÇA DESKTOP (hardware-bound)
+# ============================================================================
+@app.route("/api/license/hardware_id")
+def api_license_hwid():
+    """ID de hardware desta máquina — o cliente informa ao comprar/ativar."""
+    if not _LICENSE_AVAILABLE:
+        return jsonify({"error": "Licenciamento indisponível"}), 503
+    return jsonify({"hardware_id": _lic.get_hardware_id()})
+
+@app.route("/api/license/status")
+def api_license_status():
+    """Estado da licença ativa nesta máquina (plano, expiração, etc.)."""
+    if not _LICENSE_AVAILABLE:
+        return jsonify({"active": False, "plan": "unlimited",
+                        "reason": "Licenciamento desabilitado (dev)"})
+    st = _lic.load_active_license()
+    # não expor dados sensíveis além do necessário
+    return jsonify({
+        "active":      st.get("active", False),
+        "plan":        st.get("plan", "trial"),
+        "expires":     st.get("expires", "never"),
+        "customer":    st.get("customer", ""),
+        "hardware_id": st.get("hardware_id", ""),
+        "reason":      st.get("reason", ""),
+        "limits":      st.get("limits", {}),
+    })
+
+@app.route("/api/license/activate", methods=["POST"])
+def api_license_activate():
+    """Cliente cola a string de licença; valida p/ ESTA máquina e salva."""
+    if not _LICENSE_AVAILABLE:
+        return jsonify({"error": "Licenciamento indisponível"}), 503
+    data = request.json or {}
+    lic_str = (data.get("license") or "").strip()
+    if not lic_str:
+        return jsonify({"error": "Informe a licença (campo 'license')"}), 400
+    ok, res = _lic.activate(lic_str)
+    if not ok:
+        return jsonify({"error": str(res)}), 400
+    global _LICENSE_STATE
+    _LICENSE_STATE = _lic.load_active_license()
+    return jsonify({"ok": True, "plan": res.get("plan"), "expires": res.get("expires", "never"),
+                    "message": "Licença ativada com sucesso!"})
+
+@app.route("/api/license/deactivate", methods=["POST"])
+def api_license_deactivate():
+    if not _LICENSE_AVAILABLE:
+        return jsonify({"error": "Licenciamento indisponível"}), 503
+    if not _require_admin(request):
+        return jsonify({"error": "Unauthorized"}), 401
+    ok = _lic.deactivate()
+    global _LICENSE_STATE
+    _LICENSE_STATE = _lic.load_active_license()
+    return jsonify({"ok": ok})
+
+@app.route("/api/admin/license/generate", methods=["POST"])
+def api_admin_license_generate():
+    """VENDOR (admin): assina uma licença p/ um hardware_id. Usado p/ emissão manual."""
+    if not _LICENSE_AVAILABLE:
+        return jsonify({"error": "Licenciamento indisponível"}), 503
+    if not _require_admin(request):
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.json or {}
+    hwid = (data.get("hardware_id") or "").strip()
+    plan = data.get("plan", "pro")
+    try:
+        days = int(data.get("days", 365))
+    except (ValueError, TypeError):
+        days = 365
+    customer = (data.get("customer") or "").strip()
+    if not hwid or len(hwid) < 8:
+        return jsonify({"error": "hardware_id inválido"}), 400
+    if plan not in _lic.PLAN_LIMITS:
+        return jsonify({"error": f"plano inválido — use: {', '.join(_lic.PLAN_LIMITS)}"}), 400
+    try:
+        lic_str = _lic.sign_license(hwid, plan=plan, days=days, customer=customer)
+        return jsonify({"license": lic_str, "plan": plan, "days": days,
+                        "hardware_id": hwid, "customer": customer})
+    except Exception as e:
+        return jsonify({"error": f"Falha ao assinar: {e}"}), 500
+
+
+def _send_license_email(email, name, license_str, plan):
+    """Envia a licença por email (reusa infra de email do _send_key_email)."""
+    try:
+        return _send_key_email(email, name, license_str, plan, subject_kind="license")
+    except TypeError:
+        # _send_key_email pode não aceitar subject_kind — fallback
+        try:
+            return _send_key_email(email, name, license_str, plan)
+        except Exception:
+            return False
+    except Exception:
+        return False
+
 
 @app.route("/api/admin/stripe/status")
 def stripe_admin_status():
@@ -8905,6 +9026,20 @@ if __name__ == "__main__":
     print(f"  Workers:   {MAX_WORKERS} concurrent jobs")
     print("=" * 60)
     _init_admin_token()
+    # ── Licença desktop: validar no boot e exibir estado ─────────────────────
+    if _LICENSE_AVAILABLE:
+        try:
+            _lic.ensure_vendor_keys()  # garante par de chaves do vendor (license authority)
+            _LICENSE_STATE = _lic.load_active_license()
+            _exp = _LICENSE_STATE.get("expires", "never")
+            _exp_lbl = "vitalícia" if _exp == "never" else _exp[:10]
+            if _LICENSE_STATE.get("active"):
+                print(f"  Licença:   ATIVA — plano '{_LICENSE_STATE['plan']}' (expira: {_exp_lbl})")
+            else:
+                print(f"  Licença:   TRIAL — {_LICENSE_STATE.get('reason','')}")
+                print(f"             Hardware ID: {_LICENSE_STATE.get('hardware_id','')}")
+        except Exception as _lbe:
+            print(f"  [License] erro no boot: {_lbe}", flush=True)
     _run_startup_diagnostics()
     # DEFINITIVE: Reset active_workers to 0 on every startup
     # All worker threads from previous session are dead after restart.

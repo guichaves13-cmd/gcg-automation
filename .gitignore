@@ -97,6 +97,15 @@ node_modules/
 # Brain/scheduling state
 brain/
 schedule.json
+
+# License secrets (NUNCA commitar — chave privada do vendor + licença do cliente)
+.license_keys.json
+**/.license_keys.json
+license.dat
+**/license.dat
+# Logs de boot/teste do servidor
+server_boot*.txt
+test_*.txt
 schedule_log.json
 stats.json
 analytics_data.json
