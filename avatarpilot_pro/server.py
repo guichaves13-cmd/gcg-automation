@@ -5914,6 +5914,26 @@ def api_generate():
     gesture_video_name = request.form.get("gesture_video", "")
     plan              = load_settings().get("plan", DEFAULT_PLAN)
 
+    # ── Enforcement de licença desktop (opt-in via AVP_LICENSE_ENFORCE=1) ─────
+    # No .exe distribuído isso fica ligado: a licença ativa é autoritativa (define
+    # plano + limites de duração/marca d'água). Sem licença = trial. Em dev fica
+    # desligado p/ não atrapalhar (default 0).
+    if _LICENSE_AVAILABLE and os.environ.get("AVP_LICENSE_ENFORCE", "0").strip() in ("1", "true", "yes"):
+        _lic_plan   = _LICENSE_STATE.get("plan", "trial")
+        _lic_limits = _LICENSE_STATE.get("limits", {})
+        plan = _lic_plan  # licença sobrepõe settings
+        _max_s = _lic_limits.get("max_seconds", 0)
+        if _max_s and _max_s > 0 and script:
+            _est_s = len(script) / 14.0  # ~14 chars/s
+            if _est_s > _max_s:
+                return jsonify({
+                    "error": f"Seu plano '{_lic_plan}' permite vídeos de até {_max_s}s "
+                             f"(roteiro estima ~{_est_s:.0f}s). Faça upgrade da licença.",
+                    "code": "plan_limit", "plan": _lic_plan, "max_seconds": _max_s
+                }), 402
+        if _lic_limits.get("watermark") and not (watermark_text or "").strip():
+            watermark_text = "AvatarPilot Pro — Trial"  # trial força marca d'água
+
     # Validate script length
     if len(script) > MAX_SCRIPT_CHARS:
         return jsonify({"error": f"Script muito longo (máximo {MAX_SCRIPT_CHARS} caracteres)"}), 400
