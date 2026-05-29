@@ -12,18 +12,20 @@ def best_image():
             if 30000<s<600000 and s>bs: bs=s;b=p
     return b
 IMG=best_image()
+TARGET_S = int(sys.argv[1]) if len(sys.argv) > 1 else 180
 base=("A inteligência artificial transforma a criação de conteúdo digital com qualidade "
       "profissional e rapidez impressionante todos os dias. ")
-script=(base*((180*14)//len(base)+1))[:180*14]  # ~180s
-print(f"=== M3.4 validação — vídeo ~180s ({len(script)} chars) ===")
+_chars = min(TARGET_S*14, 15000)  # respeita o cap de 15000 chars do servidor
+script=(base*(_chars//len(base)+1))[:_chars]
+print(f"=== Validação duração extrema — vídeo ~{TARGET_S}s ({len(script)} chars) ===")
 with open(IMG,"rb") as f:
     r=requests.post(f"{BASE}/api/generate",
         data={"script":script,"voice":"pt-BR-FranciscaNeural","engine":"edge-tts","enhancer":"none"},
         files={"image":(os.path.basename(IMG),f,"image/jpeg")},timeout=30)
 jid=r.json().get("job_id","")
-print(f"  job {jid[:8]} submetido. Aguardando (max 90min)...")
+print(f"  job {jid[:8]} submetido. Aguardando (max 4h)...")
 t0=time.time(); last=""
-while time.time()-t0<5400:
+while time.time()-t0<15000:
     d=requests.get(f"{BASE}/api/job/{jid}",timeout=10).json()
     st,msg=d.get("status"),d.get("message","")
     if msg!=last: print(f"    [{st}] {d.get('progress',0)}% — {msg}"); last=msg
