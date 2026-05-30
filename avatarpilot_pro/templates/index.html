@@ -1068,6 +1068,31 @@
         <p>Configure chaves de API, plano e modelos</p>
       </div>
 
+      <!-- Licença Desktop -->
+      <div class="card" style="border:1px solid rgba(34,197,94,0.4);background:rgba(34,197,94,0.05)">
+        <h3>🔐 Licença</h3>
+        <div class="setting-row">
+          <label>Hardware ID:</label>
+          <div style="display:flex;gap:8px;align-items:center;flex:1">
+            <code id="lic-hwid" style="background:rgba(0,0,0,0.35);padding:4px 8px;border-radius:4px;font-family:monospace;font-size:12px">carregando…</code>
+            <button type="button" onclick="copyHwid()" class="btn btn-small">📋 Copiar</button>
+          </div>
+        </div>
+        <div class="setting-row">
+          <label>Status:</label>
+          <div id="lic-status" style="flex:1">carregando…</div>
+        </div>
+        <div class="setting-row" id="lic-activate-row">
+          <label>Ativar licença:</label>
+          <div style="display:flex;gap:8px;flex:1">
+            <input type="text" id="lic-input" placeholder="Cole sua chave de licença aqui" style="flex:1;font-family:monospace;font-size:12px"/>
+            <button type="button" onclick="activateLicense()" class="btn">✓ Ativar</button>
+          </div>
+        </div>
+        <p class="hint" id="lic-msg" style="display:none;margin-top:8px"></p>
+        <p class="hint">A licença é amarrada a esta máquina (Hardware ID). Compre em <a href="/pricing" target="_blank">/pricing</a> — você receberá a chave por email após o pagamento.</p>
+      </div>
+
       <!-- Plan -->
       <div class="card">
         <h3>📋 Plano & Limites de Duração</h3>

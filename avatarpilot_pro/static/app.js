@@ -3069,3 +3069,97 @@ function renderAnalytics(d) {
   }
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// 🔐 LICENÇA DESKTOP — UI (hardware ID + ativação)
+// ════════════════════════════════════════════════════════════════════════════
+async function loadLicenseUI() {
+  const hwidEl = document.getElementById('lic-hwid');
+  const stEl   = document.getElementById('lic-status');
+  const actRow = document.getElementById('lic-activate-row');
+  if (!hwidEl || !stEl) return;  // página de settings não montada ainda
+  try {
+    const hw = await fetch('/api/license/hardware_id').then(r => r.json());
+    hwidEl.textContent = hw.hardware_id || (hw.error || '?');
+  } catch (e) {
+    hwidEl.textContent = 'erro';
+  }
+  try {
+    const st = await fetch('/api/license/status').then(r => r.json());
+    if (st.active) {
+      const exp = (st.expires === 'never' || !st.expires)
+        ? 'vitalícia'
+        : (String(st.expires).slice(0, 10));
+      const cust = st.customer ? ` · ${st.customer}` : '';
+      stEl.innerHTML = `<span style="color:#22c55e;font-weight:600">● Ativa</span> — plano <strong>${st.plan}</strong> (expira: ${exp})${cust}`;
+      if (actRow) actRow.style.display = 'none';
+    } else {
+      stEl.innerHTML = `<span style="color:#eab308;font-weight:600">● ${st.plan || 'trial'}</span> — ${st.reason || 'sem licença ativa'}`;
+      if (actRow) actRow.style.display = '';
+    }
+  } catch (e) {
+    stEl.textContent = 'erro ao carregar status';
+  }
+}
+
+function copyHwid() {
+  const txt = (document.getElementById('lic-hwid') || {}).textContent || '';
+  if (!txt || txt === 'carregando…') return;
+  const msg = document.getElementById('lic-msg');
+  const showMsg = (color, text) => {
+    if (!msg) return;
+    msg.style.display = 'block'; msg.style.color = color; msg.textContent = text;
+    setTimeout(() => { msg.style.display = 'none'; }, 2000);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(txt).then(
+      () => showMsg('#22c55e', '✓ Hardware ID copiado!'),
+      () => showMsg('#ef4444', 'Falha ao copiar')
+    );
+  } else {
+    // fallback: seleciona o texto
+    const r = document.createRange();
+    r.selectNode(document.getElementById('lic-hwid'));
+    window.getSelection().removeAllRanges();
+    window.getSelection().addRange(r);
+    showMsg('#22c55e', '✓ Selecionado — Ctrl+C para copiar');
+  }
+}
+
+async function activateLicense() {
+  const inputEl = document.getElementById('lic-input');
+  const msg     = document.getElementById('lic-msg');
+  const lic     = (inputEl ? inputEl.value : '').trim();
+  if (!lic) {
+    if (msg) { msg.style.display = 'block'; msg.style.color = '#eab308'; msg.textContent = 'Cole a chave de licença primeiro.'; }
+    return;
+  }
+  try {
+    const r = await fetch('/api/license/activate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ license: lic })
+    });
+    const d = await r.json();
+    if (msg) msg.style.display = 'block';
+    if (r.ok) {
+      if (msg) { msg.style.color = '#22c55e';
+        msg.textContent = `✓ Licença ativada! Plano '${d.plan}' agora ativo.`; }
+      if (inputEl) inputEl.value = '';
+      setTimeout(loadLicenseUI, 400);
+    } else {
+      if (msg) { msg.style.color = '#ef4444';
+        msg.textContent = `✗ ${d.error || 'Falha na ativação'}`; }
+    }
+  } catch (e) {
+    if (msg) { msg.style.display = 'block'; msg.style.color = '#ef4444';
+      msg.textContent = `✗ Erro de rede: ${e}`; }
+  }
+}
+
+// Carregar UI de licença assim que a página estiver pronta
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', loadLicenseUI);
+} else {
+  loadLicenseUI();
+}
+
