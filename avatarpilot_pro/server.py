@@ -5617,17 +5617,22 @@ def _build_long_gesture_sequence(audio_dur: float, templates: list,
     tmp = _tgs.mkdtemp(prefix="gesture_seq_")
     try:
         # Build sequence by picking templates in randomized order until audio_dur is covered.
-        # Each template can be used multiple times but never consecutively.
+        # MELHORIA: evita os ÚLTIMOS 3 picks (não só o imediato) — em packs com templates
+        # curtos isso reduz drasticamente a sensação de repetição visual.
         rng = _rgs.Random(42)  # deterministic for reproducibility
         sequence = []
         accumulated = 0.0
-        last_pick = None
+        # janela deslizante de evitados: max(3, 33% do pack) p/ packs pequenos não travarem
+        _avoid_window = max(1, min(3, max(1, len(template_info) // 3)))
+        recent_picks = []  # FIFO dos últimos N escolhidos
         while accumulated < audio_dur + 1:
-            choices = [t for t in template_info if t[0] != last_pick] or template_info
+            choices = [t for t in template_info if t[0] not in recent_picks] or template_info
             pick = rng.choice(choices)
             sequence.append(pick)
             accumulated += pick[1]
-            last_pick = pick[0]
+            recent_picks.append(pick[0])
+            if len(recent_picks) > _avoid_window:
+                recent_picks.pop(0)
 
         if job_id and job_id in jobs:
             jobs[job_id]["message"] = f"Gesture Pack: montando sequência ({len(sequence)} templates)..."
@@ -5651,10 +5656,20 @@ def _build_long_gesture_sequence(audio_dur: float, templates: list,
                 f.write(f"file '{p_safe}'\n")
 
         # Concat (re-encode required because templates may differ in fps/codec params).
-        # Output also goes to ASCII tmp first, then copied to final out_path.
+        # MELHORIA: normalização de resolução (1280x720 uniforme) + cor unificada
+        # (eq + colorbalance + curves sutil) p/ que clips de Pexels diferentes
+        # pareçam uma única gravação coerente — não "colagem". Aplicado ANTES do
+        # face swap + lip sync p/ garantir consistência em todo o pipeline.
+        _vf_unify = (
+            "scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,"  # resolução uniforme
+            "eq=saturation=1.06:brightness=0.005:contrast=1.02,"                  # cor unificada
+            "colorbalance=rs=0.015:gs=0:bs=-0.01,"                                 # warm skin shift
+            "curves=m='0/0 0.25/0.24 0.5/0.52 0.75/0.77 1/1'"                     # S-curve sutil (cinema)
+        )
         ascii_out = os.path.join(tmp, "out.mp4")
         cmd = [ff, "-y", "-f", "concat", "-safe", "0", "-i", concat_txt,
                "-t", str(round(audio_dur + 0.5, 3)),
+               "-vf", _vf_unify,
                "-c:v", "libx264", "-preset", "slow", "-crf", "20",
                "-pix_fmt", "yuv420p", "-an", ascii_out]
         r = subprocess.run(cmd, capture_output=True,
