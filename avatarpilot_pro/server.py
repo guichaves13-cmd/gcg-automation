@@ -5712,15 +5712,26 @@ def swap_face_on_gesture_video(source_img: str, gesture_video: str, output_path:
         _start_t = time.time()
         _timeout = 3600  # 60 min max for large face swaps
         _last_update = time.time()
+        _hb_tick = 0  # contador de heartbeats — oscila progress p/ satisfazer watchdog
         for line in proc.stdout:
             line = line.strip()
             if not line: continue
             try:
                 data = _j.loads(line)
                 if data.get("progress") is not None and job_id and job_id in jobs:
-                    pct = int(data["progress"] * 100 / max(1, data.get("total", 1)))
-                    jobs[job_id]["message"] = f"Face Swap: {data['progress']}/{data.get('total',0)} frames ({pct}%)..."
-                    jobs[job_id]["progress"] = 35 + int(pct * 0.3)  # 35-65% range
+                    total = max(1, data.get("total", 1))
+                    pct = int(data["progress"] * 100 / total)
+                    if data.get("stage"):
+                        # Heartbeat de init (progress=0/total=1 + stage) — oscila o
+                        # int progress (35↔36) para o watchdog detectar atividade,
+                        # mesmo sem progresso real ainda. Init pesado (~minutos)
+                        # nao trava mais o watchdog stall.
+                        jobs[job_id]["message"] = f"Face Swap: {data['stage']} (carregando modelos)..."
+                        _hb_tick += 1
+                        jobs[job_id]["progress"] = 35 + (_hb_tick % 2)
+                    else:
+                        jobs[job_id]["message"] = f"Face Swap: {data['progress']}/{data.get('total',0)} frames ({pct}%)..."
+                        jobs[job_id]["progress"] = 35 + int(pct * 0.3)  # 35-65% range
                     _last_update = time.time()
                 elif data.get("error"):
                     print(f"  [FaceSwap] Worker: {data['error']}", flush=True)
