@@ -3730,16 +3730,66 @@ def notify_webhooks(job_id: str, job_data: dict):
 # ============================================================================
 # THUMBNAIL GENERATION
 # ============================================================================
-def generate_thumbnail(video_path: str, out_path: str) -> bool:
-    """Extract a frame at ~2s as JPEG thumbnail."""
+def _thumb_legacy(video_path: str, out_path: str) -> bool:
+    """Fallback: extrai frame a ~25% do vídeo (melhor que 2s fixo p/ vídeos longos)."""
     try:
+        r = subprocess.run([_ffprobe_path(), "-v", "error", "-show_entries", "format=duration",
+                            "-of", "default=noprint_wrappers=1:nokey=1", video_path],
+                           capture_output=True, text=True, timeout=10)
+        dur = float(r.stdout.strip() or 2)
+        ts = max(0.5, min(dur * 0.25, dur - 0.5))
         cmd = [_ffmpeg_path(), "-y", "-i", video_path,
-               "-ss", "00:00:02", "-vframes", "1", "-q:v", "3",
+               "-ss", str(round(ts, 2)), "-vframes", "1", "-q:v", "3",
                "-vf", "scale=320:-1", out_path]
         r = subprocess.run(cmd, capture_output=True, timeout=30)
         return r.returncode == 0 and os.path.exists(out_path)
     except Exception:
         return False
+
+def generate_thumbnail(video_path: str, out_path: str) -> bool:
+    """Smart thumbnail: amostra 3 frames (15%, 40%, 70%), detecta face com Haar
+    cascade, escolhe o frame com a MAIOR face (= melhor enquadrado/visivel). Evita
+    pegar frame de blink, boca aberta no meio de palavra, ou clip de transição."""
+    try:
+        import cv2 as _cv2
+        cap = _cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            return _thumb_legacy(video_path, out_path)
+        total = int(cap.get(_cv2.CAP_PROP_FRAME_COUNT) or 0)
+        if total <= 0:
+            cap.release()
+            return _thumb_legacy(video_path, out_path)
+        try:
+            cascade_path = _cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+            cascade = _cv2.CascadeClassifier(cascade_path)
+            cascade_ok = not cascade.empty()
+        except Exception:
+            cascade_ok = False
+        best_frame, best_area = None, 0
+        for p in (0.15, 0.40, 0.70):
+            cap.set(_cv2.CAP_PROP_POS_FRAMES, max(0, int(total * p)))
+            ok, frame = cap.read()
+            if not ok or frame is None: continue
+            if cascade_ok:
+                gray = _cv2.cvtColor(frame, _cv2.COLOR_BGR2GRAY)
+                faces = cascade.detectMultiScale(gray, 1.2, 5)
+                if len(faces) > 0:
+                    area = max(w*h for (_, _, w, h) in faces)
+                    if area > best_area:
+                        best_area = area; best_frame = frame
+        cap.release()
+        if best_frame is not None:
+            h0, w0 = best_frame.shape[:2]
+            new_w = 320; new_h = max(1, int(h0 * 320 / max(1, w0)))
+            thumb = _cv2.resize(best_frame, (new_w, new_h), interpolation=_cv2.INTER_AREA)
+            ok = _cv2.imwrite(out_path, thumb, [_cv2.IMWRITE_JPEG_QUALITY, 88])
+            if ok and os.path.exists(out_path):
+                return True
+        # Sem face detectada (vídeo abstrato, escuro, etc.) → fallback simples
+        return _thumb_legacy(video_path, out_path)
+    except Exception as e:
+        print(f"  [Thumbnail] smart falhou ({e}) — usando fallback", flush=True)
+        return _thumb_legacy(video_path, out_path)
 
 # ============================================================================
 # BACKGROUND COMPOSITING (with position + size options)
