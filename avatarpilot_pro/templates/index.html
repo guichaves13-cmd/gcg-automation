@@ -15,6 +15,7 @@
       <div class="logo-text">AvatarPilot<span>Pro</span></div>
     </div>
     <div class="nav-items">
+      <button class="nav-btn"        data-page="dashboard"   onclick="showPage('dashboard')">📊 Dashboard</button>
       <button class="nav-btn active" data-page="create"      onclick="showPage('create')">🎬 Create Avatar</button>
       <button class="nav-btn"        data-page="studio"      onclick="showPage('studio')">🧑‍🎨 Avatar Studio</button>
       <button class="nav-btn"        data-page="translate"   onclick="showPage('translate')">🌐 Traduzir Vídeo</button>
@@ -39,6 +40,89 @@
     <div class="loading-overlay" id="loading" style="display:none">
       <div class="loading-spinner"></div>
       <div class="loading-text" id="loading-text">Processando...</div>
+    </div>
+
+    <!-- ===== DASHBOARD PAGE ===== -->
+    <div class="page" id="page-dashboard">
+      <div class="page-header">
+        <h1>📊 Dashboard</h1>
+        <p id="dash-greeting">Bem-vindo de volta — acompanhe seu uso e atalhos rápidos</p>
+      </div>
+
+      <!-- HERO: Plano ativo -->
+      <div class="card" id="dash-hero" style="background:linear-gradient(135deg,rgba(124,58,237,0.18),rgba(34,197,94,0.10));border:1px solid rgba(124,58,237,0.4)">
+        <div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap">
+          <div style="flex:1;min-width:240px">
+            <div style="font-size:13px;color:var(--dim);text-transform:uppercase;letter-spacing:1px">Plano atual</div>
+            <div id="dash-plan-name" style="font-size:32px;font-weight:700;margin:4px 0">—</div>
+            <div id="dash-plan-sub" style="color:var(--dim);font-size:13px">carregando…</div>
+          </div>
+          <div style="text-align:right">
+            <button class="btn" onclick="showPage('create')" style="padding:14px 22px;font-size:15px">🎬 Criar Novo Vídeo</button>
+            <div style="margin-top:8px"><a href="/pricing" target="_blank" style="color:#a78bfa;font-size:12px">Ver planos</a></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stats em 4 cards -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-top:16px">
+        <div class="card" style="padding:18px">
+          <div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:1px">Hoje</div>
+          <div id="dash-stat-today" style="font-size:28px;font-weight:700;margin-top:4px">—</div>
+          <div id="dash-stat-today-sub" style="color:var(--dim);font-size:12px">vídeos gerados</div>
+        </div>
+        <div class="card" style="padding:18px">
+          <div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:1px">Total gerado</div>
+          <div id="dash-stat-total" style="font-size:28px;font-weight:700;margin-top:4px">—</div>
+          <div style="color:var(--dim);font-size:12px">vídeos no histórico</div>
+        </div>
+        <div class="card" style="padding:18px">
+          <div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:1px">Tempo gerado</div>
+          <div id="dash-stat-minutes" style="font-size:28px;font-weight:700;margin-top:4px">—</div>
+          <div style="color:var(--dim);font-size:12px">min de vídeo (estimado)</div>
+        </div>
+        <div class="card" style="padding:18px">
+          <div style="font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:1px">Disco usado</div>
+          <div id="dash-stat-disk" style="font-size:28px;font-weight:700;margin-top:4px">—</div>
+          <div id="dash-stat-disk-sub" style="color:var(--dim);font-size:12px">de outputs</div>
+        </div>
+      </div>
+
+      <!-- Cota diária — barra de progresso visual -->
+      <div class="card" id="dash-quota-card" style="display:none;margin-top:16px">
+        <h3>📈 Cota Diária</h3>
+        <div style="margin-top:8px">
+          <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px">
+            <span id="dash-quota-label">— / —</span>
+            <span id="dash-quota-reset" style="color:var(--dim)">reset à meia-noite</span>
+          </div>
+          <div style="height:10px;background:rgba(0,0,0,0.35);border-radius:5px;overflow:hidden">
+            <div id="dash-quota-bar" style="height:100%;width:0%;background:#22c55e;transition:width 0.4s,background 0.4s"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Histórico recente -->
+      <div class="card" style="margin-top:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <h3>🎞️ Vídeos Recentes</h3>
+          <button class="btn-small" onclick="showPage('history')">Ver todos →</button>
+        </div>
+        <div id="dash-recent" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-top:12px">
+          <div style="color:var(--dim);text-align:center;padding:24px;grid-column:1/-1">carregando…</div>
+        </div>
+      </div>
+
+      <!-- Status do sistema (GPU/disco) -->
+      <div class="card" style="margin-top:16px">
+        <h3>⚙️ Status do Sistema</h3>
+        <div id="dash-system" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:12px;font-size:13px">
+          <div>GPU livre: <strong id="dash-gpu">—</strong></div>
+          <div>Jobs ativos: <strong id="dash-jobs">—</strong></div>
+          <div>Engines: <strong id="dash-engines">—</strong></div>
+          <div>Hardware ID: <code id="dash-hwid" style="font-size:11px;background:rgba(0,0,0,0.3);padding:2px 6px;border-radius:3px">—</code></div>
+        </div>
+      </div>
     </div>
 
     <!-- ===== CREATE PAGE ===== -->

@@ -3260,3 +3260,130 @@ document.addEventListener('click', function _avpPermOnce(ev) {
   }
 }, true);
 
+// ════════════════════════════════════════════════════════════════════════════
+// 📊 DASHBOARD — agrega licença + histórico + sistema em uma página polida
+// ════════════════════════════════════════════════════════════════════════════
+async function loadDashboard() {
+  if (!document.getElementById('page-dashboard')) return;
+  // Buscar dados em paralelo (mais rápido)
+  const [licR, histR, sysR, dashR] = await Promise.allSettled([
+    fetch('/api/license/status').then(r => r.json()),
+    fetch('/api/history?limit=200').then(r => r.json()),
+    fetch('/api/system_health').then(r => r.json()).catch(() => ({})),
+    fetch('/api/dashboard').then(r => r.json()).catch(() => ({})),
+  ]);
+  const lic  = licR.status  === 'fulfilled' ? licR.value  : {};
+  const hist = histR.status === 'fulfilled' ? histR.value : { videos: [], total: 0, total_size_mb: 0 };
+  const sys  = sysR.status  === 'fulfilled' ? sysR.value  : {};
+  const dash = dashR.status === 'fulfilled' ? dashR.value : {};
+
+  // HERO: plano + saudação
+  const planEl = document.getElementById('dash-plan-name');
+  const planSub = document.getElementById('dash-plan-sub');
+  const greet = document.getElementById('dash-greeting');
+  if (lic.active) {
+    const exp = (lic.expires === 'never' || !lic.expires) ? 'vitalícia' : String(lic.expires).slice(0, 10);
+    if (planEl) planEl.textContent = (lic.plan || 'pro').toUpperCase();
+    if (planSub) planSub.textContent = `Licença ativa · expira: ${exp}${lic.customer ? ' · ' + lic.customer : ''}`;
+    if (greet && lic.customer) greet.textContent = `Olá, ${lic.customer} — acompanhe seu uso e atalhos rápidos`;
+  } else {
+    if (planEl) planEl.textContent = 'TRIAL';
+    if (planSub) planSub.textContent = lic.reason || 'Ative sua licença em Configurações para desbloquear o plano completo';
+  }
+
+  // Stats
+  const videos = Array.isArray(hist.videos) ? hist.videos : [];
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const today = videos.filter(v => String(v.created || '').slice(0, 10) === todayIso).length;
+  const totalMinutes = videos.reduce((sum, v) => sum + (Number(v.duration || 0) / 60), 0);
+  const setText = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+  setText('dash-stat-today', String(today));
+  if (lic.daily_limit > 0) {
+    setText('dash-stat-today-sub', `de ${lic.daily_limit} no plano`);
+  } else {
+    setText('dash-stat-today-sub', 'vídeos gerados');
+  }
+  setText('dash-stat-total',   String(hist.total || videos.length));
+  setText('dash-stat-minutes', totalMinutes.toFixed(1));
+  const diskMb = Number(hist.total_size_mb || 0);
+  setText('dash-stat-disk', diskMb >= 1024 ? (diskMb / 1024).toFixed(1) + ' GB' : Math.round(diskMb) + ' MB');
+  const freeMb = Number(dash.disk_free_mb || 0);
+  if (freeMb > 0) setText('dash-stat-disk-sub', `${(freeMb / 1024).toFixed(1)} GB livres`);
+
+  // Cota diária (barra visual)
+  const quotaCard = document.getElementById('dash-quota-card');
+  if (lic.daily_limit > 0) {
+    quotaCard.style.display = 'block';
+    const used = Number(lic.usage_today || 0);
+    const limit = Number(lic.daily_limit);
+    const pct = Math.min(100, Math.round((used / limit) * 100));
+    setText('dash-quota-label', `${used} / ${limit} vídeos hoje (${pct}%)`);
+    const bar = document.getElementById('dash-quota-bar');
+    if (bar) {
+      bar.style.width = pct + '%';
+      bar.style.background = pct >= 90 ? '#ef4444' : pct >= 70 ? '#eab308' : '#22c55e';
+    }
+  } else {
+    quotaCard.style.display = 'none';
+  }
+
+  // Vídeos recentes (últimos 6 com thumbs)
+  const recentEl = document.getElementById('dash-recent');
+  const recent = videos.slice(0, 6);
+  if (recent.length === 0) {
+    recentEl.innerHTML = '<div style="color:var(--dim);text-align:center;padding:24px;grid-column:1/-1">Nenhum vídeo ainda. <a href="#" onclick="showPage(\'create\');return false" style="color:#a78bfa">Criar o primeiro</a></div>';
+  } else {
+    recentEl.innerHTML = recent.map(v => {
+      const thumb = v.thumbnail ? `<img src="${v.thumbnail}" style="width:100%;height:112px;object-fit:cover;border-radius:6px;background:#222">` :
+        '<div style="width:100%;height:112px;background:#222;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:32px">🎬</div>';
+      const fname = (v.filename || '').replace(/_final\.mp4$/, '');
+      const dur = v.duration ? `${Number(v.duration).toFixed(1)}s` : '';
+      const sz = v.size_mb ? `${Number(v.size_mb).toFixed(1)} MB` : '';
+      const safe = encodeURIComponent(v.filename || '');
+      return `<div style="background:rgba(0,0,0,0.25);border-radius:8px;padding:8px">
+        ${thumb}
+        <div style="font-size:11px;font-family:monospace;margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${fname}">${fname || 'sem nome'}</div>
+        <div style="font-size:10px;color:var(--dim);margin-top:2px">${dur} · ${sz}</div>
+        <div style="display:flex;gap:4px;margin-top:6px">
+          <a href="/outputs/${safe}" target="_blank" class="btn-small" style="flex:1;text-align:center">▶️ Ver</a>
+          <a href="/outputs/${safe}" download="${v.filename || 'video.mp4'}" class="btn-small" style="flex:1;text-align:center">⬇️</a>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // Sistema
+  const gpu = sys.resources && sys.resources.vram_free_gb;
+  setText('dash-gpu', gpu != null ? `${gpu} GB` : '—');
+  const active = (sys.resources && sys.resources.active_jobs) ?? dash.active_jobs ?? 0;
+  setText('dash-jobs', String(active));
+  const engs = sys.engines || {};
+  const okEngs = Object.entries(engs).filter(([_, v]) => v === 'ready').map(([k, _]) => k).join(', ');
+  setText('dash-engines', okEngs || '—');
+  // Hardware ID
+  try {
+    const hw = await fetch('/api/license/hardware_id').then(r => r.json());
+    setText('dash-hwid', (hw.hardware_id || '—').slice(0, 16) + '…');
+  } catch (e) { setText('dash-hwid', '—'); }
+}
+
+// Re-carrega o dashboard sempre que o usuário entra nele
+(function () {
+  const _orig = window.showPage;
+  if (typeof _orig === 'function') {
+    window.showPage = function (name) {
+      const r = _orig.apply(this, arguments);
+      if (name === 'dashboard') {
+        try { loadDashboard(); } catch (e) { console.error('dash err', e); }
+      }
+      return r;
+    };
+  }
+  // Também carrega no primeiro load (se o dashboard estiver visível ou só pra pré-popular)
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => { try { loadDashboard(); } catch (e) {} });
+  } else {
+    try { loadDashboard(); } catch (e) {}
+  }
+})();
+
