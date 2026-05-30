@@ -481,6 +481,9 @@ function pollJob(jobId) {
         }
         loadHistory();
         toast('Vídeo pronto!', 'success');
+        // HeyGen-like: notificacao do browser + chime de audio.
+        // Permite ao usuario submeter um job longo e sair — sera avisado quando pronto.
+        notifyJobDone(d.output_filename || 'Seu vídeo está pronto');
       }
       if (d.status === 'error') {
         clearInterval(pollingInterval);
@@ -3193,4 +3196,67 @@ if (document.readyState === 'loading') {
 } else {
   loadLicenseUI();
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// 🔔 NOTIFICAÇÕES DE JOB CONCLUÍDO (HeyGen-like: avisa mesmo com aba em BG)
+// ════════════════════════════════════════════════════════════════════════════
+
+// Pede permissão de notificação na primeira interação. Idempotente.
+function requestNotifyPermission() {
+  try {
+    if (!('Notification' in window)) return;
+    if (Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {});
+    }
+  } catch (e) { /* navegadores antigos */ }
+}
+
+// Toca um chime curto (Web Audio API, sem arquivo). Falha silenciosamente.
+function playChime() {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    const ctx = new AC();
+    const now = ctx.currentTime;
+    // dois "ding" curtos: 880Hz e 1320Hz, envelope rápido
+    [[880, 0], [1320, 0.13]].forEach(([freq, t]) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      osc.connect(gain); gain.connect(ctx.destination);
+      gain.gain.setValueAtTime(0.0001, now + t);
+      gain.gain.exponentialRampToValueAtTime(0.18, now + t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + t + 0.25);
+      osc.start(now + t); osc.stop(now + t + 0.3);
+    });
+    setTimeout(() => { try { ctx.close(); } catch(_){} }, 800);
+  } catch (e) { /* sem audio */ }
+}
+
+// Notifica o usuário que um job terminou — chime + notificação de browser.
+function notifyJobDone(filename) {
+  playChime();
+  try {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      const n = new Notification('AvatarPilot Pro — Vídeo pronto! 🎬', {
+        body: filename || 'Seu vídeo de avatar está pronto para baixar.',
+        icon: '/static/favicon.ico',
+        tag:  'avp-job-done',  // substitui notificação anterior se ainda visível
+      });
+      n.onclick = () => { window.focus(); n.close(); };
+    }
+  } catch (e) { /* sem notificacao */ }
+}
+
+// Auto-pede permissão na primeira submissão de job (handler de click no botão Gerar)
+document.addEventListener('click', function _avpPermOnce(ev) {
+  const btn = ev.target.closest && ev.target.closest('button');
+  if (!btn) return;
+  const txt = (btn.innerText || '').toLowerCase();
+  if (/gerar|criar|generate/.test(txt)) {
+    requestNotifyPermission();
+    document.removeEventListener('click', _avpPermOnce, true);
+  }
+}, true);
 
