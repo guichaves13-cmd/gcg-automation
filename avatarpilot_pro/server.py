@@ -6121,6 +6121,34 @@ def api_generate():
             jobs[job_id]['_thread'] = t
     return jsonify({"job_id": job_id, "queued_workers": _cur_workers})
 
+def _compute_eta_seconds(j: dict) -> int:
+    """ETA HeyGen-like: estima segundos restantes a partir do progresso e tempo decorrido.
+    Retorna 0 se em fila/done/error ou se não tem dados confiáveis."""
+    try:
+        st  = j.get("status", "")
+        if st in ("queued", "done", "error", "failed", "cancelled"):
+            return 0
+        prog = float(j.get("progress", 0))
+        if prog <= 5 or prog >= 99:
+            return 0
+        # tempo decorrido desde criação
+        created = j.get("created", "")
+        if not created:
+            return 0
+        from datetime import datetime as _dt
+        try:
+            t0 = _dt.fromisoformat(created)
+            elapsed = (datetime.now() - t0).total_seconds()
+        except Exception:
+            return 0
+        if elapsed < 5:
+            return 0
+        # linear: ETA = elapsed * (100 - prog) / prog
+        eta = elapsed * (100.0 - prog) / prog
+        return max(0, int(eta))
+    except Exception:
+        return 0
+
 @app.route("/api/job/<job_id>")
 def api_job_status(job_id):
     if job_id in jobs:
@@ -6128,6 +6156,8 @@ def api_job_status(job_id):
         j.pop("_config", None)
         j.pop("_thread", None)   # Thread objects are not JSON serializable
         j.pop("_cancel", None)   # internal flag, not needed by client
+        # ETA HeyGen-like — minutos/segundos restantes estimados
+        j["eta_seconds"] = _compute_eta_seconds(j)
         return jsonify(j)
     # Fallback: look in DB (survives server restarts)
     conn = None

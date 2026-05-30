@@ -430,7 +430,14 @@ function pollJob(jobId) {
       const statusLabel = d.message || statusMap[d.status] || d.status;
       document.getElementById('progress-status').textContent = statusLabel;
       document.getElementById('progress-fill').style.width   = (d.progress || 0) + '%';
-      document.getElementById('progress-text').textContent   = `${d.progress || 0}% — ${d.message || ''}`;
+      // HeyGen-like ETA: "70% • ~8min 23s restantes — GFPGAN: restaurando..."
+      let etaPart = '';
+      const eta = Number(d.eta_seconds || 0);
+      if (eta > 5) {
+        const m = Math.floor(eta / 60), s = eta % 60;
+        etaPart = m > 0 ? ` • ~${m}min ${s}s restantes` : ` • ~${s}s restantes`;
+      }
+      document.getElementById('progress-text').textContent   = `${d.progress || 0}%${etaPart} — ${d.message || ''}`;
 
       const elapsed = Math.round((Date.now() - startTime) / 1000);
       const durEl   = document.getElementById('progress-duration');
