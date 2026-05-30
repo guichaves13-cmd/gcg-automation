@@ -430,14 +430,27 @@ function pollJob(jobId) {
       const statusLabel = d.message || statusMap[d.status] || d.status;
       document.getElementById('progress-status').textContent = statusLabel;
       document.getElementById('progress-fill').style.width   = (d.progress || 0) + '%';
-      // HeyGen-like ETA: "70% • ~8min 23s restantes — GFPGAN: restaurando..."
+      // HeyGen-like: stage indicator + ETA + mensagem técnica.
+      // ex: "✨ Qualidade (4/5) • 70% • ~3min 12s restantes — GFPGAN: restaurando qualidade (47%)..."
+      const msg = d.message || '';
       let etaPart = '';
       const eta = Number(d.eta_seconds || 0);
       if (eta > 5) {
         const m = Math.floor(eta / 60), s = eta % 60;
         etaPart = m > 0 ? ` • ~${m}min ${s}s restantes` : ` • ~${s}s restantes`;
       }
-      document.getElementById('progress-text').textContent   = `${d.progress || 0}%${etaPart} — ${d.message || ''}`;
+      // mapear mensagem técnica -> etapa visual com icone
+      let stage = null;
+      const mL = msg.toLowerCase();
+      if      (/aguardando|vaga|fila/.test(mL))                                                            stage = { i: '⏳', l: 'Na fila',     n: 0 };
+      else if (/audio|voice|tts|edge[- ]?tts|eleven/.test(mL))                                             stage = { i: '🎙️', l: 'Áudio',      n: 1 };
+      else if (/sadtalker|gesture pack|montando seq|face swap|movimento natural|seq[uû]ênc/.test(mL))     stage = { i: '🎬', l: 'Animação',   n: 2 };
+      else if (/musetalk|wav2lip|sincroniz|lip sync/.test(mL))                                             stage = { i: '👄', l: 'Lip Sync',   n: 3 };
+      else if (/gfpgan|restaurando|codeformer|enhance/.test(mL))                                           stage = { i: '✨', l: 'Qualidade',  n: 4 };
+      else if (/hd final|compositing|encod|body sway|watermark|smooth motion|upscale|fade|export/.test(mL))stage = { i: '📺', l: 'Render HD',  n: 5 };
+      else if (/done|concluí/.test(mL))                                                                    stage = { i: '✅', l: 'Pronto',     n: 5 };
+      const stageStr = stage ? `${stage.i} ${stage.l} (${stage.n}/5) • ` : '';
+      document.getElementById('progress-text').textContent = `${stageStr}${d.progress || 0}%${etaPart} — ${msg}`;
 
       const elapsed = Math.round((Date.now() - startTime) / 1000);
       const durEl   = document.getElementById('progress-duration');
