@@ -2116,14 +2116,29 @@ def run_wav2lip(image_path: str, audio_path: str, output_path: str,
                 _bg_ext = os.path.splitext(image_path)[1] or ".jpg"
                 _bg_src = os.path.join(tmp_root, f"bg_frame{_bg_ext}")
                 shutil.copy2(image_path, _bg_src)
+            # ── HeyGen-quality: composite com BORDAS SUAVES (feathered alpha) ──
+            # O composite anterior usava overlay com borda retangular dura — visivel
+            # como caixa ao redor do rosto, principal causa do "look Wav2Lip ruim".
+            # Agora usamos um mask gaussiano via geq no canal alpha: 0 nas bordas,
+            # 255 no centro, transicao suave em _F pixels. O rosto se funde no corpo.
+            _F = 28  # pixels de feather (transicao alpha) — testado p/ ~720p crop
+            # geq alpha: para cada (X,Y), produto de fatores horizontal e vertical;
+            # cada fator vai linearmente de 0 (na borda) a 1 (>= F do bordo).
+            # Virgulas escapadas com \\, para o parser de filter do ffmpeg.
+            _alpha_expr = (
+                "255"
+                f"*if(lt(X\\,{_F})\\,X/{_F}\\,if(gt(X\\,W-{_F})\\,(W-X)/{_F}\\,1))"
+                f"*if(lt(Y\\,{_F})\\,Y/{_F}\\,if(gt(Y\\,H-{_F})\\,(H-Y)/{_F}\\,1))"
+            )
             _comp_r = subprocess.run([
                 _ff2, "-y",
                 "-loop", "1", "-framerate", "25", "-i", _bg_src,
                 "-i", safe_out,
                 "-filter_complex",
                 f"[0:v]scale={_bg_w}:{_bg_h}:flags=lanczos[bg];"
-                f"[1:v]scale={_crop_w}:{_crop_h}:flags=lanczos[fg];"
-                f"[bg][fg]overlay={_crop_x1}:{_crop_y1}:shortest=1[out]",
+                f"[1:v]scale={_crop_w}:{_crop_h}:flags=lanczos,format=rgba,"
+                f"geq=r='r(X\\,Y)':g='g(X\\,Y)':b='b(X\\,Y)':a='{_alpha_expr}'[fg];"
+                f"[bg][fg]overlay={_crop_x1}:{_crop_y1}:format=auto:shortest=1[out]",
                 "-map", "[out]", "-map", "1:a",
                 "-c:v", "libx264", "-preset", "slow", "-crf", "17",
                 "-pix_fmt", "yuv420p", "-t", str(audio_dur_s),
@@ -2131,11 +2146,30 @@ def run_wav2lip(image_path: str, audio_path: str, output_path: str,
             ], capture_output=True, timeout=600)
             if _comp_r.returncode == 0 and os.path.exists(_comp_out) and os.path.getsize(_comp_out) > 50000:
                 safe_out = _comp_out
-                print(f"  [Wav2Lip] Composited → {_bg_w}×{_bg_h} full frame (lip-sync overlay at {_crop_x1},{_crop_y1} size {_crop_w}×{_crop_h})")
+                print(f"  [Wav2Lip] Composited (FEATHERED {_F}px alpha) → {_bg_w}×{_bg_h} full frame (overlay {_crop_x1},{_crop_y1} {_crop_w}×{_crop_h})")
             else:
-                _ce = _comp_r.stderr
-                if isinstance(_ce, bytes): _ce = _ce.decode("utf-8", errors="replace")
-                print(f"  [Wav2Lip] Composite failed (rc={_comp_r.returncode}) — keeping crop video. {(_ce or '')[:300]}")
+                # Fallback 1: tentar overlay HARD (sem feather) — pelo menos o composite-back funciona
+                _ce = (_comp_r.stderr or b"").decode("utf-8", errors="replace") if isinstance(_comp_r.stderr, (bytes, bytearray)) else (_comp_r.stderr or "")
+                print(f"  [Wav2Lip] Feathered composite falhou (rc={_comp_r.returncode}) — tentando overlay hard. {_ce[:200]}")
+                _comp_r2 = subprocess.run([
+                    _ff2, "-y",
+                    "-loop", "1", "-framerate", "25", "-i", _bg_src,
+                    "-i", safe_out,
+                    "-filter_complex",
+                    f"[0:v]scale={_bg_w}:{_bg_h}:flags=lanczos[bg];"
+                    f"[1:v]scale={_crop_w}:{_crop_h}:flags=lanczos[fg];"
+                    f"[bg][fg]overlay={_crop_x1}:{_crop_y1}:shortest=1[out]",
+                    "-map", "[out]", "-map", "1:a",
+                    "-c:v", "libx264", "-preset", "slow", "-crf", "17",
+                    "-pix_fmt", "yuv420p", "-t", str(audio_dur_s),
+                    _comp_out
+                ], capture_output=True, timeout=600)
+                if _comp_r2.returncode == 0 and os.path.exists(_comp_out) and os.path.getsize(_comp_out) > 50000:
+                    safe_out = _comp_out
+                    print(f"  [Wav2Lip] Composited (HARD fallback) → {_bg_w}×{_bg_h}")
+                else:
+                    _ce2 = (_comp_r2.stderr or b"").decode("utf-8", errors="replace") if isinstance(_comp_r2.stderr, (bytes, bytearray)) else (_comp_r2.stderr or "")
+                    print(f"  [Wav2Lip] Hard composite tambem falhou (rc={_comp_r2.returncode}) — mantendo crop video. {_ce2[:200]}")
 
         # Fix A/V sync antes de copiar para output
         _synced = os.path.join(tmp_root, "out_sync.mp4")
