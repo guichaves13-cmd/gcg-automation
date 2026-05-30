@@ -3105,15 +3105,26 @@ async function loadLicenseUI() {
   }
   try {
     const st = await fetch('/api/license/status').then(r => r.json());
+    // Uso diário (mostra X/Y vídeos hoje se o plano tem limite)
+    const used  = Number(st.usage_today || 0);
+    const limit = Number(st.daily_limit || 0);
+    let usagePart = '';
+    if (limit > 0) {
+      const pct = Math.min(100, Math.round((used / limit) * 100));
+      const c   = pct >= 90 ? '#ef4444' : (pct >= 70 ? '#eab308' : '#22c55e');
+      usagePart = ` · <span style="color:${c}">Hoje: ${used}/${limit}</span>`;
+    } else if (st.active && used > 0) {
+      usagePart = ` · Hoje: ${used} vídeos`;
+    }
     if (st.active) {
       const exp = (st.expires === 'never' || !st.expires)
         ? 'vitalícia'
         : (String(st.expires).slice(0, 10));
       const cust = st.customer ? ` · ${st.customer}` : '';
-      stEl.innerHTML = `<span style="color:#22c55e;font-weight:600">● Ativa</span> — plano <strong>${st.plan}</strong> (expira: ${exp})${cust}`;
+      stEl.innerHTML = `<span style="color:#22c55e;font-weight:600">● Ativa</span> — plano <strong>${st.plan}</strong> (expira: ${exp})${cust}${usagePart}`;
       if (actRow) actRow.style.display = 'none';
     } else {
-      stEl.innerHTML = `<span style="color:#eab308;font-weight:600">● ${st.plan || 'trial'}</span> — ${st.reason || 'sem licença ativa'}`;
+      stEl.innerHTML = `<span style="color:#eab308;font-weight:600">● ${st.plan || 'trial'}</span> — ${st.reason || 'sem licença ativa'}${usagePart}`;
       if (actRow) actRow.style.display = '';
     }
   } catch (e) {

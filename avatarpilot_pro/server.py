@@ -147,6 +147,50 @@ except Exception as _lic_e:
     _LICENSE_AVAILABLE = False
     print(f"  [License] módulo indisponível ({_lic_e}) — rodando sem licenciamento", flush=True)
 _LICENSE_STATE = {"active": False, "plan": "trial"}  # preenchido no boot
+
+# ── Cota diária por licença (hardware_id) ──────────────────────────────────
+# Persistido em data/daily_usage.json: {"<hwid>": {"YYYY-MM-DD": count}}
+# Habilitado quando enforcement está ON e o plano tem daily_jobs > 0.
+_DAILY_USAGE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "daily_usage.json")
+_daily_usage_lock = threading.Lock()
+
+def _daily_today() -> str:
+    return datetime.now().strftime("%Y-%m-%d")
+
+def _daily_load() -> dict:
+    try:
+        with open(_DAILY_USAGE_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def _daily_save(d: dict):
+    try:
+        os.makedirs(os.path.dirname(_DAILY_USAGE_FILE), exist_ok=True)
+        with open(_DAILY_USAGE_FILE, "w", encoding="utf-8") as f:
+            json.dump(d, f, indent=2)
+    except Exception as _de:
+        print(f"  [DailyUsage] save error: {_de}", flush=True)
+
+def get_daily_usage(hwid: str) -> int:
+    if not hwid: return 0
+    with _daily_usage_lock:
+        return int(_daily_load().get(hwid, {}).get(_daily_today(), 0))
+
+def increment_daily_usage(hwid: str) -> int:
+    if not hwid: return 0
+    today = _daily_today()
+    with _daily_usage_lock:
+        all_d = _daily_load()
+        hw = all_d.get(hwid, {})
+        # purge entradas > 7 dias
+        from datetime import timedelta as _td
+        cutoff = (datetime.now() - _td(days=7)).strftime("%Y-%m-%d")
+        hw = {k: v for k, v in hw.items() if k >= cutoff}
+        hw[today] = hw.get(today, 0) + 1
+        all_d[hwid] = hw
+        _daily_save(all_d)
+        return hw[today]
 _temp_prefixes  = ("mst_avp_", "mst_chunk_", "avp_loop_", "avp_hd_", "sway_",
                    "avp_sad_", "wav2lip_", "fswap_vid_",
                    "echo_avp_", "codeformer_avp_", "gfpgan_avp_",
@@ -5921,7 +5965,19 @@ def api_generate():
     if _LICENSE_AVAILABLE and os.environ.get("AVP_LICENSE_ENFORCE", "0").strip() in ("1", "true", "yes"):
         _lic_plan   = _LICENSE_STATE.get("plan", "trial")
         _lic_limits = _LICENSE_STATE.get("limits", {})
+        _lic_hwid   = _LICENSE_STATE.get("hardware_id", "")
         plan = _lic_plan  # licença sobrepõe settings
+        # Cota diária — bloqueia quando o plano tem daily_jobs > 0
+        _daily_max = int(_lic_limits.get("daily_jobs", 0))
+        if _daily_max > 0 and _lic_hwid:
+            _used_today = get_daily_usage(_lic_hwid)
+            if _used_today >= _daily_max:
+                return jsonify({
+                    "error": f"Cota diária do plano '{_lic_plan}' atingida "
+                             f"({_used_today}/{_daily_max}). Reset à meia-noite (horário local).",
+                    "code": "daily_quota_exceeded", "plan": _lic_plan,
+                    "used": _used_today, "limit": _daily_max
+                }), 402
         _max_s = _lic_limits.get("max_seconds", 0)
         if _max_s and _max_s > 0 and script:
             _est_s = len(script) / 14.0  # ~14 chars/s
@@ -6119,6 +6175,15 @@ def api_generate():
     with jobs_lock:
         if job_id in jobs:
             jobs[job_id]['_thread'] = t
+    # Incrementa cota diária quando enforcement está ON e o plano tem quota
+    if _LICENSE_AVAILABLE and os.environ.get("AVP_LICENSE_ENFORCE", "0").strip() in ("1","true","yes"):
+        try:
+            _hwid_inc = _LICENSE_STATE.get("hardware_id", "")
+            _dmax = int(_LICENSE_STATE.get("limits", {}).get("daily_jobs", 0))
+            if _hwid_inc and _dmax > 0:
+                increment_daily_usage(_hwid_inc)
+        except Exception as _ie:
+            print(f"  [DailyUsage] increment error: {_ie}", flush=True)
     return jsonify({"job_id": job_id, "queued_workers": _cur_workers})
 
 def _compute_eta_seconds(j: dict) -> int:
@@ -7570,15 +7635,20 @@ def api_license_status():
         return jsonify({"active": False, "plan": "unlimited",
                         "reason": "Licenciamento desabilitado (dev)"})
     st = _lic.load_active_license()
+    _hwid_st = st.get("hardware_id", "")
+    _limits_st = st.get("limits", {}) or {}
+    _daily_limit_st = int(_limits_st.get("daily_jobs", 0))
     # não expor dados sensíveis além do necessário
     return jsonify({
         "active":      st.get("active", False),
         "plan":        st.get("plan", "trial"),
         "expires":     st.get("expires", "never"),
         "customer":    st.get("customer", ""),
-        "hardware_id": st.get("hardware_id", ""),
+        "hardware_id": _hwid_st,
         "reason":      st.get("reason", ""),
-        "limits":      st.get("limits", {}),
+        "limits":      _limits_st,
+        "usage_today": get_daily_usage(_hwid_st),
+        "daily_limit": _daily_limit_st,
     })
 
 @app.route("/api/license/activate", methods=["POST"])
