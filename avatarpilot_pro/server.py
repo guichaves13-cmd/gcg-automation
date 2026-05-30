@@ -6025,7 +6025,9 @@ def api_generate():
     watermark_text    = request.form.get("watermark_text", "")[:200]
     watermark_pos     = request.form.get("watermark_pos", "bottom_right")
     music_url         = request.form.get("music_url", "")
-    enable_fade       = request.form.get("enable_fade") == "true"
+    # HeyGen-like default: fade in/out (~0.5s) por padrão — abertura/fechamento
+    # cinematográfico evita corte seco. Cliente pode desligar com enable_fade=false.
+    enable_fade       = request.form.get("enable_fade", "true").lower() != "false"
     export_format     = request.form.get("export_format", "")
     enhance_img       = request.form.get("enhance_image") == "true"
     enhance_face      = request.form.get("enhance_face", "true").lower() != "false"
