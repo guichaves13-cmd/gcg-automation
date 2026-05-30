@@ -5968,7 +5968,9 @@ def api_generate():
     caption_model   = request.form.get("caption_model", "base")
     caption_color   = request.form.get("caption_color", "white")
     caption_pos     = request.form.get("caption_position", "bottom")
-    normalize_audio   = request.form.get("normalize_audio") == "true"
+    # HeyGen-like default: ligado por padrão p/ loudness consistente entre todas as gerações.
+    # Cliente pode desligar explicitamente passando normalize_audio=false.
+    normalize_audio   = request.form.get("normalize_audio", "true").lower() != "false"
     output_format     = request.form.get("output_format", "landscape")
     watermark_text    = request.form.get("watermark_text", "")[:200]
     watermark_pos     = request.form.get("watermark_pos", "bottom_right")
