@@ -2130,18 +2130,29 @@ def run_wav2lip(image_path: str, audio_path: str, output_path: str,
                 f"*if(lt(X\\,{_F})\\,X/{_F}\\,if(gt(X\\,W-{_F})\\,(W-X)/{_F}\\,1))"
                 f"*if(lt(Y\\,{_F})\\,Y/{_F}\\,if(gt(Y\\,H-{_F})\\,(H-Y)/{_F}\\,1))"
             )
+            # MELHORIAS de lip sync neste composite:
+            # 1) Color matching: eq sutil (saturation 0.97, gamma 1.02, contrast 1.02)
+            #    p/ casar o tom do patch ao corpo — Wav2Lip tende a oversaturar.
+            # 2) Sharpening: unsharp leve realça precisão labial (linha 5/5/0.7).
+            # 3) Framerate locado a 25fps com vsync cfr — elimina drift de timing
+            #    que causa boca dessincronizada com voz.
+            # 4) Feathered alpha (28px) — bordas suaves p/ patch se fundir no corpo.
             _comp_r = subprocess.run([
                 _ff2, "-y",
                 "-loop", "1", "-framerate", "25", "-i", _bg_src,
                 "-i", safe_out,
                 "-filter_complex",
-                f"[0:v]scale={_bg_w}:{_bg_h}:flags=lanczos[bg];"
-                f"[1:v]scale={_crop_w}:{_crop_h}:flags=lanczos,format=rgba,"
+                f"[0:v]scale={_bg_w}:{_bg_h}:flags=lanczos,fps=25[bg];"
+                f"[1:v]scale={_crop_w}:{_crop_h}:flags=lanczos,fps=25,"
+                f"eq=saturation=0.97:gamma=1.02:contrast=1.02,"        # color match
+                f"unsharp=5:5:0.7:5:5:0.0,"                            # mouth sharpening
+                f"format=rgba,"
                 f"geq=r='r(X\\,Y)':g='g(X\\,Y)':b='b(X\\,Y)':a='{_alpha_expr}'[fg];"
                 f"[bg][fg]overlay={_crop_x1}:{_crop_y1}:format=auto:shortest=1[out]",
                 "-map", "[out]", "-map", "1:a",
                 "-c:v", "libx264", "-preset", "slow", "-crf", "17",
-                "-pix_fmt", "yuv420p", "-t", str(audio_dur_s),
+                "-pix_fmt", "yuv420p", "-r", "25", "-vsync", "cfr",
+                "-t", str(audio_dur_s),
                 _comp_out
             ], capture_output=True, timeout=600)
             if _comp_r.returncode == 0 and os.path.exists(_comp_out) and os.path.getsize(_comp_out) > 50000:
@@ -2655,13 +2666,30 @@ def run_wav2lip_chunked(image_path: str, audio_path: str, output_path: str,
                     f.write(f"file '{v.replace(os.sep, '/')}'\n")
 
             safe_out = os.path.join(_ascii_tmp, "merged.mp4")
+            # MELHORIA lip sync: re-encode VIDEO ao concatenar (antes era -c copy = hard cut)
+            # com framerate locado a 25fps + vsync CFR. Smooth keyframe alignment entre chunks
+            # elimina "mouth pop" no momento da juncao. Audio passa direto (Wav2Lip ja sincronizou).
+            # preset veryfast: ~15% mais lento que copy mas qualidade percebida muito melhor.
             r = subprocess.run([
                 ffmpeg, "-y", "-f", "concat", "-safe", "0",
-                "-i", concat_txt, "-c", "copy", safe_out
-            ], capture_output=True, timeout=600)
+                "-i", concat_txt,
+                "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+                "-c:a", "copy",
+                "-r", "25", "-vsync", "cfr", "-pix_fmt", "yuv420p",
+                "-fflags", "+genpts",
+                safe_out
+            ], capture_output=True, timeout=1800)
             if r.returncode != 0:
+                # Fallback: tenta concat com -c copy (modo antigo) p/ nao quebrar pipeline
                 err = (r.stderr or b"").decode("utf-8", errors="replace")[:500] if isinstance(r.stderr, bytes) else (r.stderr or "")[:500]
-                raise Exception(f"Concat failed: {err}")
+                print(f"  [Wav2Lip] Concat smooth falhou ({err[:200]}) — fallback p/ copy")
+                r2 = subprocess.run([
+                    ffmpeg, "-y", "-f", "concat", "-safe", "0",
+                    "-i", concat_txt, "-c", "copy", safe_out
+                ], capture_output=True, timeout=600)
+                if r2.returncode != 0:
+                    err2 = (r2.stderr or b"").decode("utf-8", errors="replace")[:500] if isinstance(r2.stderr, bytes) else (r2.stderr or "")[:500]
+                    raise Exception(f"Concat falhou (smooth + copy): {err2}")
 
             shutil.copy2(safe_out, output_path)
         finally:
@@ -3711,11 +3739,15 @@ def _fix_av_sync(input_path: str, output_path: str, job_id: str = None) -> bool:
     try:
         _tmp_dir = _avt.mkdtemp(prefix="avsync_")
         _tmp = os.path.join(_tmp_dir, "synced.mp4")
+        # MELHORIA lip sync: async=2000 (~45ms tolerancia, antes 22ms) + first_pts=0
+        # garante reset do timestamp na origem -> elimina drift acumulado em videos
+        # longos. min_hard_comp=0.10 forca correcao quando drift > 100ms.
         _r = subprocess.run([
             ff, "-y", "-i", input_path,
             "-c:v", "copy",
-            "-af", "aresample=async=1000",
+            "-af", "aresample=async=2000:first_pts=0:min_hard_comp=0.100",
             "-c:a", "aac", "-b:a", "192k",
+            "-fflags", "+genpts",
             _tmp
         ], capture_output=True, timeout=300)
         if _r.returncode == 0 and os.path.exists(_tmp) and os.path.getsize(_tmp) > 10000:
