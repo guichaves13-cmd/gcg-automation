@@ -1,0 +1,42 @@
+CONTRATO DE LICENCA DE USO — AVATARPILOT PRO
+
+Este software ("AvatarPilot Pro") e propriedade de Guilherme Chaves
+("Licenciante"). O uso deste software esta sujeito aos termos abaixo.
+
+1. CONCESSAO DE LICENCA
+   Mediante o pagamento e a ativacao via chave de licenca, o Licenciante concede
+   ao usuario final ("Licenciado") uma licenca pessoal, intransferivel e
+   nao-exclusiva para instalar e usar uma copia do AvatarPilot Pro em UMA UNICA
+   maquina identificada pelo seu Hardware ID.
+
+2. RESTRICOES
+   O Licenciado NAO pode:
+   a) Distribuir, sublicenciar, vender, alugar ou emprestar copias do software;
+   b) Realizar engenharia reversa, descompilar ou desmontar o software;
+   c) Remover ou alterar avisos de copyright/licenca;
+   d) Burlar mecanismos de licenciamento (hardware binding, assinatura);
+   e) Usar a mesma licenca em mais de uma maquina sem nova aquisicao.
+
+3. CONTEUDO GERADO
+   O Licenciado e o unico responsavel pelo conteudo gerado (videos, audios,
+   imagens). O Licenciante nao se responsabiliza por usos ilicitos, violacoes
+   de direitos de terceiros, ou conteudo difamatorio/enganoso.
+
+4. ATUALIZACOES
+   Atualizacoes podem ser disponibilizadas a criterio do Licenciante. Versoes
+   maiores (X.0.0) podem requerer nova licenca.
+
+5. GARANTIA E LIMITACAO DE RESPONSABILIDADE
+   O software e fornecido "COMO ESTA", sem garantias. O Licenciante nao se
+   responsabiliza por danos diretos, indiretos, incidentais ou consequenciais
+   decorrentes do uso ou impossibilidade de uso do software.
+
+6. RESCISAO
+   Esta licenca termina automaticamente em caso de descumprimento. O Licenciado
+   deve cessar o uso e remover o software apos a rescisao.
+
+7. LEI APLICAVEL
+   Este contrato rege-se pelas leis brasileiras. Foro: comarca do Licenciante.
+
+Ao instalar ou usar o AvatarPilot Pro, o Licenciado confirma haver lido,
+compreendido e aceito integralmente os termos deste contrato.
