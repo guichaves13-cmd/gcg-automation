@@ -42,6 +42,19 @@
       <div class="loading-text" id="loading-text">Processando...</div>
     </div>
 
+    <!-- BANNER DE LICENÇA EXPIRANDO (global, aparece se <=7 dias) -->
+    <div id="lic-expire-banner" style="display:none;padding:12px 18px;margin-bottom:12px;border-radius:8px;border:1px solid rgba(234,179,8,0.5);background:rgba(234,179,8,0.12);color:#fbbf24;font-size:14px;line-height:1.4">
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:20px">⚠️</span>
+        <div style="flex:1;min-width:240px">
+          <strong id="lic-expire-title">Licença expirando em breve</strong>
+          <div id="lic-expire-msg" style="margin-top:2px;opacity:0.9">—</div>
+        </div>
+        <a href="/pricing" target="_blank" class="btn" style="white-space:nowrap;background:#fbbf24;color:#000">Renovar agora</a>
+        <button onclick="document.getElementById('lic-expire-banner').style.display='none'" style="background:transparent;border:none;color:#fbbf24;font-size:18px;cursor:pointer;padding:4px 8px" title="Fechar">✕</button>
+      </div>
+    </div>
+
     <!-- ===== DASHBOARD PAGE ===== -->
     <div class="page" id="page-dashboard">
       <div class="page-header">
@@ -176,6 +189,7 @@
           <div class="card">
             <h3>📝 Script
               <span style="float:right;display:flex;gap:6px">
+                <button class="btn-ai" onclick="openScriptTemplates()" title="Templates prontos por nicho">📋 Templates</button>
                 <button class="btn-ai" onclick="openAIModal()">✨ Gerar com IA</button>
                 <button class="btn-ai" onclick="enhanceScript()">🔮 Enhance</button>
                 <button class="btn-ai" onclick="showPage('editor')" title="Gerar script a partir de uma URL">🔗 URL</button>

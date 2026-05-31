@@ -3130,6 +3130,44 @@ async function loadLicenseUI() {
       stEl.innerHTML = `<span style="color:#eab308;font-weight:600">● ${st.plan || 'trial'}</span> — ${st.reason || 'sem licença ativa'}${usagePart}`;
       if (actRow) actRow.style.display = '';
     }
+
+    // Banner GLOBAL de expiração: aparece se licença expira em <=7 dias.
+    // Sticky até o usuário fechar; reaparece no próximo load se condição persiste.
+    try {
+      const banner = document.getElementById('lic-expire-banner');
+      if (banner && st.active && st.expires && st.expires !== 'never') {
+        const expDate = new Date(st.expires);
+        if (!isNaN(expDate.getTime())) {
+          const daysLeft = Math.ceil((expDate.getTime() - Date.now()) / 86400000);
+          const dismissedKey = 'avp_lic_banner_dismissed_' + st.expires.slice(0, 10);
+          if (daysLeft <= 7 && !sessionStorage.getItem(dismissedKey)) {
+            const title = document.getElementById('lic-expire-title');
+            const msg   = document.getElementById('lic-expire-msg');
+            if (daysLeft <= 0) {
+              if (title) title.textContent = '🚫 Sua licença EXPIROU';
+              if (msg) msg.textContent = `O plano '${st.plan}' venceu em ${st.expires.slice(0,10)}. Renove para continuar gerando vídeos.`;
+            } else if (daysLeft === 1) {
+              if (title) title.textContent = '⏰ Sua licença expira AMANHÃ';
+              if (msg) msg.textContent = `Plano '${st.plan}' expira em ${st.expires.slice(0,10)}. Renove hoje para evitar interrupção.`;
+            } else {
+              if (title) title.textContent = `⚠️ Licença expira em ${daysLeft} dias`;
+              if (msg) msg.textContent = `Plano '${st.plan}' expira em ${st.expires.slice(0,10)}. Considere renovar antes do vencimento.`;
+            }
+            banner.style.display = 'block';
+            // Marca como dismissed quando o usuário fecha (mas só pra ESTA expires — se renovar, nova banner)
+            banner.querySelectorAll('button').forEach(b => {
+              if (!b._avpHooked) { b._avpHooked = true;
+                b.addEventListener('click', () => sessionStorage.setItem(dismissedKey, '1'));
+              }
+            });
+          } else {
+            banner.style.display = 'none';
+          }
+        }
+      } else if (banner) {
+        banner.style.display = 'none';
+      }
+    } catch (e) { /* banner não-crítico */ }
   } catch (e) {
     stEl.textContent = 'erro ao carregar status';
   }
@@ -3384,6 +3422,158 @@ async function loadDashboard() {
     document.addEventListener('DOMContentLoaded', () => { try { loadDashboard(); } catch (e) {} });
   } else {
     try { loadDashboard(); } catch (e) {}
+  }
+})();
+
+// ════════════════════════════════════════════════════════════════════════════
+// 📋 TEMPLATES DE SCRIPT POR NICHO (modal HeyGen-like)
+// ════════════════════════════════════════════════════════════════════════════
+const SCRIPT_TEMPLATES = [
+  { icon: '📢', name: 'Anúncio curto',     niche: 'Marketing/Vendas',
+    desc: 'Hook + benefício + CTA. Ideal p/ Reels/TikTok 15-30s.',
+    voice: 'sales_pitch',
+    text: 'Cansado de [PROBLEMA]? Descobri uma forma simples de [SOLUÇÃO]. Em apenas [TEMPO], você consegue [RESULTADO]. Clique no link agora e veja como funciona. Não perca essa oportunidade!' },
+  { icon: '🎓', name: 'Tutorial / Como fazer', niche: 'Educacional',
+    desc: 'Passo-a-passo claro. Ideal p/ tutoriais 1-3min.',
+    voice: 'corporate_trainer',
+    text: 'Hoje vou te mostrar como [TAREFA] em apenas 3 passos simples. Primeiro, [PASSO 1]. Em seguida, [PASSO 2]. E por último, [PASSO 3]. Pronto! Agora você já sabe [RESULTADO]. Curtiu? Compartilhe esse vídeo!' },
+  { icon: '🎤', name: 'Apresentação de canal', niche: 'YouTube/Podcast',
+    desc: 'Boas-vindas profissional. Ideal p/ intro de canal/podcast.',
+    voice: 'podcast_host',
+    text: 'Olá e bem-vindo ao [NOME DO CANAL]. Aqui você vai aprender [TÓPICO PRINCIPAL] de forma simples e direta. Toda semana eu trago [TIPO DE CONTEÚDO] novo. Se você curte [TEMA], inscreva-se e ative o sininho. Vamos juntos nessa jornada!' },
+  { icon: '📰', name: 'Notícia / Reportagem', niche: 'Jornalismo',
+    desc: 'Tom de âncora profissional. Ideal p/ news bulletins.',
+    voice: 'news_anchor',
+    text: 'Boa noite. A notícia mais comentada de hoje: [MANCHETE]. Segundo informações, [CONTEXTO BREVE]. Especialistas afirmam que [ANÁLISE]. Acompanhe os desdobramentos no nosso portal. Eu sou [SEU NOME], obrigado por assistir.' },
+  { icon: '💪', name: 'Mensagem motivacional', niche: 'Coaching/Self-help',
+    desc: 'Inspiração emocional. Ideal p/ Reels motivacionais 30s.',
+    voice: 'friendly_explainer',
+    text: 'Pare e respire fundo. Tudo o que você precisa pra mudar sua vida começa com uma decisão. Hoje. Agora. Não importa onde você está — importa onde você quer chegar. Dê o primeiro passo. O resto vem com o tempo. Você consegue.' },
+  { icon: '🎬', name: 'Narração de documentário', niche: 'Documental',
+    desc: 'Tom profundo e contemplativo. Ideal p/ vídeo longo (1-5min).',
+    voice: 'documentary_narrator',
+    text: 'Existe um lugar no mundo onde o tempo parece se esticar. [DESCRIÇÃO DO LUGAR/TEMA]. Há séculos, [CONTEXTO HISTÓRICO]. Hoje, [SITUAÇÃO ATUAL]. E é justamente essa transformação que vamos explorar nos próximos minutos.' },
+];
+
+function openScriptTemplates() {
+  // Remove modal anterior se existir
+  const old = document.getElementById('script-templates-modal');
+  if (old) old.remove();
+  // Cria modal
+  const m = document.createElement('div');
+  m.id = 'script-templates-modal';
+  m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  m.innerHTML = `
+    <div style="background:#1a1a2e;border:1px solid rgba(124,58,237,0.4);border-radius:12px;max-width:760px;width:100%;max-height:85vh;overflow:auto;padding:24px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <h2 style="margin:0;font-size:20px">📋 Templates de Script</h2>
+        <button onclick="document.getElementById('script-templates-modal').remove()" style="background:transparent;border:none;color:#fff;font-size:24px;cursor:pointer;padding:4px 12px">✕</button>
+      </div>
+      <p style="color:var(--dim);font-size:13px;margin:0 0 16px">Clique em um template para usar. Substitua os [CAMPOS] pelo seu conteúdo. A voz recomendada é selecionada automaticamente.</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px" id="tmpl-grid"></div>
+    </div>
+  `;
+  document.body.appendChild(m);
+  const grid = document.getElementById('tmpl-grid');
+  SCRIPT_TEMPLATES.forEach((tpl, idx) => {
+    const card = document.createElement('div');
+    card.style.cssText = 'background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:14px;cursor:pointer;transition:all 0.15s';
+    card.onmouseenter = () => { card.style.borderColor = 'rgba(124,58,237,0.6)'; card.style.background = 'rgba(124,58,237,0.08)'; };
+    card.onmouseleave = () => { card.style.borderColor = 'rgba(255,255,255,0.08)'; card.style.background = 'rgba(0,0,0,0.3)'; };
+    card.onclick = () => applyScriptTemplate(idx);
+    card.innerHTML = `
+      <div style="font-size:24px">${tpl.icon}</div>
+      <div style="font-weight:600;margin-top:6px">${tpl.name}</div>
+      <div style="color:var(--dim);font-size:11px;margin-top:2px">${tpl.niche}</div>
+      <div style="color:var(--dim);font-size:12px;margin-top:8px;line-height:1.3">${tpl.desc}</div>
+    `;
+    grid.appendChild(card);
+  });
+  // Fecha clicando no backdrop
+  m.addEventListener('click', e => { if (e.target === m) m.remove(); });
+}
+
+function applyScriptTemplate(idx) {
+  const tpl = SCRIPT_TEMPLATES[idx];
+  if (!tpl) return;
+  const scriptEl = document.getElementById('script');
+  if (scriptEl) {
+    if (scriptEl.value.trim() && !confirm('Substituir o script atual pelo template?')) return;
+    scriptEl.value = tpl.text;
+    scriptEl.dispatchEvent(new Event('input', { bubbles: true })); // dispara contador
+  }
+  // Tenta selecionar a voz recomendada (preset)
+  const presetSel = document.getElementById('voice-preset') || document.querySelector('[id*=preset]');
+  if (presetSel && tpl.voice) {
+    try {
+      presetSel.value = tpl.voice;
+      presetSel.dispatchEvent(new Event('change', { bubbles: true }));
+    } catch (e) { /* preset não existe nesse select */ }
+  }
+  document.getElementById('script-templates-modal').remove();
+  if (typeof toast === 'function') toast(`✓ Template "${tpl.name}" aplicado — substitua os [CAMPOS]`, 'success');
+  if (scriptEl) scriptEl.focus();
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// 📥 DRAG-AND-DROP de imagem/vídeo na zona de upload (Create Avatar)
+// ════════════════════════════════════════════════════════════════════════════
+(function setupDragAndDrop() {
+  function init() {
+    const zone  = document.getElementById('upload-zone');
+    const input = document.getElementById('img-input');
+    if (!zone || !input) return;
+    if (zone._avpDragSetup) return;  // idempotent
+    zone._avpDragSetup = true;
+    const _origBorder = zone.style.border || '';
+    const _origBg     = zone.style.background || '';
+    const highlight = () => {
+      zone.style.border = '2px dashed #22c55e';
+      zone.style.background = 'rgba(34,197,94,0.08)';
+    };
+    const unhighlight = () => {
+      zone.style.border = _origBorder;
+      zone.style.background = _origBg;
+    };
+    ['dragenter', 'dragover'].forEach(e =>
+      zone.addEventListener(e, ev => { ev.preventDefault(); ev.stopPropagation(); highlight(); }));
+    ['dragleave', 'dragend'].forEach(e =>
+      zone.addEventListener(e, ev => { ev.preventDefault(); ev.stopPropagation(); unhighlight(); }));
+    zone.addEventListener('drop', ev => {
+      ev.preventDefault(); ev.stopPropagation();
+      unhighlight();
+      const dt = ev.dataTransfer;
+      if (!dt || !dt.files || dt.files.length === 0) return;
+      const file = dt.files[0];
+      const isImg = /\.(jpe?g|png|webp|bmp)$/i.test(file.name);
+      const isVid = /\.(mp4|mov|avi|webm|mkv|m4v)$/i.test(file.name);
+      if (!isImg && !isVid) {
+        if (typeof toast === 'function') toast('Tipo não suportado: ' + file.name + ' (use jpg/png/mp4)', 'error');
+        return;
+      }
+      // Atribui o arquivo ao input via DataTransfer (cross-browser)
+      try {
+        const dtNew = new DataTransfer();
+        dtNew.items.add(file);
+        input.files = dtNew.files;
+      } catch (e) {
+        // Browsers antigos: dispara mensagem e pede clique manual
+        if (typeof toast === 'function') toast('Drag-drop não suportado neste navegador — clique para upload', 'error');
+        return;
+      }
+      // Dispara handler existente de preview
+      if (typeof previewAvatarFile === 'function') {
+        previewAvatarFile(input);
+      } else {
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      if (typeof toast === 'function') toast('📷 ' + file.name + ' carregado', 'success');
+    });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
   }
 })();
 
