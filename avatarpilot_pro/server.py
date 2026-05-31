@@ -2091,7 +2091,10 @@ def run_wav2lip(image_path: str, audio_path: str, output_path: str,
         audio_dur_s = _get_duration_safe(audio_path)
         timeout_s   = max(3600, int(audio_dur_s * 10))
 
-        def _w2l_run(pads_top=0, pads_bottom=15, pads_left=0, pads_right=0, resize_factor=1):
+        def _w2l_run(pads_top=0, pads_bottom=15, pads_left=0, pads_right=0, resize_factor=1, batch_factor=1.0):
+            # batch_factor < 1 reduz batches p/ escapar OOM (silencioso em 8GB VRAM)
+            _fd_batch = max(1, int((4 if is_video_input else 8) * batch_factor))
+            _w_batch  = max(8, int((64 if is_video_input else 128) * batch_factor))
             _cmd = [
                 sys.executable, script,
                 "--checkpoint_path", ckpt_path,
@@ -2100,13 +2103,14 @@ def run_wav2lip(image_path: str, audio_path: str, output_path: str,
                 "--outfile",         safe_out,
                 "--fps",             "25",
                 "--pads",            str(pads_top), str(pads_bottom), str(pads_left), str(pads_right),
-                "--face_det_batch",  "4" if is_video_input else "8",
-                "--wav2lip_batch",   "64" if is_video_input else "128",
+                "--face_det_batch",  str(_fd_batch),
+                "--wav2lip_batch",   str(_w_batch),
                 "--resize_factor",   str(resize_factor),
                 "--ffmpeg",          ffmpeg_bin,
             ]
             print(f"  [Wav2Lip] Starting {'VIDEO' if is_video_input else 'IMAGE'} inference "
-                  f"(pads={pads_top}/{pads_bottom}/{pads_left}/{pads_right}, resize={resize_factor})")
+                  f"(pads={pads_top}/{pads_bottom}/{pads_left}/{pads_right}, resize={resize_factor}, "
+                  f"batches fd={_fd_batch}/w2l={_w_batch})")
             return subprocess.run(
                 _cmd, capture_output=True,
                 encoding="utf-8", errors="replace",
@@ -2136,7 +2140,24 @@ def run_wav2lip(image_path: str, audio_path: str, output_path: str,
 
         if proc.returncode != 0:
             err = (proc.stderr or proc.stdout or "")[:2000]
-            raise Exception(f"Wav2Lip failed (code {proc.returncode}): {err}")
+            # Code != 0 + stderr vazio = provavel OOM kill silencioso (8GB VRAM).
+            # Retry com batches reduzidos a 25% (4x menos VRAM por batch).
+            if not err.strip():
+                print("  [Wav2Lip] code!=0 com stderr vazio (provavel OOM kill) — retry batch=25%")
+                if os.path.exists(safe_out): os.remove(safe_out)
+                proc = _w2l_run(pads_bottom=15, resize_factor=1, batch_factor=0.25)
+                if proc.returncode == 0:
+                    print("  [Wav2Lip] Recuperou com batch reduzido!")
+                else:
+                    err = (proc.stderr or proc.stdout or "")[:2000]
+                    if not err.strip():
+                        # Ultimo recurso: batches minimos (1/8)
+                        print("  [Wav2Lip] Retry final com batch=12.5% (minimos absolutos)")
+                        if os.path.exists(safe_out): os.remove(safe_out)
+                        proc = _w2l_run(pads_bottom=15, resize_factor=2, batch_factor=0.125)
+                        err = (proc.stderr or proc.stdout or "")[:2000]
+            if proc.returncode != 0:
+                raise Exception(f"Wav2Lip failed (code {proc.returncode}): {err or '<stderr vazio — provavel OOM>'}")
 
         if not os.path.isfile(safe_out):
             raise Exception("Wav2Lip produced no output video.")
