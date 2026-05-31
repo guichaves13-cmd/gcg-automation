@@ -234,31 +234,67 @@
     </div>
   </section>
 
+  <!-- COMO FUNCIONA (3 passos) -->
+  <section style="max-width:1100px;margin:0 auto;padding:60px 24px;border-top:1px solid var(--border)">
+    <h2 style="text-align:center;font-size:clamp(24px,4vw,32px);margin-bottom:8px">⚡ Como funciona</h2>
+    <p style="text-align:center;color:var(--muted);margin-bottom:40px">3 passos simples para gerar seu primeiro vídeo</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px">
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:28px;text-align:center">
+        <div style="font-size:36px;margin-bottom:10px">💳</div>
+        <h3 style="margin:0 0 8px;font-size:18px">1. Compre o plano</h3>
+        <p style="color:var(--muted);font-size:14px;line-height:1.5;margin:0">Pagamento seguro via Stripe. Sua licença chega por email em segundos.</p>
+      </div>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:28px;text-align:center">
+        <div style="font-size:36px;margin-bottom:10px">⬇️</div>
+        <h3 style="margin:0 0 8px;font-size:18px">2. Baixe o instalador</h3>
+        <p style="color:var(--muted);font-size:14px;line-height:1.5;margin:0">Windows. ~150 MB inicial + setup automático na primeira execução.</p>
+      </div>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:28px;text-align:center">
+        <div style="font-size:36px;margin-bottom:10px">🎬</div>
+        <h3 style="margin:0 0 8px;font-size:18px">3. Cole a licença e crie</h3>
+        <p style="color:var(--muted);font-size:14px;line-height:1.5;margin:0">Configurações &gt; Licença &gt; cole &gt; Ativar. Pronto, gere quantos vídeos quiser!</p>
+      </div>
+    </div>
+  </section>
+
   <!-- TRUST -->
   <section class="trust-section">
     <div class="trust-badges">
       <div class="trust-badge">🔒 Pagamento seguro via Stripe</div>
-      <div class="trust-badge">📧 API Key entregue por e-mail</div>
-      <div class="trust-badge">⚡ Ativo em minutos</div>
-      <div class="trust-badge">🔄 Cancele quando quiser</div>
+      <div class="trust-badge">📧 Licença entregue por e-mail</div>
+      <div class="trust-badge">💻 Instalador Windows incluído</div>
+      <div class="trust-badge">⚡ Ativação em 1 minuto</div>
+      <div class="trust-badge">🛡️ Roda offline na sua máquina</div>
     </div>
 
     <h2 class="trust-title" style="margin-top:48px">Perguntas frequentes</h2>
     <div class="faq-item">
       <div class="faq-q">Como funciona após o pagamento?</div>
-      <div class="faq-a">Após confirmar o pagamento, você recebe sua API Key por e-mail em segundos. Use-a no header <code style="color:#a78bfa">X-API-Key</code> para acessar a API, ou insira nas Configurações da interface web.</div>
+      <div class="faq-a">Você recebe um e-mail em segundos com: <strong>sua licença</strong> (chave criptográfica) + <strong>link do instalador</strong> Windows + passo-a-passo de 4 etapas para ativação. Instale, abra o app, vá em ⚙️ Configurações &gt; 🔐 Licença, cole a chave e clique Ativar. Pronto.</div>
     </div>
     <div class="faq-item">
-      <div class="faq-q">O que é o limite de minutos?</div>
-      <div class="faq-a">É a duração total dos vídeos gerados por mês. Um vídeo de 5 minutos consome 5 minutos do seu plano. O contador reinicia todo mês.</div>
+      <div class="faq-q">Onde o software roda?</div>
+      <div class="faq-a">Direto na <strong>sua máquina</strong> Windows — não dependemos de nuvem. Após ativar a licença, funciona <strong>offline</strong>. Mais privacidade (seus vídeos nunca saem do seu PC) e sem custos recorrentes de cloud.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">Requisitos de hardware?</div>
+      <div class="faq-a">Mínimo: Windows 10/11 + GPU NVIDIA com 8GB+ VRAM (RTX 3060+/4060+) + 50GB de disco. Recomendado: RTX 4090 24GB para vídeos longos rápidos. CPU-only funciona mas é muito lento.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">A licença vale para mais de uma máquina?</div>
+      <div class="faq-a">Cada licença é amarrada ao Hardware ID da máquina onde você ativar primeiro (anti-pirataria). Trocou de PC? Entre em contato pelo email e migramos sua licença (até 1×/ano grátis).</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">Quanto tempo dura cada licença?</div>
+      <div class="faq-a">1 ano a partir da ativação. Atualizações de versão menor (X.Y) inclusas. Versões maiores podem requerer upgrade.</div>
     </div>
     <div class="faq-item">
       <div class="faq-q">Posso usar minha própria voz?</div>
-      <div class="faq-a">Sim! O plano Pro inclui voice cloning — grave alguns segundos de voz e o sistema sintetiza qualquer texto com ela.</div>
+      <div class="faq-a">Sim! Plano Pro inclui voice cloning via F5-TTS — grave 5-30s de voz de referência e o sistema sintetiza qualquer texto com ela. Plus: 322 vozes Edge-TTS multi-idioma incluídas em todos os planos.</div>
     </div>
     <div class="faq-item">
-      <div class="faq-q">Funciona com qualquer imagem de avatar?</div>
-      <div class="faq-a">Sim. Envie qualquer foto com rosto frontal bem iluminado. Quanto mais nítida a imagem, melhor a qualidade do lip sync.</div>
+      <div class="faq-q">Política de reembolso?</div>
+      <div class="faq-a">7 dias sem perguntas — se sua máquina não atende aos requisitos ou o resultado não te atende, reembolso integral. Basta responder ao email da compra.</div>
     </div>
   </section>
 
@@ -273,7 +309,7 @@
   <div class="modal-overlay" id="checkout-modal" style="display:none" onclick="if(event.target===this)closeModal()">
     <div class="modal-box">
       <h3 id="modal-title">Assinar Starter</h3>
-      <p id="modal-desc">Informe seu e-mail para receber a API Key após o pagamento.</p>
+      <p id="modal-desc">Informe seus dados para receber a <strong>licença + instalador</strong> por email após o pagamento.</p>
       <label>Seu nome</label>
       <input type="text" id="modal-name" placeholder="Ex: João Silva">
       <label>Seu e-mail</label>
@@ -285,8 +321,12 @@
       <div id="modal-error"></div>
       <div id="modal-loading">
         <div class="spinner"></div>
-        <div style="font-size:13px;color:var(--muted)">Criando sessão de pagamento...</div>
+        <div style="font-size:13px;color:var(--muted)">Criando sessão de pagamento segura...</div>
       </div>
+      <p style="font-size:11px;color:var(--dim);margin-top:14px;text-align:center">
+        🔒 Pagamento processado pela Stripe — não armazenamos dados de cartão. <br>
+        Após pagar, sua licença chega em até 1 min por email com instruções de ativação.
+      </p>
     </div>
   </div>
 
