@@ -139,6 +139,41 @@ VRAM_MIN_GB     = 1.5    # minimum free VRAM to start MuseTalk
 # RTX 4090/cloud p/ produção de longa duração.
 MAX_SCRIPT_CHARS = int(os.environ.get("AVP_MAX_SCRIPT_CHARS", "15000"))
 
+# ── Helper centralizado: haar cascade XML (4 sites usam) ────────────────────
+# Resolve em ordem: cv2.data.haarcascades (se disponivel) -> models/ (bundled).
+# Cacheia o resultado num temp ASCII-safe (OpenCV XML parser falha em path com ç).
+# Algumas builds do opencv-python NAO incluem os XMLs (issue real); o bundled
+# garante que face detection funciona em qualquer build.
+_HAAR_CACHED_PATH = None
+
+def _get_haar_cascade_xml() -> str:
+    """Retorna path ASCII-safe do haarcascade_frontalface_default.xml. None se falhar."""
+    global _HAAR_CACHED_PATH
+    if _HAAR_CACHED_PATH and os.path.exists(_HAAR_CACHED_PATH):
+        return _HAAR_CACHED_PATH
+    import tempfile as _hctf
+    _haar_tmp = os.path.join(_hctf.gettempdir(), "haarcascade_frontalface_default.xml")
+    if os.path.exists(_haar_tmp) and os.path.getsize(_haar_tmp) > 10000:
+        _HAAR_CACHED_PATH = _haar_tmp; return _haar_tmp
+    # Tentar fontes em ordem de preferencia
+    _candidates = []
+    try:
+        import cv2 as _hccv2
+        _candidates.append(os.path.join(_hccv2.data.haarcascades, "haarcascade_frontalface_default.xml"))
+    except Exception:
+        pass
+    _candidates.append(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                    "models", "haarcascade_frontalface_default.xml"))
+    for _src in _candidates:
+        try:
+            if os.path.exists(_src) and os.path.getsize(_src) > 10000:
+                shutil.copy2(_src, _haar_tmp)
+                _HAAR_CACHED_PATH = _haar_tmp
+                return _haar_tmp
+        except Exception:
+            continue
+    return None
+
 # ── Sistema de licenças desktop (hardware-bound Ed25519) ─────────────────────
 try:
     import license_system as _lic
@@ -1028,10 +1063,11 @@ def validate_face_in_image(image_path: str) -> tuple:
         import tempfile as _tf2
 
         # Copy cascade to ASCII temp path (OpenCV XML parser fails on non-ASCII paths)
-        cascade_src = os.path.join(_cv2.data.haarcascades, "haarcascade_frontalface_default.xml")
-        cascade_tmp = os.path.join(_tf2.gettempdir(), "haarcascade_frontalface_default.xml")
-        if not os.path.exists(cascade_tmp):
-            shutil.copy2(cascade_src, cascade_tmp)
+        cascade_tmp = _get_haar_cascade_xml()
+
+        if not cascade_tmp:
+
+            return True, "validation skipped (no haar cascade)"
         cascade = _cv2.CascadeClassifier(cascade_tmp)
         if cascade.empty():
             return True, "validation skipped (cascade load failed)"
@@ -1108,9 +1144,11 @@ def run_sadtalker(image_path, audio_path, output_path, settings=None):
         _ih, _iw = _im.shape[:2]
 
         # ── Auto-crop to dominant face (helps with group photos / small faces) ──
-        _cascade_tmp = os.path.join(__import__('tempfile').gettempdir(), "haarcascade_frontalface_default.xml")
-        if not os.path.exists(_cascade_tmp):
-            shutil.copy2(os.path.join(_cv2s.data.haarcascades, "haarcascade_frontalface_default.xml"), _cascade_tmp)
+        _cascade_tmp = _get_haar_cascade_xml()
+
+        if not _cascade_tmp:
+
+            return _im  # face detection skipped, return original
         _casc = _cv2s.CascadeClassifier(_cascade_tmp)
         _gray = _cv2s.cvtColor(_im, _cv2s.COLOR_BGR2GRAY)
         _faces = _casc.detectMultiScale(_gray, 1.1, 4, minSize=(30, 30))
@@ -1348,9 +1386,9 @@ def run_sadtalker_chunked(image_path, audio_path, output_path, settings=None,
         _raw = open(image_path, 'rb').read()
         _im  = _cvsad.imdecode(_npsad.frombuffer(_raw, dtype=_npsad.uint8), _cvsad.IMREAD_COLOR)
         _ih, _iw = _im.shape[:2]
-        _cascade_tmp = os.path.join(__import__('tempfile').gettempdir(), "haarcascade_frontalface_default.xml")
-        if not os.path.exists(_cascade_tmp):
-            shutil.copy2(os.path.join(_cvsad.data.haarcascades, "haarcascade_frontalface_default.xml"), _cascade_tmp)
+        _cascade_tmp = _get_haar_cascade_xml()
+        if not _cascade_tmp:
+            return image_path  # SadTalker pre-crop pulado — usar imagem original
         _casc = _cvsad.CascadeClassifier(_cascade_tmp)
         _gray = _cvsad.cvtColor(_im, _cvsad.COLOR_BGR2GRAY)
         _faces = _casc.detectMultiScale(_gray, 1.1, 4, minSize=(30, 30))
@@ -1974,10 +2012,11 @@ def run_wav2lip(image_path: str, audio_path: str, output_path: str,
                 _ih, _iw = _im.shape[:2]
                 _orig_w, _orig_h = _iw, _ih
                 import tempfile as _tf2
-                _casc_src = os.path.join(_cv2w.data.haarcascades, "haarcascade_frontalface_default.xml")
-                _casc_tmp = os.path.join(_tf2.gettempdir(), "haarcascade_frontalface_default.xml")
-                if not os.path.exists(_casc_tmp):
-                    shutil.copy2(_casc_src, _casc_tmp)
+                _casc_tmp = _get_haar_cascade_xml()
+
+                if not _casc_tmp:
+
+                    raise Exception("haar cascade indisponivel")
                 _casc  = _cv2w.CascadeClassifier(_casc_tmp)
                 _gray  = _cv2w.cvtColor(_im, _cv2w.COLOR_BGR2GRAY)
                 _dets  = _casc.detectMultiScale(_gray, 1.1, 4, minSize=(30, 30))
@@ -3826,9 +3865,9 @@ def generate_thumbnail(video_path: str, out_path: str) -> bool:
             cap.release()
             return _thumb_legacy(video_path, out_path)
         try:
-            cascade_path = _cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-            cascade = _cv2.CascadeClassifier(cascade_path)
-            cascade_ok = not cascade.empty()
+            cascade_path = _get_haar_cascade_xml()
+            cascade = _cv2.CascadeClassifier(cascade_path) if cascade_path else _cv2.CascadeClassifier()
+            cascade_ok = (cascade_path is not None) and (not cascade.empty())
         except Exception:
             cascade_ok = False
         best_frame, best_area = None, 0
