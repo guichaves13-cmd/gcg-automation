@@ -7722,7 +7722,10 @@ def _get_stripe_keys() -> dict:
         "cancel_url":       c.get("stripe_cancel_url",  "http://localhost:5052/?payment=cancel"),
     }
 
-def _send_key_email(to_email: str, customer_name: str, api_key: str, plan: str) -> bool:
+def _send_key_email(to_email: str, customer_name: str, api_key: str, plan: str,
+                    subject_kind: str = "api_key") -> bool:
+    """Envia chave por email. subject_kind='license' usa template de licenca desktop
+    (com passo-a-passo de ativacao + link p/ instalador); 'api_key' usa template SaaS."""
     c = _load_stripe_cfg()
     smtp_host = c.get("smtp_host", "")
     smtp_port = int(c.get("smtp_port", 587))
@@ -7730,33 +7733,141 @@ def _send_key_email(to_email: str, customer_name: str, api_key: str, plan: str) 
     smtp_pass = c.get("smtp_pass", "")
     smtp_from = c.get("smtp_from", smtp_user)
     if not smtp_host or not smtp_user:
-        print(f"  [Stripe] SMTP não configurado — chave para {to_email}: {api_key}", flush=True)
+        print(f"  [Stripe] SMTP nao configurado — chave para {to_email}: {api_key[:20]}...", flush=True)
         return False
     import smtplib
     from email.mime.text import MIMEText
     from email.mime.multipart import MIMEMultipart
-    plan_limits = {"free": "5 minutos/mês", "starter": "30 minutos/mês", "pro": "1 hora/mês", "unlimited": "Ilimitado"}
+
+    plan_limits = {"free": "5 min/mes", "starter": "30 videos/dia",
+                   "pro": "200 videos/dia · 10 min/video",
+                   "unlimited": "Sem limite", "trial": "30s/video, 3/dia"}
     limit_txt = plan_limits.get(plan, plan.title())
-    html_body = f"""
-<html><body style="font-family:Arial,sans-serif;background:#0f0f18;color:#cdd6f4;padding:32px">
-<div style="max-width:520px;margin:auto;background:#1e1e2e;border-radius:12px;padding:32px">
-  <h2 style="color:#cba6f7;margin-top:0">🎉 Bem-vindo ao AvatarPilot Pro!</h2>
-  <p>Olá <strong>{customer_name}</strong>, seu pagamento foi confirmado.</p>
-  <p>Aqui está sua API Key — <strong>guarde-a agora:</strong></p>
-  <div style="background:#181825;border-radius:8px;padding:16px;font-family:monospace;font-size:15px;color:#a6e3a1;word-break:break-all;margin:16px 0">{api_key}</div>
-  <table style="width:100%;border-collapse:collapse;margin:16px 0">
-    <tr><td style="color:#888;padding:4px 0">Plano</td><td style="color:#cba6f7;font-weight:bold">{plan.title()}</td></tr>
-    <tr><td style="color:#888;padding:4px 0">Limite</td><td style="color:#cdd6f4">{limit_txt}</td></tr>
-  </table>
-  <p style="font-size:13px;color:#888">Para usar: adicione o header <code style="color:#89dceb">X-API-Key: {api_key}</code> nas suas requests à API.</p>
-  <hr style="border-color:#313244;margin:24px 0">
-  <p style="font-size:12px;color:#585b70">AvatarPilot Pro — Em caso de dúvidas responda este e-mail.</p>
+    # URL do instalador — configuravel via env, padrao GitHub releases
+    installer_url = os.environ.get("AVP_INSTALLER_URL",
+                                    "https://github.com/guichaves13-cmd/gcg-automation/releases/latest")
+    support_email = c.get("smtp_from", smtp_user) or "suporte@avatarpilot.pro"
+
+    if subject_kind == "license":
+        # Template DESKTOP (licenca hardware-bound) — passo-a-passo de ativacao
+        subject = f"🎉 Sua licenca AvatarPilot Pro — Plano {plan.title()} esta pronta!"
+        html_body = f"""
+<html><body style="margin:0;padding:0;background:#0f0f18;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;color:#cdd6f4">
+<div style="max-width:600px;margin:0 auto;padding:32px 24px">
+  <!-- Header com gradiente -->
+  <div style="background:linear-gradient(135deg,#7c3aed,#22c55e);border-radius:14px;padding:36px 24px;text-align:center;margin-bottom:24px">
+    <div style="font-size:48px;margin-bottom:8px">🎬</div>
+    <h1 style="color:#fff;margin:0;font-size:24px;font-weight:700">AvatarPilot Pro</h1>
+    <p style="color:rgba(255,255,255,0.9);margin:6px 0 0;font-size:14px">Sua licenca esta pronta!</p>
+  </div>
+  <!-- Saudacao -->
+  <div style="background:#1e1e2e;border-radius:12px;padding:28px;margin-bottom:18px">
+    <h2 style="color:#cba6f7;margin:0 0 12px;font-size:18px">Ola, {customer_name}! 👋</h2>
+    <p style="color:#cdd6f4;line-height:1.6;margin:0">Obrigado pela compra! Seu pagamento foi confirmado e sua licenca esta abaixo.</p>
+    <table style="width:100%;border-collapse:collapse;margin-top:18px">
+      <tr><td style="color:#7c7c8a;padding:6px 0;width:40%">Plano</td><td style="color:#a6e3a1;font-weight:700;font-size:15px">{plan.upper()}</td></tr>
+      <tr><td style="color:#7c7c8a;padding:6px 0">Limites</td><td style="color:#cdd6f4">{limit_txt}</td></tr>
+      <tr><td style="color:#7c7c8a;padding:6px 0">Validade</td><td style="color:#cdd6f4">1 ano</td></tr>
+    </table>
+  </div>
+  <!-- Chave de licenca em destaque -->
+  <div style="background:#181825;border:1px solid rgba(124,58,237,0.35);border-radius:12px;padding:24px;margin-bottom:18px">
+    <p style="color:#cba6f7;font-size:13px;text-transform:uppercase;letter-spacing:1px;margin:0 0 12px;font-weight:600">🔑 SUA LICENCA — COPIE INTEIRA</p>
+    <div style="background:#0f0f18;border-radius:8px;padding:14px;font-family:'Courier New',monospace;font-size:11px;color:#a6e3a1;word-break:break-all;line-height:1.4;user-select:all">{api_key}</div>
+    <p style="color:#fbbf24;font-size:12px;margin:12px 0 0">⚠️ Guarde este email — sua licenca nao sera reexibida.</p>
+  </div>
+  <!-- Passo a passo de ativacao -->
+  <div style="background:#1e1e2e;border-radius:12px;padding:28px;margin-bottom:18px">
+    <h3 style="color:#cba6f7;margin:0 0 18px;font-size:16px">📋 Como ativar (4 passos)</h3>
+    <table style="width:100%;border-collapse:collapse">
+      <tr><td style="vertical-align:top;width:40px;padding:10px 0">
+        <span style="background:#7c3aed;color:#fff;width:28px;height:28px;border-radius:50%;display:inline-block;text-align:center;line-height:28px;font-weight:700">1</span>
+      </td><td style="padding:10px 0">
+        <strong style="color:#cdd6f4">Baixe o instalador</strong><br>
+        <a href="{installer_url}" style="color:#89dceb;text-decoration:none">{installer_url}</a>
+      </td></tr>
+      <tr><td style="vertical-align:top;padding:10px 0">
+        <span style="background:#7c3aed;color:#fff;width:28px;height:28px;border-radius:50%;display:inline-block;text-align:center;line-height:28px;font-weight:700">2</span>
+      </td><td style="padding:10px 0">
+        <strong style="color:#cdd6f4">Instale e abra o AvatarPilot Pro</strong><br>
+        <span style="color:#7c7c8a;font-size:13px">Primeira execucao baixa Python + modelos (10-30min, so 1x)</span>
+      </td></tr>
+      <tr><td style="vertical-align:top;padding:10px 0">
+        <span style="background:#7c3aed;color:#fff;width:28px;height:28px;border-radius:50%;display:inline-block;text-align:center;line-height:28px;font-weight:700">3</span>
+      </td><td style="padding:10px 0">
+        <strong style="color:#cdd6f4">Va em ⚙️ Configuracoes → 🔐 Licenca</strong><br>
+        <span style="color:#7c7c8a;font-size:13px">Voce vera seu Hardware ID</span>
+      </td></tr>
+      <tr><td style="vertical-align:top;padding:10px 0">
+        <span style="background:#22c55e;color:#fff;width:28px;height:28px;border-radius:50%;display:inline-block;text-align:center;line-height:28px;font-weight:700">4</span>
+      </td><td style="padding:10px 0">
+        <strong style="color:#a6e3a1">Cole a licenca acima e clique "Ativar"</strong><br>
+        <span style="color:#7c7c8a;font-size:13px">Pronto! Plano {plan} desbloqueado nesta maquina.</span>
+      </td></tr>
+    </table>
+  </div>
+  <!-- Avisos importantes -->
+  <div style="background:rgba(234,179,8,0.08);border:1px solid rgba(234,179,8,0.25);border-radius:10px;padding:16px;margin-bottom:18px;font-size:13px;color:#fbbf24">
+    <strong>ℹ️ Importante:</strong> Sua licenca e amarrada ao Hardware ID da maquina onde voce ativa-la primeiro. Se trocar de PC, entre em contato pelo email abaixo p/ migracao.
+  </div>
+  <!-- Footer -->
+  <div style="text-align:center;padding:24px 0;color:#585b70;font-size:12px">
+    <p style="margin:0 0 6px">Duvidas? Responda este email ou escreva pra <a href="mailto:{support_email}" style="color:#89dceb">{support_email}</a></p>
+    <p style="margin:0">AvatarPilot Pro · Geracao de avatares falantes com IA</p>
+  </div>
 </div></body></html>
 """
+    else:
+        # Template API KEY (SaaS) — uso programatico
+        subject = f"🔑 Sua API Key AvatarPilot Pro — Plano {plan.title()}"
+        html_body = f"""
+<html><body style="margin:0;padding:0;background:#0f0f18;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;color:#cdd6f4">
+<div style="max-width:560px;margin:0 auto;padding:32px 24px">
+  <div style="background:linear-gradient(135deg,#7c3aed,#3b82f6);border-radius:14px;padding:32px 24px;text-align:center;margin-bottom:20px">
+    <div style="font-size:42px;margin-bottom:6px">🔌</div>
+    <h1 style="color:#fff;margin:0;font-size:22px;font-weight:700">AvatarPilot Pro API</h1>
+    <p style="color:rgba(255,255,255,0.9);margin:4px 0 0;font-size:13px">Sua chave de acesso esta pronta</p>
+  </div>
+  <div style="background:#1e1e2e;border-radius:12px;padding:24px;margin-bottom:18px">
+    <p style="color:#cdd6f4;margin:0 0 12px">Ola <strong>{customer_name}</strong>, pagamento confirmado!</p>
+    <table style="width:100%;border-collapse:collapse">
+      <tr><td style="color:#7c7c8a;padding:6px 0;width:35%">Plano</td><td style="color:#a6e3a1;font-weight:700">{plan.upper()}</td></tr>
+      <tr><td style="color:#7c7c8a;padding:6px 0">Limites</td><td style="color:#cdd6f4">{limit_txt}</td></tr>
+    </table>
+  </div>
+  <div style="background:#181825;border:1px solid rgba(124,58,237,0.35);border-radius:12px;padding:22px;margin-bottom:18px">
+    <p style="color:#cba6f7;font-size:13px;text-transform:uppercase;letter-spacing:1px;margin:0 0 10px;font-weight:600">🔑 API KEY</p>
+    <div style="background:#0f0f18;border-radius:8px;padding:14px;font-family:'Courier New',monospace;font-size:13px;color:#a6e3a1;word-break:break-all;user-select:all">{api_key}</div>
+    <p style="color:#fbbf24;font-size:12px;margin:10px 0 0">⚠️ Guarde com seguranca — nao sera reexibida.</p>
+  </div>
+  <div style="background:#1e1e2e;border-radius:12px;padding:22px;margin-bottom:18px">
+    <h3 style="color:#cba6f7;margin:0 0 12px;font-size:15px">Como usar</h3>
+    <p style="color:#cdd6f4;font-size:13px;margin:0 0 8px">Adicione o header em todas suas requests:</p>
+    <div style="background:#0f0f18;border-radius:6px;padding:10px;font-family:'Courier New',monospace;font-size:12px;color:#89dceb;word-break:break-all">X-API-Key: {api_key[:30]}...</div>
+  </div>
+  <div style="text-align:center;padding:20px 0;color:#585b70;font-size:12px">
+    <p style="margin:0 0 4px">Duvidas? <a href="mailto:{support_email}" style="color:#89dceb">{support_email}</a></p>
+    <p style="margin:0">AvatarPilot Pro</p>
+  </div>
+</div></body></html>
+"""
+
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = f"Sua API Key AvatarPilot Pro — Plano {plan.title()}"
+    msg["Subject"] = subject
     msg["From"]    = smtp_from
     msg["To"]      = to_email
+    # Text fallback p/ clientes sem HTML
+    text_fallback = (
+        f"AvatarPilot Pro — {('Licenca' if subject_kind=='license' else 'API Key')}\n\n"
+        f"Ola {customer_name}!\n\n"
+        f"Plano: {plan.upper()} ({limit_txt})\n\n"
+        f"Sua chave:\n{api_key}\n\n"
+        + ("Como ativar: Configuracoes > Licenca > cole a chave > Ativar\n"
+           f"Instalador: {installer_url}\n\n" if subject_kind == "license"
+           else f"Como usar: adicione header X-API-Key nas requests.\n\n")
+        + f"Duvidas: {support_email}\n"
+    )
+    msg.attach(MIMEText(text_fallback, "plain"))
     msg.attach(MIMEText(html_body, "html"))
     try:
         with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as srv:
@@ -7764,7 +7875,7 @@ def _send_key_email(to_email: str, customer_name: str, api_key: str, plan: str) 
             srv.starttls()
             srv.login(smtp_user, smtp_pass)
             srv.sendmail(smtp_from, to_email, msg.as_string())
-        print(f"  [Stripe] Email enviado para {to_email}", flush=True)
+        print(f"  [Stripe] Email '{subject_kind}' enviado para {to_email}", flush=True)
         return True
     except Exception as e:
         print(f"  [Stripe] Falha ao enviar email: {e}", flush=True)
@@ -7913,16 +8024,11 @@ def api_admin_license_generate():
 
 
 def _send_license_email(email, name, license_str, plan):
-    """Envia a licença por email (reusa infra de email do _send_key_email)."""
+    """Envia a licenca desktop com template HTML proprio (passo-a-passo de ativacao)."""
     try:
         return _send_key_email(email, name, license_str, plan, subject_kind="license")
-    except TypeError:
-        # _send_key_email pode não aceitar subject_kind — fallback
-        try:
-            return _send_key_email(email, name, license_str, plan)
-        except Exception:
-            return False
-    except Exception:
+    except Exception as _e:
+        print(f"  [License] erro ao enviar email: {_e}", flush=True)
         return False
 
 
