@@ -133,11 +133,13 @@ def _check_rate_limit(ip: str) -> bool:
 DISK_WARN_MB    = 500    # warn when free disk < 500MB
 DISK_BLOCK_MB   = 100    # block new jobs when < 100MB free
 VRAM_MIN_GB     = 1.5    # minimum free VRAM to start MuseTalk
-# Cap de script (TTS). ~14 chars/s → 15000 chars ≈ 18min de vídeo. Configurável via
-# env p/ vídeos mais longos: AVP_MAX_SCRIPT_CHARS=50000 (~60min) com enhance_face=false
-# + AVP_STUCK_TIMEOUT_MIN alto. Em 8GB VRAM, vídeos muito longos levam horas — prefira
-# RTX 4090/cloud p/ produção de longa duração.
-MAX_SCRIPT_CHARS = int(os.environ.get("AVP_MAX_SCRIPT_CHARS", "15000"))
+# Cap de script (TTS). ~14 chars/s → 50000 chars ≈ 60min de vídeo (default novo).
+# Configurável via env. Para áudios MUITO longos (1h+), use upload de audio próprio
+# em /api/generate (campo 'audio') que bypassa o cap de script totalmente.
+# Watchdog absoluto (AVP_STUCK_TIMEOUT_MIN, default 240/4h) também precisa ser
+# subido p/ vídeos que processam por horas. Em 8GB VRAM use enhance_face=false
+# para 2-3× mais throughput em vídeos longos.
+MAX_SCRIPT_CHARS = int(os.environ.get("AVP_MAX_SCRIPT_CHARS", "50000"))
 
 # ── Helper centralizado: haar cascade XML (4 sites usam) ────────────────────
 # Resolve em ordem: cv2.data.haarcascades (se disponivel) -> models/ (bundled).
