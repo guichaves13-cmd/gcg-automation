@@ -296,10 +296,19 @@
                 <span style="color:#86efac;font-size:11px">✨ MuseTalk 1.5 usa difusão latente — qualidade HeyGen</span>
               </div>
             </div>
+            <div class="setting-row" style="margin-top:10px">
+              <label>✨ Enhancer facial:</label>
+              <select id="enhancer">
+                <option value="gfpgan" selected>GFPGAN (rápido, balanceado)</option>
+                <option value="codeformer">CodeFormer (mais nítido, preserva identidade)</option>
+                <option value="RestoreFormer">RestoreFormer (alternativa SOTA)</option>
+                <option value="none">Sem enhancer (mais rápido)</option>
+              </select>
+              <span class="hint" style="margin-left:8px;font-size:11px">CodeFormer = textura HD para rostos detalhados</span>
+            </div>
             <!-- hidden fields so JS form collect works -->
             <input type="hidden" id="lip-sync-engine" value="auto">
             <input type="hidden" id="expression-scale" value="1.2">
-            <input type="hidden" id="enhancer" value="gfpgan">
             <input type="hidden" id="still-mode" value="false">
           </div>
 
@@ -409,6 +418,25 @@
                   <option value="cyan">Ciano</option>
                 </select>
               </div>
+              <!-- NOVO: Estilo de legenda (Standard vs Karaoke HeyGen-style) -->
+              <div class="setting-row">
+                <label>Estilo:</label>
+                <select id="caption-style" onchange="toggleKaraokeOptions()">
+                  <option value="standard" selected>📝 Padrão (blocos estáticos)</option>
+                  <option value="karaoke">✨ Karaoke (palavra-por-palavra estilo HeyGen)</option>
+                </select>
+              </div>
+              <div class="setting-row" id="caption-highlight-row" style="display:none">
+                <label>Cor de destaque (karaoke):</label>
+                <select id="caption-highlight">
+                  <option value="yellow" selected>🟡 Amarelo</option>
+                  <option value="cyan">🔵 Ciano</option>
+                  <option value="green">🟢 Verde</option>
+                  <option value="orange">🟠 Laranja</option>
+                  <option value="red">🔴 Vermelho</option>
+                </select>
+                <span class="hint" style="margin-left:8px;font-size:11px">Palavra atual destacada — chama atenção em Reels/TikTok</span>
+              </div>
             </div>
           </div>
 
@@ -452,7 +480,10 @@
               <input type="range" id="music-volume" min="0.01" max="0.5" step="0.01" value="0.12" oninput="document.getElementById('music-vol-val').textContent=Math.round(this.value*100)+'%'">
               <span id="music-vol-val">12%</span>
             </div>
-            <p class="hint">Mix de música automático no vídeo final via FFmpeg</p>
+            <div class="setting-row" id="music-duck-row" style="display:none">
+              <label><input type="checkbox" id="music-auto-duck" checked> 🎚️ Auto-duck (música abaixa quando avatar fala — HeyGen-style)</label>
+            </div>
+            <p class="hint">Mix de música automático no vídeo final via FFmpeg, com sidechain compression quando ducking ativo</p>
           </div>
 
           <!-- Fade + Export -->

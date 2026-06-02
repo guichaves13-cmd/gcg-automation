@@ -292,6 +292,9 @@ async function generateAvatar() {
     formData.append('caption_font_size', document.getElementById('caption-fontsize')?.value || '22');
     formData.append('caption_color',     document.getElementById('caption-color')?.value || 'white');
     formData.append('caption_position',  document.getElementById('caption-position')?.value || 'bottom');
+    // NOVO: estilo karaoke (palavra-por-palavra) + cor de destaque
+    formData.append('caption_style',     document.getElementById('caption-style')?.value || 'standard');
+    formData.append('caption_highlight', document.getElementById('caption-highlight')?.value || 'yellow');
   }
   formData.append('remove_bg',       document.getElementById('remove-bg-enable')?.checked || false);
   formData.append('normalize_audio', document.getElementById('normalize-audio')?.checked  || false);
@@ -302,6 +305,7 @@ async function generateAvatar() {
   if (musicUrl) {
     formData.append('music_url',    musicUrl);
     formData.append('music_volume', document.getElementById('music-volume')?.value || '0.12');
+    formData.append('music_auto_duck', document.getElementById('music-auto-duck')?.checked ? 'true' : 'false');
   }
   if (document.getElementById('fade-enable')?.checked) {
     formData.append('enable_fade', 'true');
@@ -1737,11 +1741,19 @@ init();
 // ============================================================================
 // GENERATE — captions toggle
 // ============================================================================
+function toggleKaraokeOptions() {
+  const style = document.getElementById('caption-style')?.value || 'standard';
+  const row = document.getElementById('caption-highlight-row');
+  if (row) row.style.display = (style === 'karaoke') ? '' : 'none';
+}
+
 function toggleCaptionOptions() {
   const on = document.getElementById('captions-enable').checked;
   document.getElementById('caption-options').style.display = on ? 'block' : 'none';
   const trCard = document.getElementById('caption-translate-card');
   if (trCard) trCard.style.display = on ? 'block' : 'none';
+  // Re-sincroniza karaoke row state quando captions ativa
+  if (on) toggleKaraokeOptions();
 }
 
 // ============================================================================
@@ -1761,8 +1773,11 @@ async function loadMusicLibrary() {
       sel.appendChild(o);
     });
     sel.onchange = () => {
-      const row = document.getElementById('music-volume-row');
-      if (row) row.style.display = sel.value ? 'flex' : 'none';
+      const row  = document.getElementById('music-volume-row');
+      const dRow = document.getElementById('music-duck-row');
+      const show = sel.value ? 'flex' : 'none';
+      if (row)  row.style.display  = show;
+      if (dRow) dRow.style.display = show;
     };
   } catch (e) { console.error('Music library error:', e); }
 }

@@ -1124,7 +1124,12 @@ def run_sadtalker(image_path, audio_path, output_path, settings=None):
     ckpt_dir = os.path.join(st_path, "checkpoints")
     gfpgan_ok = os.path.isfile(os.path.join(ckpt_dir, "GFPGANv1.4.pth"))
     requested_enhancer = settings.get("enhancer", "gfpgan")
-    if requested_enhancer == "gfpgan" and not gfpgan_ok:
+    # "codeformer" não é nativo do SadTalker — passamos "none" e aplicamos
+    # CodeFormer como post-pass abaixo. Mantemos o flag em config p/ ramo SadTalker.
+    if requested_enhancer == "codeformer":
+        enhancer = "none"
+        print("  [SadTalker] enhancer=codeformer — SadTalker rodará sem enhancer; CodeFormer será aplicado como post-pass")
+    elif requested_enhancer == "gfpgan" and not gfpgan_ok:
         print("  [SadTalker] GFPGANv1.4.pth not found — disabling enhancer to avoid hang")
         enhancer = "none"
     else:
@@ -4076,29 +4081,55 @@ def composite_with_background(avatar_video, bg_image, output_path,
 # BACKGROUND MUSIC — mix voice + music track
 # ============================================================================
 def mix_background_music(video_path: str, music_path: str, output_path: str,
-                          music_volume: float = 0.15) -> str:
-    """Mix background music into video at reduced volume. Loops if shorter than video."""
+                          music_volume: float = 0.15, auto_duck: bool = True) -> str:
+    """Mix BGM into video. If auto_duck=True, uses sidechain compression so the music
+    automatically ducks down when the voice is talking (HeyGen-style).
+    """
     if not music_path or not os.path.exists(music_path):
         shutil.copy2(video_path, output_path)
         return output_path
     ffmpeg = _ffmpeg_path()
     vol = max(0.01, min(1.0, float(music_volume)))
+
+    if auto_duck:
+        # Sidechain: voice ([0:a]) triggers ducking on music ([1:a]).
+        # threshold=0.05 (-26 dB) ratio=8 -> aggressive duck when voice peaks
+        # attack=20ms release=300ms -> natural feel
+        # makeup=2 keeps music audible between words
+        filter_complex = (
+            f"[1:a]volume={vol:.2f},aformat=channel_layouts=stereo[music];"
+            f"[0:a]asplit=2[voice1][voice2];"
+            f"[music][voice1]sidechaincompress=threshold=0.05:ratio=8:attack=20:release=300:makeup=2[ducked];"
+            f"[voice2][ducked]amix=inputs=2:duration=first:dropout_transition=0:weights='1 1'[aout]"
+        )
+    else:
+        filter_complex = (
+            f"[1:a]volume={vol:.2f}[music];"
+            f"[0:a][music]amix=inputs=2:duration=first:dropout_transition=2[aout]"
+        )
+
     cmd = [
         ffmpeg, "-y",
         "-i", video_path,
         "-stream_loop", "-1", "-i", music_path,
-        "-filter_complex",
-        f"[1:a]volume={vol:.2f}[music];[0:a][music]amix=inputs=2:duration=first:dropout_transition=2[aout]",
+        "-filter_complex", filter_complex,
         "-map", "0:v", "-map", "[aout]",
         "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
         "-shortest", output_path
     ]
     proc = subprocess.run(cmd, capture_output=True, timeout=600)
     if proc.returncode != 0 or not os.path.exists(output_path):
+        # Auto-duck failed? Fall back to plain mix.
+        if auto_duck:
+            err = (proc.stderr or b"").decode("utf-8", errors="replace")[-200:]
+            print(f"  [Music] auto-duck falhou, fallback plain mix: {err[:120]}")
+            return mix_background_music(video_path, music_path, output_path,
+                                         music_volume=music_volume, auto_duck=False)
         print(f"  [Music] Mix failed, using original")
         shutil.copy2(video_path, output_path)
     else:
-        print(f"  [Music] Mixed background track at vol={vol:.0%}")
+        mode = "auto-ducked" if auto_duck else "static mix"
+        print(f"  [Music] {mode} at vol={vol:.0%}")
     return output_path
 
 
@@ -4768,27 +4799,58 @@ def run_pipeline(job_id: str, config: dict):
                             print(f"  [Temporal] Skipped (output invalid)")
                     except Exception as _tc_err:
                         print(f"  [Temporal] Skipped ({_tc_err})")
-                    # GFPGAN externo pós-SadTalker (auto-adapta frames pelo tamanho)
-                    jobs[job_id]["message"] = "GFPGAN: restaurando qualidade facial..."
-                    _st_gfpgan_out = os.path.join(OUTPUT_DIR, f"{job_id}_gfpgan.mp4")
-                    apply_gfpgan_chunked(avatar_video, _st_gfpgan_out, job_id=job_id, max_gfpgan_seconds=600, enhance_face=config.get("enhance_face", True))
-                    if os.path.exists(_st_gfpgan_out) and os.path.getsize(_st_gfpgan_out) > 10000:
-                        _safe_rm(avatar_video)
-                        _safe_rename(_st_gfpgan_out, avatar_video)
-                    # CODEFORMER PASS: identity-preserving texture refinement after GFPGAN
-                    if dur <= 120:  # CodeFormer for clips <= 2min (GPU intensive)
+                    # Enhancer selection: gfpgan (default), codeformer (HD primary),
+                    # RestoreFormer (alternative), or none (skip)
+                    _user_enh = (config.get("enhancer", "gfpgan") or "gfpgan").lower()
+                    if _user_enh in ("gfpgan", "restoreformer"):
+                        # GFPGAN/RestoreFormer externo pós-SadTalker
+                        jobs[job_id]["message"] = "GFPGAN: restaurando qualidade facial..."
+                        _st_gfpgan_out = os.path.join(OUTPUT_DIR, f"{job_id}_gfpgan.mp4")
+                        apply_gfpgan_chunked(avatar_video, _st_gfpgan_out, job_id=job_id, max_gfpgan_seconds=600, enhance_face=config.get("enhance_face", True))
+                        if os.path.exists(_st_gfpgan_out) and os.path.getsize(_st_gfpgan_out) > 10000:
+                            _safe_rm(avatar_video)
+                            _safe_rename(_st_gfpgan_out, avatar_video)
+                        # CODEFORMER refinement (optional, only for short clips)
+                        if dur <= 120 and config.get("enhance_face", True):
+                            try:
+                                jobs[job_id]["message"] = "CodeFormer: refinando textura facial..."
+                                _cf_out = os.path.join(OUTPUT_DIR, f"{job_id}_codeformer.mp4")
+                                apply_codeformer_to_video(avatar_video, _cf_out, job_id=job_id, fidelity=0.7)
+                                if os.path.exists(_cf_out) and os.path.getsize(_cf_out) > 10000:
+                                    _safe_rm(avatar_video)
+                                    _safe_rename(_cf_out, avatar_video)
+                                    print("  [CodeFormer] Texture refinement applied (fidelity=0.7)")
+                                else:
+                                    print("  [CodeFormer] Skipped (output invalid)")
+                            except Exception as _cf_err:
+                                print(f"  [CodeFormer] Skipped ({_cf_err})")
+                    elif _user_enh == "codeformer":
+                        # CodeFormer como enhancer PRIMÁRIO — fidelity menor pra max qualidade
                         try:
-                            jobs[job_id]["message"] = "CodeFormer: refinando textura facial..."
+                            jobs[job_id]["message"] = "CodeFormer (HD): restaurando rosto com alta nitidez..."
                             _cf_out = os.path.join(OUTPUT_DIR, f"{job_id}_codeformer.mp4")
-                            apply_codeformer_to_video(avatar_video, _cf_out, job_id=job_id, fidelity_weight=0.7)
+                            apply_codeformer_to_video(avatar_video, _cf_out, job_id=job_id, fidelity=0.5)
                             if os.path.exists(_cf_out) and os.path.getsize(_cf_out) > 10000:
                                 _safe_rm(avatar_video)
                                 _safe_rename(_cf_out, avatar_video)
-                                print("  [CodeFormer] Texture refinement applied (fidelity=0.7)")
+                                print("  [CodeFormer] Primary enhancer applied (fidelity=0.5, max HD)")
                             else:
-                                print("  [CodeFormer] Skipped (output invalid)")
+                                # Fallback: GFPGAN
+                                print("  [CodeFormer] Falhou — fallback GFPGAN")
+                                _st_gfpgan_out = os.path.join(OUTPUT_DIR, f"{job_id}_gfpgan.mp4")
+                                apply_gfpgan_chunked(avatar_video, _st_gfpgan_out, job_id=job_id, max_gfpgan_seconds=600, enhance_face=config.get("enhance_face", True))
+                                if os.path.exists(_st_gfpgan_out) and os.path.getsize(_st_gfpgan_out) > 10000:
+                                    _safe_rm(avatar_video)
+                                    _safe_rename(_st_gfpgan_out, avatar_video)
                         except Exception as _cf_err:
-                            print(f"  [CodeFormer] Skipped ({_cf_err})")
+                            print(f"  [CodeFormer] erro: {_cf_err} — fallback GFPGAN")
+                            _st_gfpgan_out = os.path.join(OUTPUT_DIR, f"{job_id}_gfpgan.mp4")
+                            apply_gfpgan_chunked(avatar_video, _st_gfpgan_out, job_id=job_id, max_gfpgan_seconds=600, enhance_face=config.get("enhance_face", True))
+                            if os.path.exists(_st_gfpgan_out) and os.path.getsize(_st_gfpgan_out) > 10000:
+                                _safe_rm(avatar_video)
+                                _safe_rename(_st_gfpgan_out, avatar_video)
+                    else:
+                        print(f"  [Enhancer] none — skipping facial restoration")
                     # FACE EDGE SOFTENING: smooth face boundaries with smartblur
                     jobs[job_id]["message"] = "Face blending: suavizando bordas faciais..."
                     _fb_out = os.path.join(OUTPUT_DIR, f"{job_id}_faceblend.mp4")
@@ -5109,15 +5171,34 @@ def run_pipeline(job_id: str, config: dict):
                     if not _av_ok:
                         raise Exception(f"Avatar video inválido após lip sync: {_av_reason}")
 
-                # Step 4: GFPGAN (escala com duração)
+                # Step 4: Enhancer facial (gfpgan / codeformer / RestoreFormer / none)
                 if os.path.exists(avatar_video) and os.path.getsize(avatar_video) > 10000:
+                    _user_enh_w = (config.get("enhancer", "gfpgan") or "gfpgan").lower()
                     _gfpgan_time = max(300, min(3600, int(dur * 1.5)))
-                    jobs[job_id]["message"] = "GFPGAN: restaurando qualidade facial..."
-                    gfpgan_out = os.path.join(OUTPUT_DIR, f"{job_id}_gfpgan.mp4")
-                    apply_gfpgan_chunked(avatar_video, gfpgan_out, job_id=job_id, max_gfpgan_seconds=_gfpgan_time, enhance_face=config.get("enhance_face", True))
-                    if os.path.exists(gfpgan_out) and os.path.getsize(gfpgan_out) > 10000:
-                        _safe_rm(avatar_video)
-                        _safe_rename(gfpgan_out, avatar_video)
+                    if _user_enh_w == "codeformer":
+                        try:
+                            jobs[job_id]["message"] = "CodeFormer (HD): restaurando rosto com alta nitidez..."
+                            _cf_out_w = os.path.join(OUTPUT_DIR, f"{job_id}_codeformer.mp4")
+                            apply_codeformer_to_video(avatar_video, _cf_out_w, job_id=job_id, fidelity=0.5)
+                            if os.path.exists(_cf_out_w) and os.path.getsize(_cf_out_w) > 10000:
+                                _safe_rm(avatar_video); _safe_rename(_cf_out_w, avatar_video)
+                            else:
+                                raise Exception("CodeFormer produced no valid output")
+                        except Exception as _cf_w_err:
+                            print(f"  [CodeFormer] erro: {_cf_w_err} — fallback GFPGAN")
+                            gfpgan_out = os.path.join(OUTPUT_DIR, f"{job_id}_gfpgan.mp4")
+                            apply_gfpgan_chunked(avatar_video, gfpgan_out, job_id=job_id, max_gfpgan_seconds=_gfpgan_time, enhance_face=config.get("enhance_face", True))
+                            if os.path.exists(gfpgan_out) and os.path.getsize(gfpgan_out) > 10000:
+                                _safe_rm(avatar_video); _safe_rename(gfpgan_out, avatar_video)
+                    elif _user_enh_w in ("gfpgan", "restoreformer"):
+                        jobs[job_id]["message"] = "GFPGAN: restaurando qualidade facial..."
+                        gfpgan_out = os.path.join(OUTPUT_DIR, f"{job_id}_gfpgan.mp4")
+                        apply_gfpgan_chunked(avatar_video, gfpgan_out, job_id=job_id, max_gfpgan_seconds=_gfpgan_time, enhance_face=config.get("enhance_face", True))
+                        if os.path.exists(gfpgan_out) and os.path.getsize(gfpgan_out) > 10000:
+                            _safe_rm(avatar_video)
+                            _safe_rename(gfpgan_out, avatar_video)
+                    else:
+                        print(f"  [Enhancer] none — skipping facial restoration on Wav2Lip output")
                 # A/V sync fix
                 _w2l_sync = os.path.join(OUTPUT_DIR, f"{job_id}_sync.mp4")
                 if _fix_av_sync(avatar_video, _w2l_sync):
@@ -5335,7 +5416,8 @@ def run_pipeline(job_id: str, config: dict):
                 jobs[job_id]["message"]  = "Mixing background music..."
                 music_out = os.path.join(OUTPUT_DIR, f"{job_id}_music.mp4")
                 mix_background_music(final_output, music_src, music_out,
-                                     music_volume=float(config.get("music_volume", 0.15)))
+                                     music_volume=float(config.get("music_volume", 0.15)),
+                                     auto_duck=bool(config.get("music_auto_duck", True)))
                 if os.path.exists(music_out) and os.path.getsize(music_out) > 1000:
                     _safe_rm(final_output)
                     _safe_rename(music_out, final_output)
@@ -6266,6 +6348,7 @@ def api_generate():
         music_volume = max(0.0, min(1.0, float(request.form.get("music_volume", "0.15"))))
     except (ValueError, TypeError):
         music_volume = 0.15
+    music_auto_duck = (request.form.get("music_auto_duck", "true").lower() in ("1","true","yes","on"))
     try:
         fade_in  = max(0.0, min(10.0, float(request.form.get("fade_in", "0.5"))))
         fade_out = max(0.0, min(10.0, float(request.form.get("fade_out", "0.5"))))
@@ -6388,6 +6471,7 @@ def api_generate():
         "output_format":   output_format,
         "watermark_text":  watermark_text, "watermark_pos": watermark_pos,
         "music_url":       music_url,      "music_volume":  music_volume,
+        "music_auto_duck": music_auto_duck,
         "enable_fade":     enable_fade,    "fade_in":       fade_in,    "fade_out": fade_out,
         "export_format":   export_format,
         "enhance_image":   enhance_img,
