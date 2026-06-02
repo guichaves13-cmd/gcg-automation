@@ -5209,33 +5209,70 @@ def run_pipeline(job_id: str, config: dict):
             jobs[job_id]["message"] = "Background compositing falhou — usando vídeo original"
             shutil.copy2(avatar_video, final_output)
 
-        # ── Step 3b: Auto-captions (Whisper) ──────────────────────────────
+        # ── Step 3b: Auto-captions (Whisper) — standard ou karaoke (HeyGen-style) ──
         if config.get("captions", False):
             jobs[job_id]["progress"] = 88
-            jobs[job_id]["message"]  = "Transcribing audio for captions (Whisper)..."
+            _cap_style_name = (config.get("caption_style", "standard") or "standard").lower()
             try:
                 caption_lang  = config.get("caption_lang") or None
                 caption_model = config.get("caption_model", "base")
-                srt_content   = transcribe_to_srt(audio_path, language=caption_lang,
-                                                   model_size=caption_model)
-                if srt_content.strip():
-                    jobs[job_id]["message"] = "Burning captions into video..."
-                    captioned = os.path.join(OUTPUT_DIR, f"{job_id}_captioned.mp4")
-                    caption_style = {
-                        "font_size": int(config.get("caption_font_size", 22)),
-                        "color":     config.get("caption_color", "white"),
-                        "position":  config.get("caption_position", "bottom"),
-                        "bg_alpha":  float(config.get("caption_bg_alpha", 0.5)),
-                    }
-                    burn_captions(final_output, srt_content, captioned, style=caption_style)
-                    _safe_rm(final_output)
-                    _safe_rename(captioned, final_output)
-                    # Save SRT alongside output
-                    srt_out = os.path.join(OUTPUT_DIR, f"{job_id}.srt")
-                    with open(srt_out, "w", encoding="utf-8") as _sf:
-                        _sf.write(srt_content)
-                    jobs[job_id]["srt_path"] = srt_out
-                    print(f"  [Captions] Done — SRT: {srt_out}")
+                # ─── KARAOKE: word-by-word highlight (HeyGen Pro style) ───
+                if _cap_style_name == "karaoke":
+                    jobs[job_id]["message"]  = "Karaoke captions: transcrevendo word-by-word (Whisper)..."
+                    import tempfile as _kctf
+                    _ass_path = os.path.join(_kctf.gettempdir(), f"{job_id}_karaoke.ass")
+                    _ok_kara = generate_karaoke_ass(
+                        audio_path, _ass_path, model_size=caption_model,
+                        font_size=int(config.get("caption_font_size", 28)),
+                        primary_color=config.get("caption_color", "white"),
+                        highlight_color=config.get("caption_highlight", "yellow"))
+                    if _ok_kara and os.path.exists(_ass_path) and os.path.getsize(_ass_path) > 100:
+                        jobs[job_id]["message"] = "Karaoke: burning word-by-word highlights..."
+                        captioned = os.path.join(OUTPUT_DIR, f"{job_id}_captioned.mp4")
+                        # ASS path com ç ferra ffmpeg → forçar ASCII via copy temp
+                        _ass_safe = _ass_path  # já está em tempdir ASCII
+                        _ass_filter = _ass_safe.replace("\\", "/").replace(":", "\\:")
+                        _kc = subprocess.run([_ffmpeg_path(), "-y", "-i", final_output,
+                                              "-vf", f"ass='{_ass_filter}'",
+                                              "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+                                              "-c:a", "copy", "-r", "25", "-pix_fmt", "yuv420p",
+                                              captioned], capture_output=True, timeout=600)
+                        if _kc.returncode == 0 and os.path.exists(captioned) and os.path.getsize(captioned) > 10000:
+                            _safe_rm(final_output)
+                            _safe_rename(captioned, final_output)
+                            print(f"  [Karaoke] ✨ Word-by-word burned (HeyGen-style)", flush=True)
+                        else:
+                            _err = (_kc.stderr or b"").decode("utf-8", errors="replace")[-300:]
+                            print(f"  [Karaoke] burn falhou rc={_kc.returncode}: {_err[:200]} — fallback standard", flush=True)
+                            _cap_style_name = "standard"  # fallback abaixo
+                        try: os.remove(_ass_path)
+                        except: pass
+                    else:
+                        print("  [Karaoke] ASS generation falhou — fallback standard", flush=True)
+                        _cap_style_name = "standard"
+
+                # ─── STANDARD (default, fallback de karaoke também) ───
+                if _cap_style_name == "standard":
+                    jobs[job_id]["message"]  = "Transcribing audio for captions (Whisper)..."
+                    srt_content = transcribe_to_srt(audio_path, language=caption_lang,
+                                                    model_size=caption_model)
+                    if srt_content.strip():
+                        jobs[job_id]["message"] = "Burning captions into video..."
+                        captioned = os.path.join(OUTPUT_DIR, f"{job_id}_captioned.mp4")
+                        _cap_style_obj = {
+                            "font_size": int(config.get("caption_font_size", 22)),
+                            "color":     config.get("caption_color", "white"),
+                            "position":  config.get("caption_position", "bottom"),
+                            "bg_alpha":  float(config.get("caption_bg_alpha", 0.5)),
+                        }
+                        burn_captions(final_output, srt_content, captioned, style=_cap_style_obj)
+                        _safe_rm(final_output)
+                        _safe_rename(captioned, final_output)
+                        srt_out = os.path.join(OUTPUT_DIR, f"{job_id}.srt")
+                        with open(srt_out, "w", encoding="utf-8") as _sf:
+                            _sf.write(srt_content)
+                        jobs[job_id]["srt_path"] = srt_out
+                        print(f"  [Captions] Done — SRT: {srt_out}")
             except Exception as _ce:
                 print(f"  [Captions] Failed (non-fatal): {_ce}")
 
@@ -6145,6 +6182,10 @@ def api_generate():
     caption_lang    = request.form.get("caption_lang", "") or None
     caption_model   = request.form.get("caption_model", "base")
     caption_color   = request.form.get("caption_color", "white")
+    # NOVO: caption_style = "standard" (blocos estáticos atual) ou "karaoke" (word-by-word
+    # highlight como HeyGen/TikTok premium). "karaoke" gera ASS via Whisper word_timestamps.
+    caption_style   = (request.form.get("caption_style", "standard") or "standard").lower()
+    caption_highlight = request.form.get("caption_highlight", "yellow")
     caption_pos     = request.form.get("caption_position", "bottom")
     # HeyGen-like default: ligado por padrão p/ loudness consistente entre todas as gerações.
     # Cliente pode desligar explicitamente passando normalize_audio=false.
@@ -6342,6 +6383,7 @@ def api_generate():
         "captions": captions, "caption_lang": caption_lang,
         "caption_model": caption_model, "caption_font_size": caption_font_sz,
         "caption_color": caption_color, "caption_position": caption_pos,
+        "caption_style": caption_style, "caption_highlight": caption_highlight,
         "normalize_audio": normalize_audio,
         "output_format":   output_format,
         "watermark_text":  watermark_text, "watermark_pos": watermark_pos,
