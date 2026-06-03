@@ -9544,10 +9544,13 @@ def _auto_cleanup_old_outputs():
         # Patterns by retention class
         long_patterns  = ("_final.mp4",)
         short_patterns = ("_avatar.mp4", "_audio.mp3", "_audio.wav",
-                          "_audio_norm.mp3", "_captioned.mp4", "_sync.mp4",
-                          "_sway.mp4", "_gfpgan.mp4", "_musetalk.mp4",
+                          "_audio_norm.mp3", "_audio_trim.mp3",
+                          "_captioned.mp4", "_sync.mp4",
+                          "_sway.mp4", "_gfpgan.mp4", "_codeformer.mp4",
+                          "_musetalk.mp4",
                           "_fmt.mp4", "_wm.mp4", "_music.mp4", "_fade.mp4",
-                          "_fswap.mp4", "preview_")
+                          "_fswap.mp4", "_faceblend.mp4", "preview_",
+                          "_thumb_old.jpg", ".tmp")
         # Force more aggressive cleanup if disk pressure
         if free_mb < 5000:
             retention_days = 2
