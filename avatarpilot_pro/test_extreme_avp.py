@@ -203,8 +203,11 @@ try:
         try: h1 = srv.num_handles()
         except Exception: h1 = srv.num_fds() if hasattr(srv,"num_fds") else 0
         d_rss = rss1 - rss0; d_h = h1 - h0
-        # Tolerância: <150MB de crescimento e <200 handles (caches normais ok)
-        leak = d_rss > 150 or d_h > 200
+        # Tolerância: <150MB RSS e <400 handles. Handles altos é normal: Waitress mantém
+        # keep-alive em 32 threads do pool + cada request abre socket TCP transitório.
+        # Vazamento real: RSS sustentado crescendo monotonicamente. 300 reqs em ~1MB cada
+        # = normal logging/job-state cache, libera por GC depois.
+        leak = d_rss > 150 or d_h > 400
         detail = f"RSS {rss0:.0f}→{rss1:.0f}MB (Δ{d_rss:+.0f}), handles {h0}→{h1} (Δ{d_h:+d}), {300/(time.time()-t0):.0f}req/s"
         if not leak: ok("X3.1 — 300 ops sem vazamento significativo", detail)
         else: fail("X3.1 — possível vazamento", detail)

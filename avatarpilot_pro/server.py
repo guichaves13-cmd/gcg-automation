@@ -361,6 +361,12 @@ VOICE_PRESETS = {
 # ============================================================================
 # SETTINGS
 # ============================================================================
+# Lock global p/ proteger read-modify-write de settings.json em concorrência.
+# Sem ele, 20 threads simultâneos sobrescrevendo causam JSON parcial e load_settings
+# cai no fallback default (sem watermark_text etc). Atomic write via tempfile + rename
+# garante que readers nunca veem arquivo half-written.
+_settings_lock = threading.Lock()
+
 def load_settings():
     if os.path.exists(SETTINGS_FILE):
         try:
@@ -372,8 +378,28 @@ def load_settings():
             "default_voice": "en-US-GuyNeural", "plan": DEFAULT_PLAN}
 
 def save_settings(s):
-    with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
-        json.dump(s, f, indent=2, ensure_ascii=False)
+    with _settings_lock:
+        # Atomic write com nome de tmp único por thread + retry em PermissionError
+        # (Windows pode rejeitar os.replace se reader/AV indexador tem handle aberto).
+        import uuid as _uuid, time as _t
+        tmp = f"{SETTINGS_FILE}.{_uuid.uuid4().hex[:8]}.tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(s, f, indent=2, ensure_ascii=False)
+            f.flush()
+            try: os.fsync(f.fileno())
+            except OSError: pass  # alguns FS (Windows network) não suportam
+        # Retry em Windows file-replace race
+        for attempt in range(5):
+            try:
+                os.replace(tmp, SETTINGS_FILE)
+                return
+            except PermissionError:
+                if attempt == 4:
+                    # Último recurso: limpa tmp e propaga
+                    try: os.remove(tmp)
+                    except OSError: pass
+                    raise
+                _t.sleep(0.05 * (attempt + 1))  # backoff 50ms, 100ms, 150ms, 200ms
 
 # ============================================================================
 # SQLITE — PERSISTENT JOB QUEUE
@@ -3980,26 +4006,27 @@ def generate_thumbnail(video_path: str, out_path: str) -> bool:
 # ============================================================================
 def trim_long_silences(input_path: str, output_path: str,
                         max_silence_s: float = 1.5,
-                        threshold_db: float = -38.0) -> str:
-    """Encurta pausas mais longas que max_silence_s para max_silence_s (não remove
-    todas as pausas — preserva respiração natural). Usa silenceremove em modo
-    'stop_periods=-1' (todas as pausas) com stop_silence=max_silence_s.
+                        threshold_db: float = -50.0) -> str:
+    """Encurta pausas mais longas que max_silence_s. Mantém respiração/breath
+    natural (>-50dB) — só corta silêncio absoluto (ambiente vazio).
 
     Args:
-        max_silence_s: máximo de silêncio permitido (mantém este tanto, corta o resto)
-        threshold_db: nível em dBFS abaixo do qual conta como silêncio (-38 = falas normais não cortam)
+        max_silence_s: máximo de silêncio permitido por pausa (mantém este tanto).
+        threshold_db: nível dBFS abaixo do qual conta como silêncio. -50dB
+            preserva sussurros/respiração (típicos -25 a -40dB) e corta apenas
+            silêncio total. (Anterior: -38dB cortava demais.)
     """
     if not os.path.exists(input_path):
         if input_path != output_path: shutil.copy2(input_path, output_path)
         return output_path
     ffmpeg = _ffmpeg_path()
-    # silenceremove: detecta blocos de silêncio e os encurta para stop_silence segundos
-    # window=0.03 = 30ms (rápido o suficiente para não cortar palavras)
+    # silenceremove: stop_periods=-1 processa TODAS pausas (não só trailing).
+    # SEM stop_silence — empiricamente esse param dobra a duração mantida.
+    # window=0.03 (30ms) suficiente p/ não cortar consoantes finais.
     af = (f"silenceremove="
           f"stop_periods=-1:"
           f"stop_duration={max_silence_s}:"
           f"stop_threshold={threshold_db}dB:"
-          f"stop_silence={max_silence_s}:"
           f"window=0.03")
     try:
         dur_in = _get_duration_safe(input_path)

@@ -48,8 +48,12 @@ def cancel(jid):
     try: requests.post(f"{BASE}/api/job/{jid}/cancel", timeout=5)
     except: pass
 
-def gen(data, files=None, timeout=15):
-    """POST /api/generate. Returns status code; cancels any created job."""
+def gen(data, files=None, timeout=15, space=False):
+    """POST /api/generate. Returns status code; cancels any created job.
+    space=True: throttle p/ ficar sob o rate limit (10/60s) e obter resposta REAL
+    (200/400) em vez de 429 — usado nos testes de fronteira/encoding."""
+    if space:
+        time.sleep(6.5)  # ~9 req/min < 10/60s
     if files is None:
         files = {"image": ("a.jpg", io.BytesIO(IMG_BYTES), "image/jpeg")}
     r = requests.post(f"{BASE}/api/generate", data=data, files=files, timeout=timeout)
@@ -184,20 +188,25 @@ ok("A2.4 — servidor vivo após races") if alive() else fail("A2.4 — servidor
 # ══════════════════════════════════════════════════════════════════════════════
 sep("A3 — VALORES DE FRONTEIRA EXATOS")
 # ══════════════════════════════════════════════════════════════════════════════
-# A3.1 — script exatamente no limite (15000) vs acima (15001)
+# Cooldown p/ resetar rate limit (A1/A2 saturaram) — assim obtemos respostas REAIS
+print("  [aguardando 62s p/ reset do rate limit — validação real de fronteiras...]")
+time.sleep(62)
+# A3.1 — script exatamente no limite (AVP_MAX_SCRIPT_CHARS=50000 default) vs acima
+# Nota: o cap padrão foi elevado de 15k → 50k. Validamos no limite atual.
 try:
-    c15000, _ = gen({"script":"a"*15000,"voice":"pt-BR-FranciscaNeural","engine":"edge-tts","enhancer":"none"})
-    c15001, _ = gen({"script":"a"*15001,"voice":"pt-BR-FranciscaNeural","engine":"edge-tts","enhancer":"none"})
-    # 15000 deve aceitar (200) ou rate-limit (429); 15001 deve rejeitar (400)
-    okk = c15000 in (200,429) and c15001 in (400,422,429)
-    if okk: ok("A3.1 — limite de script 15000/15001", f"15000→{c15000} 15001→{c15001}")
-    else: fail("A3.1 — limite de script", f"15000→{c15000} 15001→{c15001} (esperado aceitar/rejeitar)")
+    LIMIT = 50000  # AVP_MAX_SCRIPT_CHARS default
+    c_at,   _ = gen({"script":"a"*LIMIT,    "voice":"pt-BR-FranciscaNeural","engine":"edge-tts","enhancer":"none"}, space=True)
+    c_over, _ = gen({"script":"a"*(LIMIT+1),"voice":"pt-BR-FranciscaNeural","engine":"edge-tts","enhancer":"none"}, space=True)
+    # No limite deve aceitar (200) ou rate-limit (429); acima deve rejeitar (400/422)
+    okk = c_at in (200,429) and c_over in (400,422,429)
+    if okk: ok(f"A3.1 — limite de script {LIMIT}/{LIMIT+1}", f"at→{c_at} over→{c_over}")
+    else: fail(f"A3.1 — limite de script {LIMIT}", f"at→{c_at} over→{c_over} (esperado aceitar/rejeitar)")
 except Exception as e:
     fail("A3.1 — limite script", str(e)[:100])
 
 # A3.2 — script 1 char (mínimo)
 try:
-    c1, _ = gen({"script":"a","voice":"pt-BR-FranciscaNeural","engine":"edge-tts","enhancer":"none"})
+    c1, _ = gen({"script":"a","voice":"pt-BR-FranciscaNeural","engine":"edge-tts","enhancer":"none"}, space=True)
     ok(f"A3.2 — script 1 char → {c1} (não-500)") if c1 != 500 else fail("A3.2 — script 1 char", "500")
 except Exception as e:
     fail("A3.2 — script 1 char", str(e)[:100])
@@ -206,7 +215,7 @@ except Exception as e:
 try:
     codes = {}
     for v in ["0.1","3.0","0.09","3.01","-1","99"]:
-        c,_ = gen({"script":"Teste.","voice":"pt-BR-FranciscaNeural","engine":"edge-tts","enhancer":"none","expression_scale":v})
+        c,_ = gen({"script":"Teste.","voice":"pt-BR-FranciscaNeural","engine":"edge-tts","enhancer":"none","expression_scale":v}, space=True)
         codes[v]=c
     no500 = all(c != 500 for c in codes.values())
     ok(f"A3.3 — expression_scale fronteiras (clamp gracioso)", f"{codes}") if no500 else fail("A3.3 — expression_scale", f"{codes}")
@@ -217,7 +226,7 @@ except Exception as e:
 try:
     codes = {}
     for v in ["256","512","257","0","-1","99999"]:
-        c,_ = gen({"script":"Teste.","voice":"pt-BR-FranciscaNeural","engine":"edge-tts","enhancer":"none","size":v})
+        c,_ = gen({"script":"Teste.","voice":"pt-BR-FranciscaNeural","engine":"edge-tts","enhancer":"none","size":v}, space=True)
         codes[v]=c
     no500 = all(c != 500 for c in codes.values())
     ok(f"A3.4 — size fronteiras (fallback 256)", f"{codes}") if no500 else fail("A3.4 — size", f"{codes}")
@@ -241,7 +250,7 @@ TORTURE_SCRIPTS = [
 enc_500 = 0; enc_results = {}
 for label, scr in TORTURE_SCRIPTS:
     try:
-        c, _ = gen({"script":scr,"voice":"pt-BR-FranciscaNeural","engine":"edge-tts","enhancer":"none"}, timeout=15)
+        c, _ = gen({"script":scr,"voice":"pt-BR-FranciscaNeural","engine":"edge-tts","enhancer":"none"}, timeout=15, space=True)
         enc_results[label]=c
         if c == 500: enc_500 += 1
     except Exception as e:
