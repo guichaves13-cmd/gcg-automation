@@ -4992,8 +4992,12 @@ def run_pipeline(job_id: str, config: dict):
                         if os.path.exists(_st_gfpgan_out) and os.path.getsize(_st_gfpgan_out) > 10000:
                             _safe_rm(avatar_video)
                             _safe_rename(_st_gfpgan_out, avatar_video)
-                        # CODEFORMER refinement (optional, only for short clips)
-                        if dur <= 120 and config.get("enhance_face", True):
+                        # CODEFORMER refinement — OPT-IN agora (era auto e levava 30+ min
+                        # em clips de 30s, dobrando o tempo total). Para usar CodeFormer,
+                        # escolha enhancer=codeformer (que roda CF como primário) OU passe
+                        # codeformer_refine=true. Default: GFPGAN sozinho (HeyGen-quality já).
+                        if dur <= 120 and config.get("enhance_face", True) and \
+                                config.get("codeformer_refine", False):
                             try:
                                 jobs[job_id]["message"] = "CodeFormer: refinando textura facial..."
                                 _cf_out = os.path.join(OUTPUT_DIR, f"{job_id}_codeformer.mp4")
@@ -6536,6 +6540,9 @@ def api_generate():
     except (ValueError, TypeError):
         music_volume = 0.15
     music_auto_duck = (request.form.get("music_auto_duck", "true").lower() in ("1","true","yes","on"))
+    # CodeFormer refinement post-GFPGAN: opt-in (era auto + lento). Default false.
+    # Quando true: GFPGAN + CodeFormer refinamento (dobra tempo, qualidade extra).
+    codeformer_refine = (request.form.get("codeformer_refine", "false").lower() in ("1","true","yes","on"))
     try:
         fade_in  = max(0.0, min(10.0, float(request.form.get("fade_in", "0.5"))))
         fade_out = max(0.0, min(10.0, float(request.form.get("fade_out", "0.5"))))
@@ -6661,6 +6668,7 @@ def api_generate():
         "watermark_text":  watermark_text, "watermark_pos": watermark_pos,
         "music_url":       music_url,      "music_volume":  music_volume,
         "music_auto_duck": music_auto_duck,
+        "codeformer_refine": codeformer_refine,
         "enable_fade":     enable_fade,    "fade_in":       fade_in,    "fade_out": fade_out,
         "export_format":   export_format,
         "enhance_image":   enhance_img,
@@ -6716,6 +6724,7 @@ def api_generate():
         _enh = (config.get("enhancer", "gfpgan") or "gfpgan").lower()
         if _enh == "gfpgan":      _mult += 1.5
         elif _enh == "codeformer": _mult += 3.0  # CodeFormer é ~2x mais pesado
+        if config.get("codeformer_refine"): _mult += 1.8  # GFPGAN + CF refinement
         if config.get("captions"): _mult += 0.5  # Whisper transcribe
         if config.get("enhance_image"): _mult += 0.3
         if config.get("gesture_video"): _mult += 1.0  # face swap
@@ -7187,6 +7196,7 @@ def api_preflight():
     mult = 3.0
     if enhancer == "gfpgan":    mult += 1.5
     elif enhancer == "codeformer": mult += 3.0
+    if data.get("codeformer_refine"): mult += 1.8
     if has_captions:        mult += 0.5
     if has_enhance_img:     mult += 0.3
     if has_gesture:         mult += 1.0
