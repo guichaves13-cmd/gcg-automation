@@ -350,6 +350,13 @@ async function generateAvatar() {
       document.getElementById('progress-area').style.display = 'none';
       return;
     }
+    // Mostra ETA inicial + warnings se vieram do servidor (HeyGen-style UX)
+    if (d.estimated_minutes_text || d.warning) {
+      let msg = `Job enfileirado`;
+      if (d.estimated_minutes_text) msg += ` — ETA inicial: ${d.estimated_minutes_text}`;
+      if (d.warning) msg += `. ⚠️ ${d.warning}`;
+      toast(msg, d.warning ? 'warning' : 'info');
+    }
     pollJob(d.job_id);
   } catch (e) {
     toast('Erro: ' + e.message, 'error');
