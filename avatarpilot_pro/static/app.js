@@ -298,6 +298,7 @@ async function generateAvatar() {
   }
   formData.append('remove_bg',       document.getElementById('remove-bg-enable')?.checked || false);
   formData.append('normalize_audio', document.getElementById('normalize-audio')?.checked  || false);
+  formData.append('trim_silence',    document.getElementById('trim-silence')?.checked !== false ? 'true' : 'false');
   formData.append('output_format',   document.getElementById('output-format')?.value      || 'landscape');
 
   // Phase 4 — music, fade, export, enhance, chroma, translate, template vars

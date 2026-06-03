@@ -3880,11 +3880,17 @@ def _thumb_legacy(video_path: str, out_path: str) -> bool:
         return False
 
 def generate_thumbnail(video_path: str, out_path: str) -> bool:
-    """Smart thumbnail: amostra 3 frames (15%, 40%, 70%), detecta face com Haar
-    cascade, escolhe o frame com a MAIOR face (= melhor enquadrado/visivel). Evita
-    pegar frame de blink, boca aberta no meio de palavra, ou clip de transição."""
+    """Smart thumbnail (HeyGen-style): amostra 7 frames, scoreia cada um por:
+      - Tamanho da face (Haar cascade) — melhor enquadrado
+      - Nitidez (Laplacian variance) — evita motion blur / blink
+      - Brilho (avg luma) — evita frames muito escuros ou muito claros
+      - Centro de face — face perto do centro pontua mais
+    Escolhe o frame com maior score combinado. Saída 480px de largura (qualidade
+    Reels/TikTok preview).
+    """
     try:
         import cv2 as _cv2
+        import numpy as _np
         cap = _cv2.VideoCapture(video_path)
         if not cap.isOpened():
             return _thumb_legacy(video_path, out_path)
@@ -3898,38 +3904,175 @@ def generate_thumbnail(video_path: str, out_path: str) -> bool:
             cascade_ok = (cascade_path is not None) and (not cascade.empty())
         except Exception:
             cascade_ok = False
-        best_frame, best_area = None, 0
-        for p in (0.15, 0.40, 0.70):
+
+        best_frame, best_score = None, -1.0
+        # 7 amostras espalhadas, ignorando primeiros/últimos 5% (frames de fade)
+        sample_pts = [0.10, 0.22, 0.35, 0.50, 0.65, 0.78, 0.90]
+        for p in sample_pts:
             cap.set(_cv2.CAP_PROP_POS_FRAMES, max(0, int(total * p)))
             ok, frame = cap.read()
             if not ok or frame is None: continue
+            h_f, w_f = frame.shape[:2]
+            gray = _cv2.cvtColor(frame, _cv2.COLOR_BGR2GRAY)
+
+            # Score componentes (todos normalizados ~0–1)
+            # 1. Face — peso 0.5
+            face_score = 0.0
+            face_center_bonus = 0.0
             if cascade_ok:
-                gray = _cv2.cvtColor(frame, _cv2.COLOR_BGR2GRAY)
                 faces = cascade.detectMultiScale(gray, 1.2, 5)
                 if len(faces) > 0:
-                    area = max(w*h for (_, _, w, h) in faces)
-                    if area > best_area:
-                        best_area = area; best_frame = frame
+                    # face maior pontua mais (até 30% da largura do frame)
+                    fx, fy, fw, fh = max(faces, key=lambda d: d[2]*d[3])
+                    face_score = min(1.0, (fw * fh) / (w_f * h_f * 0.15))
+                    # bonus se face perto do centro horizontal
+                    cx = fx + fw / 2
+                    face_center_bonus = 1.0 - min(1.0, abs(cx - w_f/2) / (w_f/2))
+
+            # 2. Nitidez (Laplacian var) — peso 0.25
+            #    >100 = muito nítido; <30 = blur. Normaliza com cap em 300.
+            lap_var = _cv2.Laplacian(gray, _cv2.CV_64F).var()
+            sharp_score = min(1.0, lap_var / 300.0)
+
+            # 3. Brilho — peso 0.15. Ideal é luma média em 90–170 (0–255)
+            mean_lum = float(_np.mean(gray))
+            if 90 <= mean_lum <= 170:
+                bright_score = 1.0
+            else:
+                # Penalty proporcional à distância do range
+                dist = min(abs(mean_lum - 90), abs(mean_lum - 170))
+                bright_score = max(0.0, 1.0 - dist / 90.0)
+
+            # 4. Centro da face — peso 0.10
+            center_score = face_center_bonus
+
+            score = (face_score * 0.50 +
+                     sharp_score * 0.25 +
+                     bright_score * 0.15 +
+                     center_score * 0.10)
+            if score > best_score:
+                best_score = score
+                best_frame = frame
+
         cap.release()
-        if best_frame is not None:
+        if best_frame is not None and best_score > 0.05:
             h0, w0 = best_frame.shape[:2]
-            new_w = 320; new_h = max(1, int(h0 * 320 / max(1, w0)))
-            thumb = _cv2.resize(best_frame, (new_w, new_h), interpolation=_cv2.INTER_AREA)
-            ok = _cv2.imwrite(out_path, thumb, [_cv2.IMWRITE_JPEG_QUALITY, 88])
-            if ok and os.path.exists(out_path):
-                return True
-        # Sem face detectada (vídeo abstrato, escuro, etc.) → fallback simples
+            new_w = 480; new_h = max(1, int(h0 * 480 / max(1, w0)))
+            thumb = _cv2.resize(best_frame, (new_w, new_h), interpolation=_cv2.INTER_LANCZOS4)
+            # Sharpening suave para preview punchy
+            kernel = _np.array([[0, -0.3, 0], [-0.3, 2.2, -0.3], [0, -0.3, 0]], dtype=_np.float32)
+            thumb = _cv2.filter2D(thumb, -1, kernel)
+            # cv2.imwrite quebra com path contendo ç (Windows quirk) — usar imencode+write
+            ok_enc, enc = _cv2.imencode('.jpg', thumb, [_cv2.IMWRITE_JPEG_QUALITY, 92])
+            if ok_enc:
+                with open(out_path, 'wb') as _f: _f.write(enc.tobytes())
+                if os.path.exists(out_path) and os.path.getsize(out_path) > 500:
+                    print(f"  [Thumbnail] smart pick (score={best_score:.2f}, 480w)", flush=True)
+                    return True
+        # Sem face/score baixo → fallback simples
         return _thumb_legacy(video_path, out_path)
     except Exception as e:
         print(f"  [Thumbnail] smart falhou ({e}) — usando fallback", flush=True)
         return _thumb_legacy(video_path, out_path)
 
 # ============================================================================
+# SMART SILENCE TRIM — encurta pausas longas no áudio (HeyGen-style)
+# ============================================================================
+def trim_long_silences(input_path: str, output_path: str,
+                        max_silence_s: float = 1.5,
+                        threshold_db: float = -38.0) -> str:
+    """Encurta pausas mais longas que max_silence_s para max_silence_s (não remove
+    todas as pausas — preserva respiração natural). Usa silenceremove em modo
+    'stop_periods=-1' (todas as pausas) com stop_silence=max_silence_s.
+
+    Args:
+        max_silence_s: máximo de silêncio permitido (mantém este tanto, corta o resto)
+        threshold_db: nível em dBFS abaixo do qual conta como silêncio (-38 = falas normais não cortam)
+    """
+    if not os.path.exists(input_path):
+        if input_path != output_path: shutil.copy2(input_path, output_path)
+        return output_path
+    ffmpeg = _ffmpeg_path()
+    # silenceremove: detecta blocos de silêncio e os encurta para stop_silence segundos
+    # window=0.03 = 30ms (rápido o suficiente para não cortar palavras)
+    af = (f"silenceremove="
+          f"stop_periods=-1:"
+          f"stop_duration={max_silence_s}:"
+          f"stop_threshold={threshold_db}dB:"
+          f"stop_silence={max_silence_s}:"
+          f"window=0.03")
+    try:
+        dur_in = _get_duration_safe(input_path)
+        p = subprocess.run([
+            ffmpeg, "-y", "-i", input_path,
+            "-af", af,
+            "-ar", "44100", "-c:a", "libmp3lame", "-q:a", "2",
+            output_path
+        ], capture_output=True, timeout=180)
+        if p.returncode == 0 and os.path.exists(output_path) and os.path.getsize(output_path) > 1000:
+            dur_out = _get_duration_safe(output_path)
+            saved = max(0.0, dur_in - dur_out)
+            if saved > 0.3:
+                print(f"  [Trim] Silêncios encurtados: {dur_in:.1f}s → {dur_out:.1f}s (economizou {saved:.1f}s)")
+            else:
+                print(f"  [Trim] Sem pausas longas detectadas ({dur_in:.1f}s mantidos)")
+            return output_path
+        # Fallback: copia o original
+        err = (p.stderr or b"").decode("utf-8", errors="replace")[-150:]
+        print(f"  [Trim] silenceremove falhou ({err[:100]}) — usando áudio original")
+    except Exception as e:
+        print(f"  [Trim] erro: {e} — usando áudio original")
+    if input_path != output_path:
+        shutil.copy2(input_path, output_path)
+    return output_path
+
+
+# ============================================================================
 # BACKGROUND COMPOSITING (with position + size options)
 # ============================================================================
 def normalize_audio(input_path: str, output_path: str) -> str:
-    """Normalize audio to -16 LUFS using FFmpeg loudnorm (broadcast standard)."""
+    """Normalize audio to -16 LUFS (EBU R128 broadcast standard) via FFmpeg loudnorm.
+    Uses 2-pass measurement for clips <= 120s (more precise), 1-pass for longer.
+    """
     ffmpeg = _ffmpeg_path()
+    dur = _get_duration_safe(input_path)
+
+    # 2-pass loudnorm: pass 1 measures, pass 2 applies measured params
+    if 0 < dur <= 120:
+        try:
+            import json as _json, re as _re
+            # Pass 1: print_format=json gives us measured_I/TP/LRA/thresh + offset
+            p1 = subprocess.run([
+                ffmpeg, "-hide_banner", "-i", input_path,
+                "-af", "loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json",
+                "-f", "null", "-"
+            ], capture_output=True, timeout=90, encoding="utf-8", errors="replace")
+            # JSON é impresso ao final do stderr
+            _stderr = p1.stderr or ""
+            _m = _re.search(r"\{[^{}]*\"input_i\"[^{}]*\}", _stderr, _re.DOTALL)
+            if _m:
+                meas = _json.loads(_m.group(0))
+                af = (
+                    f"loudnorm=I=-16:TP=-1.5:LRA=11:"
+                    f"measured_I={meas['input_i']}:"
+                    f"measured_TP={meas['input_tp']}:"
+                    f"measured_LRA={meas['input_lra']}:"
+                    f"measured_thresh={meas['input_thresh']}:"
+                    f"offset={meas['target_offset']}:linear=true:print_format=summary"
+                )
+                p2 = subprocess.run([
+                    ffmpeg, "-y", "-i", input_path,
+                    "-af", af,
+                    "-ar", "44100", "-c:a", "libmp3lame", "-q:a", "2",
+                    output_path
+                ], capture_output=True, timeout=120)
+                if p2.returncode == 0 and os.path.exists(output_path):
+                    print(f"  [Loudnorm] 2-pass EBU R128 (I=-16 LUFS, measured input I={meas['input_i']})")
+                    return output_path
+        except Exception as _ln_err:
+            print(f"  [Loudnorm] 2-pass falhou ({_ln_err}) — fallback 1-pass")
+
+    # Fallback: 1-pass loudnorm (más rápido, menos preciso)
     cmd = [
         ffmpeg, "-y", "-i", input_path,
         "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
@@ -3939,6 +4082,8 @@ def normalize_audio(input_path: str, output_path: str) -> str:
     proc = subprocess.run(cmd, capture_output=True, timeout=120)
     if proc.returncode != 0 or not os.path.exists(output_path):
         shutil.copy2(input_path, output_path)
+    else:
+        print(f"  [Loudnorm] 1-pass (dur={dur:.0f}s)")
     return output_path
 
 
@@ -4588,6 +4733,16 @@ def run_pipeline(job_id: str, config: dict):
             normalize_audio(audio_path, norm_path)
             if os.path.exists(norm_path) and os.path.getsize(norm_path) > 1000:
                 audio_path = norm_path
+
+        # ── Step 1c: Smart silence trim (HeyGen-style — encurta pausas longas) ───
+        # Default: True (encurta pausas > 1.5s). Cliente pode desligar com trim_silence=false.
+        if config.get("trim_silence", True):
+            jobs[job_id]["message"] = "Trimming long silences (>1.5s)..."
+            trim_path = os.path.join(OUTPUT_DIR, f"{job_id}_audio_trim.mp3")
+            max_sil = float(config.get("max_silence_seconds", 1.5))
+            trim_long_silences(audio_path, trim_path, max_silence_s=max_sil)
+            if os.path.exists(trim_path) and os.path.getsize(trim_path) > 1000:
+                audio_path = trim_path
 
         # ── Plan limit check ───────────────────────────────────────────────
         dur   = _get_duration_safe(audio_path)
@@ -6272,6 +6427,11 @@ def api_generate():
     # HeyGen-like default: ligado por padrão p/ loudness consistente entre todas as gerações.
     # Cliente pode desligar explicitamente passando normalize_audio=false.
     normalize_audio   = request.form.get("normalize_audio", "true").lower() != "false"
+    trim_silence      = request.form.get("trim_silence", "true").lower() != "false"
+    try:
+        max_silence_sec = max(0.3, min(5.0, float(request.form.get("max_silence_seconds", "1.5"))))
+    except (ValueError, TypeError):
+        max_silence_sec = 1.5
     output_format     = request.form.get("output_format", "landscape")
     watermark_text    = request.form.get("watermark_text", "")[:200]
     watermark_pos     = request.form.get("watermark_pos", "bottom_right")
@@ -6468,6 +6628,8 @@ def api_generate():
         "caption_color": caption_color, "caption_position": caption_pos,
         "caption_style": caption_style, "caption_highlight": caption_highlight,
         "normalize_audio": normalize_audio,
+        "trim_silence":    trim_silence,
+        "max_silence_seconds": max_silence_sec,
         "output_format":   output_format,
         "watermark_text":  watermark_text, "watermark_pos": watermark_pos,
         "music_url":       music_url,      "music_volume":  music_volume,
