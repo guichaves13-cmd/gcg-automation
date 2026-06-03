@@ -190,26 +190,31 @@ try:
     if srv is None:
         fail("X3 — não achou processo do servidor", "")
     else:
+        eps = ["/api/healthz","/api/history?limit=5","/api/voices","/api/dashboard",
+               "/api/settings","/api/gesture_videos","/api/debug/jobs","/api/vram"]
+        # ETAPA 1 — warmup: caches do Waitress + thread pool + JSON serializers se aquecem
+        for i in range(80):
+            try: requests.get(f"{BASE}{eps[i % len(eps)]}", timeout=10)
+            except: pass
+        time.sleep(2)  # deixa GC rodar
+        # Mede DEPOIS do warmup — agora qualquer crescimento é cumulativo (leak real)
         rss0 = srv.memory_info().rss / (1024**2)
         try: h0 = srv.num_handles()
         except Exception: h0 = srv.num_fds() if hasattr(srv,"num_fds") else 0
-        eps = ["/api/healthz","/api/history?limit=5","/api/voices","/api/dashboard",
-               "/api/settings","/api/gesture_videos","/api/debug/jobs","/api/vram"]
         t0 = time.time()
+        # ETAPA 2 — 300 ops MEDIDAS (já com caches estáveis)
         for i in range(300):
             try: requests.get(f"{BASE}{eps[i % len(eps)]}", timeout=10)
             except: pass
+        time.sleep(2)
         rss1 = srv.memory_info().rss / (1024**2)
         try: h1 = srv.num_handles()
         except Exception: h1 = srv.num_fds() if hasattr(srv,"num_fds") else 0
         d_rss = rss1 - rss0; d_h = h1 - h0
-        # Tolerância: <150MB RSS e <400 handles. Handles altos é normal: Waitress mantém
-        # keep-alive em 32 threads do pool + cada request abre socket TCP transitório.
-        # Vazamento real: RSS sustentado crescendo monotonicamente. 300 reqs em ~1MB cada
-        # = normal logging/job-state cache, libera por GC depois.
-        leak = d_rss > 150 or d_h > 400
-        detail = f"RSS {rss0:.0f}→{rss1:.0f}MB (Δ{d_rss:+.0f}), handles {h0}→{h1} (Δ{d_h:+d}), {300/(time.time()-t0):.0f}req/s"
-        if not leak: ok("X3.1 — 300 ops sem vazamento significativo", detail)
+        # Tolerância pós-warmup: <80MB RSS e <200 handles (deltas reais, não cache load).
+        leak = d_rss > 80 or d_h > 200
+        detail = f"pós-warmup: RSS {rss0:.0f}→{rss1:.0f}MB (Δ{d_rss:+.0f}), handles {h0}→{h1} (Δ{d_h:+d}), {300/(time.time()-t0):.0f}req/s"
+        if not leak: ok("X3.1 — 300 ops pós-warmup sem vazamento", detail)
         else: fail("X3.1 — possível vazamento", detail)
 except Exception as e:
     fail("X3 — leak detection", str(e)[:150])

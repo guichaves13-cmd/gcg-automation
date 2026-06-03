@@ -6707,7 +6707,34 @@ def api_generate():
                 increment_daily_usage(_hwid_inc)
         except Exception as _ie:
             print(f"  [DailyUsage] increment error: {_ie}", flush=True)
-    return jsonify({"job_id": job_id, "queued_workers": _cur_workers})
+    # HeyGen-style: estima ETA inicial baseado em script + config (antes do job rodar).
+    # Útil pro frontend exibir "~3 min" imediatamente ao submeter.
+    try:
+        _est_audio_sec = max(2.0, len(script) / 15.0) if script else 30.0  # ~15 chars/s (Edge-TTS PT-BR)
+        # Multiplicadores baseados em config — empíricos do RTX 4060 8GB
+        _mult = 3.0  # base: SadTalker + MuseTalk
+        _enh = (config.get("enhancer", "gfpgan") or "gfpgan").lower()
+        if _enh == "gfpgan":      _mult += 1.5
+        elif _enh == "codeformer": _mult += 3.0  # CodeFormer é ~2x mais pesado
+        if config.get("captions"): _mult += 0.5  # Whisper transcribe
+        if config.get("enhance_image"): _mult += 0.3
+        if config.get("gesture_video"): _mult += 1.0  # face swap
+        _est_pipeline_sec = int(_est_audio_sec * _mult) + 30  # overhead constante
+        # Adiciona tempo de fila (jobs queued na frente × estimativa média 3min)
+        _queue_ahead = max(0, _cur_workers - 1)
+        _eta_initial = _est_pipeline_sec + (_queue_ahead * 180)
+        _vram_free_gb = get_vram_free_gb()
+        _warn = "" if _vram_free_gb >= 3.0 else f"VRAM baixa ({_vram_free_gb:.1f}GB) — pode degradar qualidade"
+    except Exception:
+        _eta_initial = 0; _vram_free_gb = 0; _warn = ""
+    return jsonify({
+        "job_id": job_id,
+        "queued_workers": _cur_workers,
+        "estimated_seconds": _eta_initial,
+        "estimated_minutes_text": f"~{max(1, _eta_initial // 60)} min" if _eta_initial > 0 else "calculando...",
+        "vram_free_gb": round(_vram_free_gb, 1),
+        "warning": _warn,
+    })
 
 def _compute_eta_seconds(j: dict) -> int:
     """ETA HeyGen-like: estima segundos restantes a partir do progresso e tempo decorrido.
@@ -6999,7 +7026,16 @@ def api_ai_generate_image():
         filename = os.path.basename(img_path)
         return jsonify({"image_url": f"/outputs/{filename}", "path": img_path})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        # Degradação graciosa: Pollinations free tier passou a exigir pagamento (HTTP 402).
+        # Mapeia para 402/503 ao invés de 500 — frontend pode mostrar "Indisponível" sem alarme.
+        _msg = str(e)
+        if "402" in _msg or "Payment Required" in _msg:
+            return jsonify({"error": "Image generation API requires payment (Pollinations free tier ended). Configure replicate_key em /api/settings para usar Replicate."}), 402
+        if "401" in _msg or "Unauthorized" in _msg:
+            return jsonify({"error": _msg}), 401
+        if "timed out" in _msg.lower() or "timeout" in _msg.lower() or "ConnectionError" in _msg:
+            return jsonify({"error": f"AI provider indisponível: {_msg}"}), 503
+        return jsonify({"error": _msg}), 500
 
 # ============================================================================
 # ROUTES — VOICES (ElevenLabs — list + clone)
@@ -7127,6 +7163,60 @@ def api_vram():
     sufficient = vram_is_sufficient(2.0)
     return jsonify({"vram_free_gb": free, "sufficient": sufficient,
                     "recommendation": "ready" if sufficient else "wait_or_use_cloud"})
+
+
+@app.route("/api/preflight", methods=["POST"])
+def api_preflight():
+    """Pre-flight check pra UI: estima ETA + VRAM + queue antes do user submeter.
+    Body JSON: {"script": "...", "enhancer": "gfpgan"|"codeformer"|..., "captions": bool, ...}
+    Retorna: {ready, eta_seconds, eta_text, vram_free_gb, queue_ahead, warnings: [...]}
+    """
+    data = request.json or {}
+    script  = (data.get("script", "") or "")[:50000]
+    enhancer = (data.get("enhancer", "gfpgan") or "gfpgan").lower()
+    has_captions = bool(data.get("captions"))
+    has_gesture  = bool(data.get("gesture_video"))
+    has_enhance_img = bool(data.get("enhance_image"))
+
+    warnings = []
+    if not script.strip() and not data.get("audio"):
+        warnings.append("Roteiro vazio — digite o texto antes de submeter")
+
+    # ETA empírico (RTX 4060 8GB baseline)
+    est_audio = max(2.0, len(script) / 15.0) if script else 30.0
+    mult = 3.0
+    if enhancer == "gfpgan":    mult += 1.5
+    elif enhancer == "codeformer": mult += 3.0
+    if has_captions:        mult += 0.5
+    if has_enhance_img:     mult += 0.3
+    if has_gesture:         mult += 1.0
+    eta = int(est_audio * mult) + 30
+
+    # Fila atual
+    with workers_lock:
+        active = active_workers
+    with jobs_lock:
+        queued = sum(1 for j in jobs.values() if j.get("status") == "queued")
+    queue_ahead = max(0, active - 1) + queued
+    eta_total = eta + (queue_ahead * 180)
+
+    free_vram = get_vram_free_gb()
+    if free_vram < 2.5:
+        warnings.append(f"VRAM baixa: {free_vram:.1f}GB livre — recomendado >2.5GB")
+    if enhancer == "codeformer" and est_audio > 120:
+        warnings.append("CodeFormer + clip >2min: pode demorar 20+ min")
+    if queue_ahead > 2:
+        warnings.append(f"{queue_ahead} jobs na frente — espera ~{(queue_ahead*180)//60}min adicional")
+
+    return jsonify({
+        "ready":             len([w for w in warnings if "vazio" in w.lower()]) == 0,
+        "eta_seconds":       eta_total,
+        "eta_text":          f"~{max(1, eta_total // 60)} min" if eta_total > 0 else "alguns segundos",
+        "vram_free_gb":      round(free_vram, 1),
+        "queue_ahead":       queue_ahead,
+        "estimated_audio_seconds": round(est_audio, 1),
+        "warnings":          warnings,
+    })
 
 @app.route("/api/voices/f5_clone", methods=["POST"])
 def api_voices_f5_clone():
@@ -8916,6 +9006,16 @@ Script:"""
 
     script = ask_groq(prompt, max_tokens=1024)
     if script.startswith("[AI Error"):
+        # Degradação graciosa: mapeia erros conhecidos pra códigos HTTP corretos
+        _s = script.lower()
+        if "429" in script or "rate limit" in _s:
+            return jsonify({"error": script, "retry_after_seconds": 60}), 429
+        if "401" in script or "unauthorized" in _s or "no api key" in _s:
+            return jsonify({"error": script}), 401
+        if "402" in script or "payment" in _s or "quota" in _s:
+            return jsonify({"error": script}), 402
+        if "timeout" in _s or "timed out" in _s or "503" in script:
+            return jsonify({"error": script}), 503
         return jsonify({"error": script}), 500
 
     return jsonify({"script": script.strip(), "source_url": url, "extracted_chars": len(text)})
