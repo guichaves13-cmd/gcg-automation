@@ -1,0 +1,45 @@
+{
+  "Business_Woman": {
+    "category": "business",
+    "gender": "female",
+    "style": "formal",
+    "best_for": ["corporate", "sales", "pitch", "linkedin"],
+    "credit": "Unsplash CC0",
+    "skin_tone": "varies"
+  },
+  "Casual_Female": {
+    "category": "casual",
+    "gender": "female",
+    "style": "informal",
+    "best_for": ["lifestyle", "vlog", "tutorial", "social media"],
+    "credit": "Unsplash CC0"
+  },
+  "Casual_Male": {
+    "category": "casual",
+    "gender": "male",
+    "style": "informal",
+    "best_for": ["lifestyle", "vlog", "gaming", "social media"],
+    "credit": "Unsplash CC0"
+  },
+  "Corporate_Executive": {
+    "category": "business",
+    "gender": "male",
+    "style": "formal",
+    "best_for": ["pitch", "investor", "ceo announcement", "board meeting"],
+    "credit": "Unsplash CC0"
+  },
+  "Influencer": {
+    "category": "creator",
+    "gender": "female",
+    "style": "energetic",
+    "best_for": ["reels", "tiktok", "youtube short", "promo"],
+    "credit": "Unsplash CC0"
+  },
+  "Professional_Man": {
+    "category": "business",
+    "gender": "male",
+    "style": "formal",
+    "best_for": ["news", "documentary", "professional content"],
+    "credit": "Unsplash CC0"
+  }
+}

@@ -4206,7 +4206,10 @@ def add_watermark(input_path: str, output_path: str,
 
 def composite_with_background(avatar_video, bg_image, output_path,
                                position="bottom_right", avatar_size="medium", opacity=1.0):
-    """Composite avatar onto background with flexible positioning."""
+    """Composite avatar onto background. Accepts:
+    - imagem estática (.jpg/.png/.webp) — fundo congelado, looped
+    - vídeo animado (.mp4/.webm/.mov) — fundo em movimento (HeyGen-style scenes)
+    """
     if not bg_image or not os.path.exists(bg_image):
         shutil.copy2(avatar_video, output_path)
         return output_path
@@ -4234,23 +4237,48 @@ def composite_with_background(avatar_video, bg_image, output_path,
     scale_filter = f"scale={av_w}:-1" if avatar_size != "fullscreen" else "scale=1920:1080"
     alpha = min(max(float(opacity), 0.1), 1.0)
 
-    filter_complex = (
-        f"[1:v]{scale_filter},format=yuva420p,"
-        f"colorchannelmixer=aa={alpha:.2f}[av];"
-        f"[0:v]scale=1920:1080[bg];"
-        f"[bg][av]overlay={pos_expr}:shortest=1[vout]"
-    )
+    # Detect tipo de background (image vs video)
+    _bg_ext = os.path.splitext(bg_image)[1].lower()
+    _is_video_bg = _bg_ext in (".mp4", ".mov", ".mkv", ".webm", ".avi")
 
-    cmd = [
-        ffmpeg, "-y",
-        "-loop", "1", "-i", bg_image,
-        "-i", avatar_video,
-        "-filter_complex", filter_complex,
-        "-map", "[vout]", "-map", "1:a:0",
-        "-c:v", "libx264", "-preset", "slow", "-crf", "20",
-        "-c:a", "aac", "-b:a", "192k",
-        "-shortest", output_path
-    ]
+    if _is_video_bg:
+        # Vídeo de fundo — loopa pra cobrir a duração do avatar.
+        # Não usa -loop 1 (que é pra imagem); usa -stream_loop -1.
+        filter_complex = (
+            f"[1:v]{scale_filter},format=yuva420p,"
+            f"colorchannelmixer=aa={alpha:.2f}[av];"
+            f"[0:v]scale=1920:1080:flags=lanczos,fps=25[bg];"
+            f"[bg][av]overlay={pos_expr}:shortest=1[vout]"
+        )
+        cmd = [
+            ffmpeg, "-y",
+            "-stream_loop", "-1", "-i", bg_image,
+            "-i", avatar_video,
+            "-filter_complex", filter_complex,
+            "-map", "[vout]", "-map", "1:a:0",
+            "-c:v", "libx264", "-preset", "slow", "-crf", "20",
+            "-c:a", "aac", "-b:a", "192k",
+            "-shortest", output_path
+        ]
+        print(f"  [Composite] Animated BG video: {os.path.basename(bg_image)}", flush=True)
+    else:
+        # Imagem estática
+        filter_complex = (
+            f"[1:v]{scale_filter},format=yuva420p,"
+            f"colorchannelmixer=aa={alpha:.2f}[av];"
+            f"[0:v]scale=1920:1080[bg];"
+            f"[bg][av]overlay={pos_expr}:shortest=1[vout]"
+        )
+        cmd = [
+            ffmpeg, "-y",
+            "-loop", "1", "-i", bg_image,
+            "-i", avatar_video,
+            "-filter_complex", filter_complex,
+            "-map", "[vout]", "-map", "1:a:0",
+            "-c:v", "libx264", "-preset", "slow", "-crf", "20",
+            "-c:a", "aac", "-b:a", "192k",
+            "-shortest", output_path
+        ]
     proc = subprocess.run(cmd, capture_output=True, timeout=600)
     if proc.returncode != 0:
         err_msg = proc.stderr.decode("utf-8", errors="replace")[:300] if proc.stderr else ""
@@ -6871,6 +6899,138 @@ def api_job_cancel(job_id):
 # ============================================================================
 # ROUTES — BATCH
 # ============================================================================
+def _split_dialogue_script(text: str) -> list:
+    """Parse roteiro de diálogo em turnos.
+
+    Aceita formatos:
+        [NARRATOR]: linha 1
+        [SPEAKER 2]: linha 2
+        John: linha 1
+        Maria: linha 2
+
+    Returns: lista de dicts [{"speaker": "narrator", "text": "..."}]
+    Se não detectar tags, retorna lista de 1 turno com speaker="speaker1".
+    """
+    import re as _re
+    turns = []
+    lines = text.strip().split("\n")
+    current_speaker = None
+    current_text = []
+    # Match [SPEAKER]: ou Name: at start of line
+    pattern = _re.compile(r"^\s*\[?([\w\s]+?)\]?\s*:\s*(.*)$")
+    for line in lines:
+        m = pattern.match(line)
+        if m:
+            speaker = m.group(1).strip().lower().replace(" ", "_")
+            rest = m.group(2).strip()
+            if current_speaker is not None and current_text:
+                turns.append({"speaker": current_speaker, "text": " ".join(current_text).strip()})
+            current_speaker = speaker
+            current_text = [rest] if rest else []
+        else:
+            if line.strip():
+                current_text.append(line.strip())
+    if current_speaker is not None and current_text:
+        turns.append({"speaker": current_speaker, "text": " ".join(current_text).strip()})
+    if not turns:
+        # Sem tags — trata como monólogo
+        turns = [{"speaker": "speaker1", "text": text.strip()}]
+    # Filtra turnos vazios
+    return [t for t in turns if t.get("text", "").strip()]
+
+
+@app.route("/api/generate_dialogue", methods=["POST"])
+def api_generate_dialogue():
+    """Multi-speaker dialogue: submete cada turno como job, retorna batch_id.
+    UI deve aguardar conclusão e chamar /api/editor/merge para combinar.
+
+    Body JSON:
+        {
+            "script": "[NARRATOR]: linha 1\\n[SPEAKER 2]: linha 2",
+            "speakers": {
+                "narrator":  {"voice": "pt-BR-AntonioNeural", "image_url": "/uploads/x.jpg"},
+                "speaker_2": {"voice": "pt-BR-FranciscaNeural", "image_url": "/uploads/y.jpg"}
+            },
+            "shared_config": {"enhancer": "gfpgan", "captions": true, ...}
+        }
+
+    Retorna: {batch_id, job_ids, turns_count, speakers_used, merge_url}
+    """
+    data = request.json or {}
+    script   = (data.get("script", "") or "").strip()
+    speakers = data.get("speakers", {}) or {}
+    shared   = data.get("shared_config", {}) or {}
+
+    if not script:
+        return jsonify({"error": "script vazio"}), 400
+    if not speakers:
+        return jsonify({"error": "defina pelo menos 1 speaker com voice + image_url"}), 400
+
+    turns = _split_dialogue_script(script)
+    if not turns:
+        return jsonify({"error": "nenhum turno reconhecido — use formato [SPEAKER]: texto"}), 400
+    if len(turns) > 10:
+        return jsonify({"error": "Max 10 turnos por dialogue"}), 400
+
+    # Resolve voice + image para cada turno
+    job_ids = []
+    speakers_used = set()
+    for i, turn in enumerate(turns):
+        sp_key = turn["speaker"]
+        sp_cfg = speakers.get(sp_key) or speakers.get(list(speakers.keys())[0])  # fallback first
+        if not sp_cfg or not sp_cfg.get("voice") or not sp_cfg.get("image_url"):
+            return jsonify({"error": f"speaker '{sp_key}' sem voice/image — defina em speakers dict"}), 400
+        speakers_used.add(sp_key)
+        # Resolve image path
+        img_url = sp_cfg["image_url"]
+        if img_url.startswith("/uploads/"):
+            img_path = os.path.join(UPLOAD_DIR, os.path.basename(img_url))
+        elif img_url.startswith("/static/"):
+            img_path = os.path.join(BASE_DIR, img_url.lstrip("/").replace("/", os.sep))
+        else:
+            img_path = img_url  # assume absolute
+        if not os.path.exists(img_path):
+            return jsonify({"error": f"imagem não encontrada para '{sp_key}': {img_url}"}), 400
+
+        cfg = dict(shared)
+        cfg.update({
+            "script":     turn["text"],
+            "voice":      sp_cfg["voice"],
+            "engine":     sp_cfg.get("engine", shared.get("engine", "edge-tts")),
+            "image_path": img_path,
+            "_dialogue_turn": i + 1,
+            "_dialogue_speaker": sp_key,
+        })
+        # Submete diretamente (em vez de via API call externo)
+        job_id = uuid.uuid4().hex[:12]
+        with jobs_lock:
+            jobs[job_id] = {
+                "id": job_id, "status": "queued", "progress": 0,
+                "created": datetime.now().isoformat(),
+                "script_preview": turn["text"][:80] + ("..." if len(turn["text"]) > 80 else ""),
+                "message": f"Diálogo turno {i+1}/{len(turns)} (speaker={sp_key})",
+                "error": "", "_config": cfg,
+                "_dialogue_batch": True,
+            }
+        db_save_job(job_id, jobs[job_id])
+        t = Thread(target=_safe_pipeline_runner, args=(job_id, cfg), daemon=True)
+        t.start()
+        with jobs_lock:
+            if job_id in jobs:
+                jobs[job_id]["_thread"] = t
+        job_ids.append(job_id)
+
+    batch_id = uuid.uuid4().hex[:12]
+    return jsonify({
+        "batch_id":       batch_id,
+        "job_ids":        job_ids,
+        "turns_count":    len(turns),
+        "speakers_used":  list(speakers_used),
+        "merge_hint":     "Aguarde todos os jobs ficarem 'done', então POST /api/editor/merge {filenames: [<job_id>_final.mp4, ...]}",
+        "polling_hint":   "GET /api/job/<id> para cada job_id pra ver progresso individual",
+    })
+
+
 @app.route("/api/batch", methods=["POST"])
 def api_batch():
     """Queue multiple jobs for sequential processing."""
@@ -7020,7 +7180,9 @@ def api_ai_generate_script():
         f"- Output ONLY the script text, nothing else"
     )
     result = ask_groq(prompt, max_tokens=1024)
-    return jsonify({"script": result})
+    if result.startswith("[AI Error"):
+        return _upstream_error_response(result)
+    return jsonify({"script": result.strip(), "topic": topic, "length": length})
 
 @app.route("/api/ai/enhance_script", methods=["POST"])
 def api_ai_enhance_script():
@@ -7039,7 +7201,9 @@ def api_ai_enhance_script():
         f"- Output ONLY the improved script, nothing else"
     )
     result = ask_groq(prompt, max_tokens=1024)
-    return jsonify({"script": result})
+    if result.startswith("[AI Error"):
+        return _upstream_error_response(result)
+    return jsonify({"script": result.strip(), "original_length": len(script)})
 
 @app.route("/api/ai/suggest_voice", methods=["POST"])
 def api_ai_suggest_voice():
@@ -7621,11 +7785,24 @@ def api_delete_template(tmpl_id):
 # ============================================================================
 @app.route("/api/backgrounds")
 def api_backgrounds():
+    """Lista backgrounds: imagens estáticas (jpg/png) + vídeos animados (mp4/webm).
+    Cada item inclui `type` ('image'|'video') para a UI renderizar adequadamente.
+    """
     bgs = []
-    for f in os.listdir(BG_DIR):
-        if f.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
-            bgs.append({"name": f, "url": f"/backgrounds/{f}"})
-    return jsonify({"backgrounds": bgs})
+    for f in sorted(os.listdir(BG_DIR)):
+        low = f.lower()
+        if low.endswith((".jpg", ".jpeg", ".png", ".webp")):
+            bgs.append({"name": f, "url": f"/backgrounds/{f}", "type": "image"})
+        elif low.endswith((".mp4", ".webm", ".mov", ".mkv")):
+            fpath = os.path.join(BG_DIR, f)
+            dur = _get_duration_safe(fpath)
+            bgs.append({
+                "name": f, "url": f"/backgrounds/{f}",
+                "type": "video", "duration": round(dur, 1),
+            })
+    return jsonify({"backgrounds": bgs, "total": len(bgs),
+                    "images": sum(1 for b in bgs if b["type"] == "image"),
+                    "videos": sum(1 for b in bgs if b["type"] == "video")})
 
 @app.route("/api/gesture_videos")
 def api_gesture_videos():
@@ -7747,10 +7924,10 @@ def api_upload_bg():
     safe_name = re.sub(r'[^\w\-_\.]', '_', _base)
     if not safe_name:
         safe_name = f"bg_{uuid.uuid4().hex[:8]}.jpg"
-    # Validate extension
+    # Validate extension — aceita IMG estática OU VÍDEO animado (scene background)
     _ext = os.path.splitext(safe_name)[1].lower()
-    if _ext not in (".jpg", ".jpeg", ".png", ".webp"):
-        return jsonify({"error": "Unsupported file type. Use JPG, PNG or WEBP."}), 400
+    if _ext not in (".jpg", ".jpeg", ".png", ".webp", ".mp4", ".webm", ".mov"):
+        return jsonify({"error": "Unsupported file type. Use JPG/PNG/WEBP (image) or MP4/WEBM/MOV (animated scene)."}), 400
     # Ensure final path stays inside BG_DIR
     _dest = os.path.normpath(os.path.join(BG_DIR, safe_name))
     if not _dest.startswith(os.path.normpath(BG_DIR)):
@@ -7812,21 +7989,67 @@ def api_avatar_library():
 
 @app.route("/api/avatar/stock_library")
 def api_avatar_stock_library():
-    """List built-in stock avatars from static/stock_avatars/."""
+    """List built-in stock avatars from static/stock_avatars/. Cada avatar
+    inclui category + gender + estimated_age + style (inferidos do nome ou
+    do _manifest.json se existir) — UI pode filtrar por categoria.
+    """
     stock_dir = os.path.join(BASE_DIR, "static", "stock_avatars")
     os.makedirs(stock_dir, exist_ok=True)
+
+    # Manifest opcional p/ override metadata
+    manifest_path = os.path.join(stock_dir, "_manifest.json")
+    manifest = {}
+    if os.path.exists(manifest_path):
+        try:
+            with open(manifest_path, "r", encoding="utf-8") as f:
+                manifest = json.load(f)
+        except Exception:
+            manifest = {}
+
+    # Heurísticas pra inferir metadata do nome
+    def _infer_category(name_lower: str) -> dict:
+        cat = "professional"
+        gender = "any"
+        style = "neutral"
+        if any(k in name_lower for k in ("business", "corporate", "executive", "professional")):
+            cat = "business"; style = "formal"
+        elif any(k in name_lower for k in ("casual", "friendly")):
+            cat = "casual"; style = "informal"
+        elif any(k in name_lower for k in ("influencer", "creator", "youtube")):
+            cat = "creator"; style = "energetic"
+        elif any(k in name_lower for k in ("teacher", "trainer", "edu")):
+            cat = "education"; style = "warm"
+        elif any(k in name_lower for k in ("news", "anchor", "journalist")):
+            cat = "news"; style = "authoritative"
+        elif any(k in name_lower for k in ("doctor", "medical", "health")):
+            cat = "medical"; style = "trustworthy"
+        if any(k in name_lower for k in ("woman", "female", "girl", "lady")):
+            gender = "female"
+        elif any(k in name_lower for k in ("man", "male", "guy", "boy")):
+            gender = "male"
+        return {"category": cat, "gender": gender, "style": style}
+
     avatars = []
     for fname in sorted(os.listdir(stock_dir)):
-        if fname.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
-            name = os.path.splitext(fname)[0].replace("_", " ")
-            avatars.append({
-                "id":   f"stock_{os.path.splitext(fname)[0]}",
-                "name": name,
-                "url":  f"/static/stock_avatars/{fname}",
-                "path": os.path.join(stock_dir, fname),
-                "source": "stock",
-            })
-    return jsonify({"avatars": avatars})
+        if not fname.lower().endswith((".jpg", ".jpeg", ".png", ".webp")):
+            continue
+        stem = os.path.splitext(fname)[0]
+        meta = _infer_category(stem.lower())
+        # Manifest pode sobrescrever
+        if stem in manifest:
+            meta.update(manifest[stem])
+        avatars.append({
+            "id":       f"stock_{stem}",
+            "name":     stem.replace("_", " "),
+            "url":      f"/static/stock_avatars/{fname}",
+            "path":     os.path.join(stock_dir, fname),
+            "source":   "stock",
+            "license":  "CC0",
+            **meta,
+        })
+    # Categorias presentes p/ UI filter
+    categories = sorted(set(a["category"] for a in avatars))
+    return jsonify({"avatars": avatars, "categories": categories, "total": len(avatars)})
 
 
 @app.route("/api/avatar/delete/<avatar_id>", methods=["DELETE"])
