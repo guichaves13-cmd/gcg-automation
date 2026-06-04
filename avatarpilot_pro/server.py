@@ -9543,6 +9543,38 @@ def api_healthz():
     })
 
 
+# Versão pública (sync com AvatarPilotPro.iss + CHANGELOG.md)
+APP_VERSION = "1.1.0"
+
+@app.route("/api/version")
+def api_version():
+    """Versão atual do app + capabilities — frontend usa pra mostrar version + check updates."""
+    try:
+        _features = {
+            "karaoke_captions":   True,
+            "bgm_auto_duck":      True,
+            "codeformer":         True,
+            "f5_voice_cloning":   True,
+            "smart_thumbnail":    True,
+            "silence_trim":       True,
+            "loudnorm_2pass":     True,
+            "preflight_endpoint": True,
+            "gesture_pack":       True,
+            "real_esrgan":        True,
+        }
+        return jsonify({
+            "version":      APP_VERSION,
+            "build_date":   "2026-06-04",
+            "features":     _features,
+            "supported_engines": ["edge-tts", "f5-tts", "elevenlabs"],
+            "supported_enhancers": ["gfpgan", "codeformer", "RestoreFormer", "none"],
+            "supported_formats": ["landscape", "portrait", "square"],
+            "supported_caption_styles": ["standard", "karaoke"],
+        })
+    except Exception as e:
+        return jsonify({"version": APP_VERSION, "error": str(e)}), 200
+
+
 # ── Request-ID middleware (traces each request in logs) ──────────────────────
 import uuid as _uuid_mod
 @app.before_request
