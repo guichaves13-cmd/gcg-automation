@@ -34,9 +34,9 @@ Pronto pra gravar (ou usar o próprio app pra gerar a versão sintetizada).
 ---
 
 **Cena 4 — Diferenciais (30–45s)**
-> "Por dentro: **MuseTalk + Wav2Lip** pra sync labial nível HeyGen. **GFPGAN** pra restauração facial. **Gesture Pack** com 20+ vídeos de gestos naturais. **322 vozes** em 12 idiomas. E sua privacidade — os vídeos **nunca saem do seu PC**."
+> "Por dentro: **MuseTalk + Wav2Lip** pra sync labial nível HeyGen. **CodeFormer + GFPGAN** pra restauração facial HD. **Karaoke captions** palavra-por-palavra estilo TikTok. **Música com auto-duck** automático quando o avatar fala. **F5-TTS** clona qualquer voz com 15 segundos de áudio. E sua privacidade — os vídeos **nunca saem do seu PC**."
 
-**B-roll:** zoom em cards do dashboard mostrando 322 vozes, histórico, qualidade.
+**B-roll:** zoom em cards do dashboard mostrando 322 vozes, karaoke ON, auto-duck slider, CodeFormer enhancer.
 
 ---
 
@@ -56,10 +56,18 @@ Estrutura ampliada pra explicar requisitos, mostrar geração end-to-end ao vivo
 **Estrutura:**
 1. Hook (0–10s) — mesmo da versão curta
 2. Quem é pra você (10–30s) — criadores de conteúdo, educadores, agências, terapeutas
-3. Demonstração ao vivo (30–120s) — abrir o app, dashboard, criar vídeo do zero
-4. Comparativo (120–150s) — HeyGen $89/mês vs AvatarPilot Pro R$XX/ano único
-5. Diferenciais técnicos (150–170s) — qualidade lip sync + privacidade + offline
-6. Garantia e CTA (170–180s) — 7 dias reembolso + link
+3. Demonstração ao vivo (30–120s) — abrir o app, dashboard, criar vídeo do zero,
+   mostrar **ETA inicial** ("~3 min") aparecendo no toast ao clicar Gerar
+4. Features HeyGen-killer (120–150s):
+   - **Karaoke captions** word-by-word com cor de destaque
+   - **BGM auto-duck** — música abaixa automaticamente quando avatar fala
+   - **CodeFormer enhancer** — HD nivel SOTA preservando identidade
+   - **F5-TTS voice cloning** local — 15s de áudio = qualquer voz clonada
+   - **Smart silence trim** — pausas longas encurtadas automaticamente
+   - **Loudnorm EBU R128** — volume broadcast-standard em todos os outputs
+5. Comparativo (150–165s) — HeyGen $89/mês vs AvatarPilot Pro R$XX/ano único
+6. Diferenciais técnicos (165–175s) — privacidade local + offline + 322 vozes
+7. Garantia e CTA (175–180s) — 7 dias reembolso + link
 
 ---
 
@@ -72,10 +80,12 @@ Use o template **"📢 Anúncio curto"** (já incluído nos Templates de Script 
 3. Upload da foto do apresentador
 4. Cole o script
 5. Voice preset: `sales_pitch` (en) ou `br_apresentador` (pt-BR)
-6. Captions: ON (com word-highlighting)
+6. Captions: ON, **Estilo: ✨ Karaoke** + cor de destaque ciano
 7. Format: `portrait` (1080×1920) p/ Reels/TikTok ou `landscape` p/ YouTube
-8. Watermark: OFF (a licença Pro permite)
-9. Gerar
+8. Enhancer: **CodeFormer** (HD identidade-preservante) ou GFPGAN (rápido)
+9. Música: `upbeat_energy.mp3` com **🎚️ Auto-duck ON**
+10. Watermark: OFF (a licença Pro permite)
+11. Gerar
 
 **Tempo estimado de produção:** 5-10 min na RTX 4060.
 
