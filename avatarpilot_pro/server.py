@@ -1150,16 +1150,18 @@ def run_sadtalker(image_path, audio_path, output_path, settings=None):
     ckpt_dir = os.path.join(st_path, "checkpoints")
     gfpgan_ok = os.path.isfile(os.path.join(ckpt_dir, "GFPGANv1.4.pth"))
     requested_enhancer = settings.get("enhancer", "gfpgan")
-    # "codeformer" não é nativo do SadTalker — passamos "none" e aplicamos
-    # CodeFormer como post-pass abaixo. Mantemos o flag em config p/ ramo SadTalker.
-    if requested_enhancer == "codeformer":
-        enhancer = "none"
-        print("  [SadTalker] enhancer=codeformer — SadTalker rodará sem enhancer; CodeFormer será aplicado como post-pass")
-    elif requested_enhancer == "gfpgan" and not gfpgan_ok:
+    # SadTalker só aceita gfpgan/RestoreFormer nativos. CodeFormer e outros
+    # rodam como post-pass — passamos "none" pro SadTalker e o pipeline aplica
+    # o enhancer escolhido após o avatar gerado.
+    _SADTALKER_NATIVE_ENHANCERS = {"gfpgan", "RestoreFormer"}
+    if requested_enhancer == "gfpgan" and not gfpgan_ok:
         print("  [SadTalker] GFPGANv1.4.pth not found — disabling enhancer to avoid hang")
         enhancer = "none"
-    else:
+    elif requested_enhancer in _SADTALKER_NATIVE_ENHANCERS:
         enhancer = requested_enhancer
+    else:
+        # codeformer, none, "" ou desconhecido → SadTalker roda sem; post-pass se aplica
+        enhancer = "none"
 
     # SadTalker's cv2.imread() breaks on non-ASCII Windows paths (e.g. ç).
     # Copy all inputs to a clean ASCII temp directory before running.
@@ -2910,6 +2912,18 @@ def remove_background_from_video(video_path: str, bg_image: str, output_path: st
 # ============================================================================
 # AUTO-CAPTIONS (faster-whisper + FFmpeg subtitle burn)
 # ============================================================================
+_WHISPER_CACHE = {}
+
+def _get_whisper_model(model_size: str = "base"):
+    """Cache de modelos Whisper por (size). Evita re-load (3-5s + VRAM spike)
+    a cada job. Reusado por transcribe_to_srt + generate_karaoke_ass."""
+    if model_size not in _WHISPER_CACHE:
+        from faster_whisper import WhisperModel
+        print(f"  [Whisper] Loading model '{model_size}' (cached)...", flush=True)
+        _WHISPER_CACHE[model_size] = WhisperModel(model_size, device="cuda", compute_type="float16")
+    return _WHISPER_CACHE[model_size]
+
+
 def transcribe_to_srt(audio_path: str, language: str = None,
                       model_size: str = "base") -> str:
     """
@@ -2917,10 +2931,7 @@ def transcribe_to_srt(audio_path: str, language: str = None,
     Returns SRT content as string.
     model_size: tiny, base, small, medium, large-v3
     """
-    from faster_whisper import WhisperModel
-
-    print(f"  [Whisper] Loading model '{model_size}'...")
-    model = WhisperModel(model_size, device="cuda", compute_type="float16")
+    model = _get_whisper_model(model_size)
 
     # Copy to temp ASCII path
     import tempfile as _tmpw
@@ -3969,13 +3980,11 @@ def generate_thumbnail(video_path: str, out_path: str) -> bool:
                 dist = min(abs(mean_lum - 90), abs(mean_lum - 170))
                 bright_score = max(0.0, 1.0 - dist / 90.0)
 
-            # 4. Centro da face — peso 0.10
-            center_score = face_center_bonus
-
+            # Score combinado (face 50% + sharp 25% + bright 15% + center 10%)
             score = (face_score * 0.50 +
                      sharp_score * 0.25 +
                      bright_score * 0.15 +
-                     center_score * 0.10)
+                     face_center_bonus * 0.10)
             if score > best_score:
                 best_score = score
                 best_frame = frame
@@ -4667,13 +4676,7 @@ def run_pipeline(job_id: str, config: dict):
                 print(f"  [Pipeline] Forced start after 2min wait for job {job_id[:8]}", flush=True)
                 break
         _semaphore_acquired = True  # kept for compatibility with finally block
-
-        # Check if user cancelled while we were waiting (mantém pra safety net)
-        with jobs_lock:
-            if job_id in jobs and jobs[job_id].get("_cancel"):
-                jobs[job_id]["status"]  = "cancelled"
-                jobs[job_id]["message"] = "Cancelado pelo usuário antes de iniciar."
-                return  # finally releases semaphore
+        # (post-loop cancel check removido — o in-loop check acima já cobre essa janela)
 
         with workers_lock:
             active_workers += 1
@@ -6728,22 +6731,16 @@ def api_generate():
         except Exception as _ie:
             print(f"  [DailyUsage] increment error: {_ie}", flush=True)
     # HeyGen-style: estima ETA inicial baseado em script + config (antes do job rodar).
-    # Útil pro frontend exibir "~3 min" imediatamente ao submeter.
     try:
-        _est_audio_sec = max(2.0, len(script) / 15.0) if script else 30.0  # ~15 chars/s (Edge-TTS PT-BR)
-        # Multiplicadores baseados em config — empíricos do RTX 4060 8GB
-        _mult = 3.0  # base: SadTalker + MuseTalk
-        _enh = (config.get("enhancer", "gfpgan") or "gfpgan").lower()
-        if _enh == "gfpgan":      _mult += 1.5
-        elif _enh == "codeformer": _mult += 3.0  # CodeFormer é ~2x mais pesado
-        if config.get("codeformer_refine"): _mult += 1.8  # GFPGAN + CF refinement
-        if config.get("captions"): _mult += 0.5  # Whisper transcribe
-        if config.get("enhance_image"): _mult += 0.3
-        if config.get("gesture_video"): _mult += 1.0  # face swap
-        _est_pipeline_sec = int(_est_audio_sec * _mult) + 30  # overhead constante
-        # Adiciona tempo de fila (jobs queued na frente × estimativa média 3min)
-        _queue_ahead = max(0, _cur_workers - 1)
-        _eta_initial = _est_pipeline_sec + (_queue_ahead * 180)
+        _eta_initial, _ = _estimate_pipeline_eta(
+            script=script,
+            enhancer=config.get("enhancer", "gfpgan"),
+            captions=bool(config.get("captions")),
+            enhance_image=bool(config.get("enhance_image")),
+            gesture=bool(config.get("gesture_video")),
+            codeformer_refine=bool(config.get("codeformer_refine")),
+            queue_ahead=max(0, _cur_workers - 1),
+        )
         _vram_free_gb = get_vram_free_gb()
         _warn = "" if _vram_free_gb >= 3.0 else f"VRAM baixa ({_vram_free_gb:.1f}GB) — pode degradar qualidade"
     except Exception:
@@ -6756,6 +6753,44 @@ def api_generate():
         "vram_free_gb": round(_vram_free_gb, 1),
         "warning": _warn,
     })
+
+def _estimate_pipeline_eta(script: str, enhancer: str, captions: bool,
+                            enhance_image: bool, gesture: bool,
+                            codeformer_refine: bool, queue_ahead: int) -> tuple:
+    """Estima ETA inicial (segundos) + duração de áudio estimada.
+    Multipliers empíricos do RTX 4060 8GB. Fonte única de verdade pra
+    api_generate (submit response) E api_preflight.
+    """
+    est_audio_sec = max(2.0, len(script) / 15.0) if script else 30.0  # ~15 chars/s pt-BR
+    mult = 3.0  # base: SadTalker + MuseTalk
+    enh = (enhancer or "gfpgan").lower()
+    if enh == "gfpgan":      mult += 1.5
+    elif enh == "codeformer": mult += 3.0
+    if codeformer_refine:    mult += 1.8
+    if captions:             mult += 0.5
+    if enhance_image:        mult += 0.3
+    if gesture:              mult += 1.0
+    est_pipeline_sec = int(est_audio_sec * mult) + 30  # +overhead constante
+    eta_total = est_pipeline_sec + (max(0, queue_ahead) * 180)
+    return eta_total, est_audio_sec
+
+
+def _upstream_error_response(err) -> tuple:
+    """Mapeia erros de upstream AI (Groq, Pollinations, etc.) para
+    (json, status) HTTP correto. Substitui 500 genérico por 401/402/429/503.
+    """
+    msg = str(err)
+    low = msg.lower()
+    if "429" in msg or "rate limit" in low:
+        return jsonify({"error": msg, "retry_after_seconds": 60}), 429
+    if "401" in msg or "unauthorized" in low or "no api key" in low:
+        return jsonify({"error": msg}), 401
+    if "402" in msg or "payment" in low or "quota" in low:
+        return jsonify({"error": msg}), 402
+    if "503" in msg or "timed out" in low or "timeout" in low or "connectionerror" in low:
+        return jsonify({"error": f"AI provider indisponível: {msg}"}), 503
+    return jsonify({"error": msg}), 500
+
 
 def _compute_eta_seconds(j: dict) -> int:
     """ETA HeyGen-like: estima segundos restantes a partir do progresso e tempo decorrido.
@@ -7047,16 +7082,8 @@ def api_ai_generate_image():
         filename = os.path.basename(img_path)
         return jsonify({"image_url": f"/outputs/{filename}", "path": img_path})
     except Exception as e:
-        # Degradação graciosa: Pollinations free tier passou a exigir pagamento (HTTP 402).
-        # Mapeia para 402/503 ao invés de 500 — frontend pode mostrar "Indisponível" sem alarme.
-        _msg = str(e)
-        if "402" in _msg or "Payment Required" in _msg:
-            return jsonify({"error": "Image generation API requires payment (Pollinations free tier ended). Configure replicate_key em /api/settings para usar Replicate."}), 402
-        if "401" in _msg or "Unauthorized" in _msg:
-            return jsonify({"error": _msg}), 401
-        if "timed out" in _msg.lower() or "timeout" in _msg.lower() or "ConnectionError" in _msg:
-            return jsonify({"error": f"AI provider indisponível: {_msg}"}), 503
-        return jsonify({"error": _msg}), 500
+        # Degradação graciosa: Pollinations free tier passou a exigir 402, etc.
+        return _upstream_error_response(e)
 
 # ============================================================================
 # ROUTES — VOICES (ElevenLabs — list + clone)
@@ -7195,24 +7222,12 @@ def api_preflight():
     data = request.json or {}
     script  = (data.get("script", "") or "")[:50000]
     enhancer = (data.get("enhancer", "gfpgan") or "gfpgan").lower()
-    has_captions = bool(data.get("captions"))
-    has_gesture  = bool(data.get("gesture_video"))
-    has_enhance_img = bool(data.get("enhance_image"))
 
+    # Estado upfront — usado pra warnings + ready (sem re-scan da lista)
+    script_empty = (not script.strip()) and (not data.get("audio"))
     warnings = []
-    if not script.strip() and not data.get("audio"):
+    if script_empty:
         warnings.append("Roteiro vazio — digite o texto antes de submeter")
-
-    # ETA empírico (RTX 4060 8GB baseline)
-    est_audio = max(2.0, len(script) / 15.0) if script else 30.0
-    mult = 3.0
-    if enhancer == "gfpgan":    mult += 1.5
-    elif enhancer == "codeformer": mult += 3.0
-    if data.get("codeformer_refine"): mult += 1.8
-    if has_captions:        mult += 0.5
-    if has_enhance_img:     mult += 0.3
-    if has_gesture:         mult += 1.0
-    eta = int(est_audio * mult) + 30
 
     # Fila atual
     with workers_lock:
@@ -7220,7 +7235,16 @@ def api_preflight():
     with jobs_lock:
         queued = sum(1 for j in jobs.values() if j.get("status") == "queued")
     queue_ahead = max(0, active - 1) + queued
-    eta_total = eta + (queue_ahead * 180)
+
+    # ETA via helper compartilhado (mesma fonte de api_generate)
+    eta_total, est_audio = _estimate_pipeline_eta(
+        script=script, enhancer=enhancer,
+        captions=bool(data.get("captions")),
+        enhance_image=bool(data.get("enhance_image")),
+        gesture=bool(data.get("gesture_video")),
+        codeformer_refine=bool(data.get("codeformer_refine")),
+        queue_ahead=queue_ahead,
+    )
 
     free_vram = get_vram_free_gb()
     if free_vram < 2.5:
@@ -7231,7 +7255,7 @@ def api_preflight():
         warnings.append(f"{queue_ahead} jobs na frente — espera ~{(queue_ahead*180)//60}min adicional")
 
     return jsonify({
-        "ready":             len([w for w in warnings if "vazio" in w.lower()]) == 0,
+        "ready":             not script_empty,
         "eta_seconds":       eta_total,
         "eta_text":          f"~{max(1, eta_total // 60)} min" if eta_total > 0 else "alguns segundos",
         "vram_free_gb":      round(free_vram, 1),
@@ -8844,11 +8868,9 @@ def translate_video_pipeline(job_id: str, config: dict):
         jobs[job_id]["progress"] = 25
         jobs[job_id]["message"]  = "Transcribing with Whisper AI..."
         try:
-            from faster_whisper import WhisperModel
-            wm = WhisperModel("base", device="cuda", compute_type="float16")
+            wm = _get_whisper_model("base")
             segments, _ = wm.transcribe(raw_audio)
             original_text = " ".join(seg.text.strip() for seg in segments)
-            del wm
         except Exception as e:
             original_text = ""
             print(f"  [TranslVideo] Whisper error: {e}")
@@ -9028,17 +9050,7 @@ Script:"""
 
     script = ask_groq(prompt, max_tokens=1024)
     if script.startswith("[AI Error"):
-        # Degradação graciosa: mapeia erros conhecidos pra códigos HTTP corretos
-        _s = script.lower()
-        if "429" in script or "rate limit" in _s:
-            return jsonify({"error": script, "retry_after_seconds": 60}), 429
-        if "401" in script or "unauthorized" in _s or "no api key" in _s:
-            return jsonify({"error": script}), 401
-        if "402" in script or "payment" in _s or "quota" in _s:
-            return jsonify({"error": script}), 402
-        if "timeout" in _s or "timed out" in _s or "503" in script:
-            return jsonify({"error": script}), 503
-        return jsonify({"error": script}), 500
+        return _upstream_error_response(script)
 
     return jsonify({"script": script.strip(), "source_url": url, "extracted_chars": len(text)})
 
@@ -9161,8 +9173,7 @@ def generate_karaoke_ass(audio_path: str, output_ass: str, model_size: str = "ba
                           highlight_color: str = "yellow") -> bool:
     """Generate ASS subtitle file with word-level timing for karaoke effect."""
     try:
-        from faster_whisper import WhisperModel
-        wm = WhisperModel(model_size, device="cuda", compute_type="float16")
+        wm = _get_whisper_model(model_size)
         segments, _ = wm.transcribe(audio_path, word_timestamps=True)
 
         # Color mapping
@@ -9218,7 +9229,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     f"{{\\1c{highlight_ass}}}{{\\kf0}}{karaoke_text}\n")
             lines.append(line)
 
-        del wm
+        # NÃO faz `del wm` — modelo está no cache _WHISPER_CACHE, reuso entre jobs
         with open(output_ass, "w", encoding="utf-8") as f:
             f.writelines(lines)
         return True
