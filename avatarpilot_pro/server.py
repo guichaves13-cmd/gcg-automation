@@ -4645,6 +4645,14 @@ def run_pipeline(job_id: str, config: dict):
         _wait_start = time.time()
         _RUNNING_STATUSES = {"generating_audio", "tts", "generating_video", "compositing"}
         while True:
+            # CHECK CANCEL inside loop — fix p/ jobs queueados que o user cancela
+            # antes do slot abrir. Antes, só verificava UMA vez ao sair do loop.
+            with jobs_lock:
+                if job_id in jobs and jobs[job_id].get("_cancel"):
+                    jobs[job_id]["status"]  = "cancelled"
+                    jobs[job_id]["message"] = "Cancelado pelo usuário enquanto na fila."
+                    print(f"  [Cancel] job {job_id[:8]} cancelado enquanto queued (esperou {time.time()-_wait_start:.1f}s)", flush=True)
+                    return  # finally releases semaphore
             with jobs_lock:
                 _running = sum(1 for jid, j in jobs.items()
                               if jid != job_id and j.get("status") in _RUNNING_STATUSES)
@@ -4660,7 +4668,7 @@ def run_pipeline(job_id: str, config: dict):
                 break
         _semaphore_acquired = True  # kept for compatibility with finally block
 
-        # Check if user cancelled while we were waiting
+        # Check if user cancelled while we were waiting (mantém pra safety net)
         with jobs_lock:
             if job_id in jobs and jobs[job_id].get("_cancel"):
                 jobs[job_id]["status"]  = "cancelled"
@@ -4754,6 +4762,7 @@ def run_pipeline(job_id: str, config: dict):
             jobs[job_id]["progress"] = 25
 
         # ── Step 1b: Audio normalization ───────────────────────────────────
+        _check_cancel(job_id)
         if config.get("normalize_audio", False):
             jobs[job_id]["message"] = "Normalizing audio levels..."
             norm_path = os.path.join(OUTPUT_DIR, f"{job_id}_audio_norm.mp3")
@@ -5448,6 +5457,7 @@ def run_pipeline(job_id: str, config: dict):
         jobs[job_id]["message"]  = "Compositing..."
 
         # ── Step 3: Background Compositing / BG Removal ───────────────────
+        _check_cancel(job_id)
         jobs[job_id]["status"] = "compositing"
         final_output = os.path.join(OUTPUT_DIR, f"{job_id}_final.mp4")
         bg_path      = config.get("background", "")
@@ -5477,6 +5487,7 @@ def run_pipeline(job_id: str, config: dict):
             shutil.copy2(avatar_video, final_output)
 
         # ── Step 3b: Auto-captions (Whisper) — standard ou karaoke (HeyGen-style) ──
+        _check_cancel(job_id)
         if config.get("captions", False):
             jobs[job_id]["progress"] = 88
             _cap_style_name = (config.get("caption_style", "standard") or "standard").lower()
@@ -5587,6 +5598,7 @@ def run_pipeline(job_id: str, config: dict):
                 _safe_rename(wm_out, final_output)
 
         # ── Step 3e: Background music ──────────────────────────────────────
+        _check_cancel(job_id)
         music_src = config.get("music_url", "")
         if music_src:
             # Bloquear URLs externas (SSRF) — só aceita paths locais do servidor

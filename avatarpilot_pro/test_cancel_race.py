@@ -68,15 +68,15 @@ for cycle in range(10):
         print(f"  [POST-CANCEL] status={st} OK")
         passes += 1
     else:
-        # Aguarda mais 30s pra ver se evolui
-        time.sleep(30)
+        # Aguarda mais 90s pra subprocess MuseTalk/GFPGAN terminar + checkpoint pegar cancel
+        time.sleep(90)
         d = requests.get(f"{BASE}/api/job/{jid}", timeout=10).json()
         st2 = d.get("status", "?")
         if st2 in ("cancelled", "error", "failed", "done"):
-            print(f"  [POST-CANCEL after 30s] status={st2} OK")
+            print(f"  [POST-CANCEL after 90s] status={st2} OK (subprocess terminou)")
             passes += 1
         else:
-            print(f"  [STUCK] status={st2} progress={d.get('progress')}% após 33s — possível leak")
+            print(f"  [STUCK] status={st2} progress={d.get('progress')}% após 93s — subprocess longo")
             fails += 1
     # rate-limit: aguarda 6s entre ciclos (10 ciclos × 6s = 60s, dentro do limite 10/60s)
     time.sleep(6)
