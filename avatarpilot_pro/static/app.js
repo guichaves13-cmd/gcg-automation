@@ -843,6 +843,27 @@ function reuseHistoryScript(script) {
 // AI FEATURES
 // ============================================================================
 function openAIModal()  { document.getElementById('ai-modal').style.display = 'flex'; }
+
+// ── Modo diálogo (multi-speaker) — toggle visual da hint ──
+let _dialogueMode = false;
+function toggleDialogueMode() {
+  _dialogueMode = !_dialogueMode;
+  const hint = document.getElementById('dialogue-hint');
+  const btn  = document.getElementById('btn-dialogue-mode');
+  if (hint) hint.style.display = _dialogueMode ? 'block' : 'none';
+  if (btn) {
+    btn.style.background = _dialogueMode ? 'var(--primary)' : '';
+    btn.style.color      = _dialogueMode ? '#fff' : '';
+    btn.title            = _dialogueMode ? 'Modo diálogo ATIVO — clique pra desativar' : 'Modo diálogo entre 2+ avatares';
+  }
+  // Auto-insere template se script vazio
+  const ta = document.getElementById('script');
+  if (_dialogueMode && ta && !ta.value.trim()) {
+    ta.value = "[NARRATOR]: Bem-vindos ao nosso podcast. Hoje recebo um convidado especial.\n[GUEST]: Obrigado pelo convite. É um prazer estar aqui.\n[NARRATOR]: Vamos começar com a primeira pergunta...";
+    ta.dispatchEvent(new Event('input'));
+  }
+  toast(_dialogueMode ? '🎭 Modo diálogo ativado — use [SPEAKER]: linha' : 'Modo diálogo desativado', 'info');
+}
 function closeAIModal() { document.getElementById('ai-modal').style.display = 'none'; }
 
 async function generateAIScript() {

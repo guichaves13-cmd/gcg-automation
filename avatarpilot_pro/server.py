@@ -9769,6 +9769,86 @@ def api_healthz():
 # Versão pública (sync com AvatarPilotPro.iss + CHANGELOG.md)
 APP_VERSION = "1.1.0"
 
+@app.route("/api/launch_check")
+def api_launch_check():
+    """Pre-launch programático: roda checklist técnico antes de release.
+    Verifica: license keys, models, ffmpeg, disk, secrets gitignored.
+    Não substitui o checklist manual mas garante o automatizável."""
+    checks = []
+
+    def _add(name, ok, detail=""):
+        checks.append({"name": name, "ok": bool(ok), "detail": str(detail)[:200]})
+
+    # 1. FFmpeg/FFprobe
+    _add("ffmpeg disponível", os.path.exists(_ffmpeg_path()), _ffmpeg_path())
+    _add("ffprobe disponível", os.path.exists(_ffprobe_path()), _ffprobe_path())
+
+    # 2. Modelos críticos
+    _models_required = {
+        "SadTalker checkpoints":  os.path.isdir(os.path.join(MODELS_DIR, "SadTalker", "checkpoints")),
+        "GFPGAN model":           any(os.path.exists(os.path.join(MODELS_DIR, "SadTalker", "checkpoints", f))
+                                       for f in ("GFPGANv1.4.pth",)),
+        "Wav2Lip checkpoint":     os.path.exists(os.path.join(MODELS_DIR, "Wav2Lip", "checkpoints", "wav2lip_gan.pth")),
+        "MuseTalk model":         os.path.isdir(os.path.join(MODELS_DIR, "MuseTalk", "models")),
+        "Haar cascade XML":       _get_haar_cascade_xml() is not None,
+        "Real-ESRGAN x2":         os.path.exists(os.path.join(MODELS_DIR, "RealESRGAN_x2plus.pth")),
+    }
+    for label, present in _models_required.items():
+        _add(f"modelo: {label}", present, "presente" if present else "AUSENTE — baixar")
+
+    # 3. Disco
+    _df = _free_disk_mb()
+    _add("disco >5GB", _df > 5000, f"{_df:.0f}MB livres")
+
+    # 4. License system (chave pública embutida)
+    if _LICENSE_AVAILABLE:
+        try:
+            from license_system import get_vendor_public_key
+            _pub = get_vendor_public_key()
+            _add("license pubkey embed", bool(_pub), "ok" if _pub else "MISSING (gen .license_keys.json)")
+        except Exception as e:
+            _add("license pubkey embed", False, f"erro: {e}")
+    else:
+        _add("license_system import", False, "license_system.py inacessível")
+
+    # 5. Secrets gitignored
+    _secrets = [".license_keys.json", ".api_keys.json", "license.dat", ".admin_token",
+                ".stripe_cfg.json", "data/stripe_config.json"]
+    _gitignore_path = os.path.join(BASE_DIR, "..", ".gitignore")
+    _gi_content = ""
+    if os.path.exists(_gitignore_path):
+        try:
+            with open(_gitignore_path, "r", encoding="utf-8") as f:
+                _gi_content = f.read()
+        except Exception:
+            pass
+    for sec in _secrets:
+        _basename = sec.split("/")[-1]
+        _add(f"gitignored: {_basename}", _basename in _gi_content,
+             "no .gitignore" if _basename in _gi_content else "ADICIONAR ao .gitignore!")
+
+    # 6. Diretórios necessários
+    for d in (OUTPUT_DIR, UPLOAD_DIR, DATA_DIR, BG_DIR):
+        _add(f"dir: {os.path.basename(d) or d}", os.path.isdir(d) and os.access(d, os.W_OK),
+             "writable" if os.access(d, os.W_OK) else "READ-ONLY")
+
+    # 7. VRAM
+    _vram = get_vram_free_gb()
+    _add("VRAM >2GB livre", _vram >= 2.0, f"{_vram:.1f}GB")
+
+    # Score
+    total = len(checks); passed = sum(1 for c in checks if c["ok"])
+    return jsonify({
+        "ready_for_launch":  passed == total,
+        "passed":            passed,
+        "total":             total,
+        "score_pct":         round(passed / total * 100, 1),
+        "checks":            checks,
+        "next_steps":        [c["detail"] for c in checks if not c["ok"]] or
+                             ["Tudo verde — compile installer + sign cert + VM test"],
+    })
+
+
 @app.route("/api/version")
 def api_version():
     """Versão atual do app + capabilities — frontend usa pra mostrar version + check updates."""

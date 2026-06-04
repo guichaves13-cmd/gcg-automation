@@ -188,13 +188,19 @@
           <!-- Script -->
           <div class="card">
             <h3>📝 Script
-              <span style="float:right;display:flex;gap:6px">
+              <span style="float:right;display:flex;gap:6px;flex-wrap:wrap">
                 <button class="btn-ai" onclick="openScriptTemplates()" title="Templates prontos por nicho">📋 Templates</button>
                 <button class="btn-ai" onclick="openAIModal()">✨ Gerar com IA</button>
                 <button class="btn-ai" onclick="enhanceScript()">🔮 Enhance</button>
                 <button class="btn-ai" onclick="showPage('editor')" title="Gerar script a partir de uma URL">🔗 URL</button>
+                <button class="btn-ai" onclick="toggleDialogueMode()" title="Modo diálogo entre 2+ avatares" id="btn-dialogue-mode">🎭 Diálogo</button>
               </span>
             </h3>
+            <div id="dialogue-hint" style="display:none;background:rgba(99,102,241,0.10);border:1px solid rgba(99,102,241,0.3);border-radius:8px;padding:10px 14px;margin:6px 0;font-size:12px;color:#c7d2fe;line-height:1.5">
+              🎭 <b>Modo Diálogo:</b> use o formato <code>[SPEAKER]: linha</code> ou <code>NOME: linha</code> para alternar vozes. Exemplo:<br>
+              <code style="color:#86efac">[NARRATOR]: Bem-vindos.<br>[GUEST]: Obrigado pelo convite.</code><br>
+              Depois clique <b>Gerar Diálogo</b> e cada turno vira um job, depois é concatenado em um vídeo único.
+            </div>
             <textarea id="script" rows="6" placeholder="Digite o que o avatar deve falar...&#10;&#10;Exemplo: Olá a todos! Bem-vindos ao meu canal. Hoje vamos falar sobre algo incrível..."></textarea>
             <div class="script-info">
               <span id="char-count">0 caracteres</span>
