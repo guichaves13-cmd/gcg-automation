@@ -9803,9 +9803,9 @@ def api_launch_check():
     # 4. License system (chave pública embutida)
     if _LICENSE_AVAILABLE:
         try:
-            from license_system import get_vendor_public_key
-            _pub = get_vendor_public_key()
-            _add("license pubkey embed", bool(_pub), "ok" if _pub else "MISSING (gen .license_keys.json)")
+            from license_system import get_public_key_hex
+            _pub = get_public_key_hex()
+            _add("license pubkey embed", bool(_pub), f"hex len={len(_pub)}" if _pub else "MISSING (gen .license_keys.json)")
         except Exception as e:
             _add("license pubkey embed", False, f"erro: {e}")
     else:

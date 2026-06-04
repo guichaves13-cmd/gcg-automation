@@ -106,6 +106,12 @@ schedule.json
 **/.license_keys.json
 license.dat
 **/license.dat
+
+# Stripe secrets (NUNCA commitar — secret_key + webhook_secret)
+.stripe_cfg.json
+**/.stripe_cfg.json
+stripe_config.json
+**/stripe_config.json
 # Logs de boot/teste do servidor
 server_boot*.txt
 test_*.txt
