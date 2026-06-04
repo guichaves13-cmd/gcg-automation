@@ -13,7 +13,7 @@
 ; ============================================================================
 
 #define AppName        "AvatarPilot Pro"
-#define AppVersion     "1.0.0"
+#define AppVersion     "1.1.0"
 #define AppPublisher   "Guilherme Chaves"
 #define AppExeName     "Start AvatarPilot Pro.bat"
 #define AppURL         "https://github.com/guichaves13-cmd/gcg-automation"
@@ -67,6 +67,12 @@ Source: "static\*";                     DestDir: "{app}\static"; Flags: ignoreve
 Source: "scripts\*";                    DestDir: "{app}\scripts"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 ; Backgrounds opcionais
 Source: "backgrounds\*";                DestDir: "{app}\backgrounds"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
+; Modelos bundled (haar cascade — necessario p/ smart thumbnail, ~930 KB)
+Source: "models\haarcascade_frontalface_default.xml"; DestDir: "{app}\models"; Flags: ignoreversion skipifsourcedoesntexist
+; Música royalty-free pré-empacotada (~700 KB de samples)
+Source: "static\music\*";               DestDir: "{app}\static\music"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
+; Gesture videos sample (1 vídeo Pexels CC0, ~50 MB — opcional)
+Source: "static\gesture_videos\*";      DestDir: "{app}\static\gesture_videos"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
 [Dirs]
 ; Cria pastas que o app precisa (vazias na instalacao)

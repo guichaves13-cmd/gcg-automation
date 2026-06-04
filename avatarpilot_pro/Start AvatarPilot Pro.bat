@@ -8,8 +8,9 @@ cd /d "%~dp0"
 
 REM ── Liga o enforcement de licenca (producao) ────────────────────────────────
 set AVP_LICENSE_ENFORCE=1
-if not defined AVP_MAX_SCRIPT_CHARS set AVP_MAX_SCRIPT_CHARS=15000
+if not defined AVP_MAX_SCRIPT_CHARS set AVP_MAX_SCRIPT_CHARS=50000
 if not defined AVP_STUCK_TIMEOUT_MIN set AVP_STUCK_TIMEOUT_MIN=240
+if not defined PYTHONUNBUFFERED set PYTHONUNBUFFERED=1
 
 REM ── Primeira execucao: rodar setup automatico ──────────────────────────────
 if not exist "venv311\Scripts\python.exe" (
