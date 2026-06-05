@@ -274,7 +274,8 @@ async function generateAvatar() {
   formData.append('preprocess',       'full');
   formData.append('still_mode',       'false');
   formData.append('expression_scale', '1.2');
-  formData.append('enhancer',         'gfpgan');
+  formData.append('enhancer',         document.getElementById('enhancer')?.value || 'gfpgan');
+  formData.append('mouth_hd',         document.getElementById('mouth-hd')?.checked ? 'true' : 'false');
   formData.append('lip_sync_engine',  'auto');
   formData.append('background',       document.getElementById('bg-select').value);
   formData.append('size',             document.getElementById('size').value);

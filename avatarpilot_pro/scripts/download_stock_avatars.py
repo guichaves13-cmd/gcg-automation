@@ -1,15 +1,21 @@
 """
-Download stock avatars curados do Unsplash (free, CC0 license, sem API key necessária).
+Download stock avatars curados do Pexels (CC0, free com API key gratuita).
+
+NOTA IMPORTANTE: Unsplash Source API foi DEPRECADA em maio/2024.
+Este script agora usa Pexels (API key gratuita em pexels.com/api).
 
 Cada avatar é processado para AvatarPilot Pro:
   - Resize para 1024x1024 max
   - Face detection para garantir face visível e centrada
-  - Categorias auto-atribuídas (business, casual, creator, education, news, medical)
+  - Categorias auto-atribuídas (business, casual, creator, education, news, medical, tech)
 
-Uso: python download_stock_avatars.py [--count 20]
+Setup (one-time, free):
+  1. Sign up em https://www.pexels.com/api/ (30 segundos)
+  2. Copie sua API key
+  3. python download_stock_avatars.py --key SUA_KEY --count 20
 
-NOTA: respeita rate limit do Unsplash. Para uso comercial em massa,
-prefira sua própria curadoria.
+Sem API key: continua usando os 6 avatars bundled (Business_Woman, Casual_*,
+Corporate_Executive, Influencer, Professional_Man). Suficiente pra começar.
 """
 import os, sys, time, json, argparse
 from pathlib import Path
@@ -35,13 +41,27 @@ CATEGORIES = {
     "tech":      ["developer", "tech-professional", "engineer"],
 }
 
-def fetch_unsplash(query: str, out_path: Path, size="1024x1024"):
-    """Unsplash Source — random photo by keywords (no API key)."""
-    url = f"https://source.unsplash.com/{size}/?{query}"
+def fetch_pexels(query: str, out_path: Path, api_key: str, orientation: str = "portrait"):
+    """Pexels API — search + download. Free com API key (50req/h)."""
+    headers = {"Authorization": api_key}
+    params  = {"query": query, "per_page": 5, "orientation": orientation}
     try:
-        r = requests.get(url, timeout=15, allow_redirects=True)
-        if r.status_code == 200 and len(r.content) > 5000:
-            out_path.write_bytes(r.content)
+        r = requests.get("https://api.pexels.com/v1/search",
+                         headers=headers, params=params, timeout=15)
+        if r.status_code != 200:
+            print(f"  pexels HTTP {r.status_code}")
+            return False
+        photos = r.json().get("photos", [])
+        if not photos:
+            return False
+        # Pega 1ª foto (com src large 1024+)
+        photo = photos[0]
+        img_url = photo.get("src", {}).get("large", "") or photo.get("src", {}).get("medium", "")
+        if not img_url:
+            return False
+        img_r = requests.get(img_url, timeout=20)
+        if img_r.status_code == 200 and len(img_r.content) > 5000:
+            out_path.write_bytes(img_r.content)
             return True
     except Exception as e:
         print(f"  err: {e}")
@@ -51,7 +71,13 @@ def fetch_unsplash(query: str, out_path: Path, size="1024x1024"):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--count", type=int, default=20, help="Total de avatars a baixar")
+    ap.add_argument("--key",   type=str, default=os.environ.get("PEXELS_KEY", ""),
+                    help="Pexels API key (ou export PEXELS_KEY=...)")
     args = ap.parse_args()
+    if not args.key:
+        print("ERRO: passe --key SUA_PEXELS_KEY ou export PEXELS_KEY=...")
+        print("      Cadastro gratuito em https://www.pexels.com/api/")
+        sys.exit(1)
 
     # Carrega manifest existente
     manifest = {}
@@ -66,7 +92,7 @@ def main():
             stem = f"{cat}_{q.replace('-', '_')}_{int(time.time()*1000) % 100000}"
             out = STOCK_DIR / f"{stem}.jpg"
             print(f"[{downloaded+1}/{args.count}] {cat} -> {stem}...")
-            if fetch_unsplash(q, out):
+            if fetch_pexels(q, out, args.key):
                 downloaded += 1
                 manifest[stem] = {
                     "category": cat,

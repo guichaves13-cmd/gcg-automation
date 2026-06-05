@@ -925,6 +925,147 @@ def _get_realesrgan(scale: int = 2):
         return None
 
 
+def mouth_region_super_resolve_video(input_path: str, output_path: str,
+                                       job_id: str = None,
+                                       scale: int = 2) -> bool:
+    """
+    Wav2Lip HD equivalent: Real-ESRGAN x2 SÓ na região da boca, depois resize
+    back e paste com feathered alpha. Mais rápido que upscale full + sem
+    identity drift do face restorer pesado.
+
+    Aplicar APÓS Wav2Lip/MuseTalk lip sync, ANTES do GFPGAN/CodeFormer:
+    - Detecta face em cada frame (Haar cascade)
+    - Estima mouth bbox (lower 38% da face, central 65% width)
+    - Crop com padding 15%
+    - Real-ESRGAN x2 no crop
+    - Unsharp 5/5/0.6
+    - Resize back + feathered alpha paste
+
+    Retorna True se sucesso. False = mantém input intacto (fallback no caller).
+    """
+    upsampler = _get_realesrgan(scale)
+    if upsampler is None:
+        print("  [MouthSR] Real-ESRGAN unavailable — skip")
+        return False
+    try:
+        import cv2 as _cvm
+        import numpy as _npm
+        import tempfile as _tmm
+        casc_xml = _get_haar_cascade_xml()
+        if not casc_xml:
+            print("  [MouthSR] haar cascade missing — skip")
+            return False
+        cascade = _cvm.CascadeClassifier(casc_xml)
+        if cascade.empty():
+            print("  [MouthSR] cascade load failed — skip")
+            return False
+
+        ff = _ffmpeg_path()
+        _tmp = _tmm.mkdtemp(prefix="mouth_sr_")
+        try:
+            cap = _cvm.VideoCapture(input_path)
+            fps = cap.get(_cvm.CAP_PROP_FPS) or 25
+            total = int(cap.get(_cvm.CAP_PROP_FRAME_COUNT))
+            print(f"  [MouthSR] Processing {total} frames @ {fps:.0f}fps (mouth-only Real-ESRGAN x{scale})", flush=True)
+            frames_dir = os.path.join(_tmp, "frames")
+            os.makedirs(frames_dir, exist_ok=True)
+
+            # Estado pra suavizar bbox entre frames (evita pulinhos)
+            last_bbox = None  # (x0, y0, x1, y1)
+            idx = 0
+            misses = 0
+            while True:
+                ok, frame = cap.read()
+                if not ok: break
+                fh, fw = frame.shape[:2]
+                gray = _cvm.cvtColor(frame, _cvm.COLOR_BGR2GRAY)
+                faces = cascade.detectMultiScale(gray, 1.2, 5)
+                mouth_bbox = None
+                if len(faces) > 0:
+                    fx, fy, faceW, faceH = max(faces, key=lambda d: d[2] * d[3])
+                    # Mouth bbox: lower 38% da face, central 65% width
+                    mw  = int(faceW * 0.65)
+                    mh  = int(faceH * 0.38)
+                    mx0 = fx + (faceW - mw) // 2
+                    my0 = fy + int(faceH * 0.55)
+                    # Padding 15%
+                    pad_x = int(mw * 0.15); pad_y = int(mh * 0.15)
+                    bx0 = max(0, mx0 - pad_x)
+                    by0 = max(0, my0 - pad_y)
+                    bx1 = min(fw, mx0 + mw + pad_x)
+                    by1 = min(fh, my0 + mh + pad_y)
+                    mouth_bbox = (bx0, by0, bx1, by1)
+                    last_bbox = mouth_bbox
+                else:
+                    misses += 1
+                    if last_bbox is not None:
+                        mouth_bbox = last_bbox  # smooth: reusa último
+
+                if mouth_bbox is None:
+                    # Sem face — escreve frame sem SR
+                    _cvm.imwrite(os.path.join(frames_dir, f"f_{idx:06d}.png"), frame)
+                else:
+                    bx0, by0, bx1, by1 = mouth_bbox
+                    if (bx1 - bx0) < 24 or (by1 - by0) < 24:
+                        _cvm.imwrite(os.path.join(frames_dir, f"f_{idx:06d}.png"), frame)
+                    else:
+                        mouth_crop = frame[by0:by1, bx0:bx1].copy()
+                        cw, ch_ = bx1 - bx0, by1 - by0
+                        # Real-ESRGAN
+                        try:
+                            up, _ = upsampler.enhance(mouth_crop, outscale=scale)
+                            # Resize back to original crop dims
+                            up_back = _cvm.resize(up, (cw, ch_), interpolation=_cvm.INTER_LANCZOS4)
+                            # Unsharp leve pra realçar detalhe
+                            blurred = _cvm.GaussianBlur(up_back, (0, 0), sigmaX=1.0)
+                            sharpened = _cvm.addWeighted(up_back, 1.6, blurred, -0.6, 0)
+                            # Feathered alpha paste
+                            mask = _npm.zeros((ch_, cw), dtype=_npm.float32)
+                            mask[:] = 1.0
+                            feather = 10  # px
+                            for k in range(feather):
+                                v = (k + 1) / feather
+                                if k < cw and k < ch_:
+                                    mask[k, :]    = _npm.minimum(mask[k, :], v)
+                                    mask[-1 - k, :] = _npm.minimum(mask[-1 - k, :], v)
+                                    mask[:, k]    = _npm.minimum(mask[:, k], v)
+                                    mask[:, -1 - k] = _npm.minimum(mask[:, -1 - k], v)
+                            mask_3 = _npm.stack([mask] * 3, axis=2)
+                            blended = (sharpened.astype(_npm.float32) * mask_3 +
+                                       mouth_crop.astype(_npm.float32) * (1 - mask_3))
+                            frame[by0:by1, bx0:bx1] = blended.astype(_npm.uint8)
+                            _cvm.imwrite(os.path.join(frames_dir, f"f_{idx:06d}.png"), frame)
+                        except Exception as _fe:
+                            # SR falhou no frame — escreve original
+                            _cvm.imwrite(os.path.join(frames_dir, f"f_{idx:06d}.png"), frame)
+
+                idx += 1
+                if job_id and idx % 20 == 0 and job_id in jobs:
+                    pct = int(idx * 100 / max(total, 1))
+                    jobs[job_id]["message"] = f"MouthSR: {pct}% ({idx}/{total})"
+
+            cap.release()
+            print(f"  [MouthSR] {idx} frames processed, {misses} misses (sem face)", flush=True)
+
+            # Reassemble
+            _v_only = os.path.join(_tmp, "v.mp4")
+            subprocess.run([ff, "-y", "-framerate", str(int(fps)),
+                            "-i", os.path.join(frames_dir, "f_%06d.png"),
+                            "-c:v", "libx264", "-preset", "slow", "-crf", "16",
+                            "-pix_fmt", "yuv420p", _v_only],
+                           capture_output=True, timeout=max(600, total))
+            subprocess.run([ff, "-y", "-i", _v_only, "-i", input_path,
+                            "-map", "0:v", "-map", "1:a?", "-c:v", "copy", "-c:a", "copy",
+                            output_path], capture_output=True, timeout=300)
+            ok = os.path.exists(output_path) and os.path.getsize(output_path) > 10000
+            return ok
+        finally:
+            shutil.rmtree(_tmp, ignore_errors=True)
+    except Exception as e:
+        print(f"  [MouthSR] failed: {e}")
+        return False
+
+
 def realesrgan_upscale_video(input_path: str, output_path: str,
                               scale: int = 2, job_id: str = None) -> bool:
     """
@@ -5096,6 +5237,20 @@ def run_pipeline(job_id: str, config: dict):
                             print("  [FaceBlend] Skipped (output invalid)")
                     except Exception as _fb_err:
                         print(f"  [FaceBlend] Skipped ({_fb_err})")
+                    # Wav2Lip HD equivalent: Mouth-region Real-ESRGAN (opt-in via mouth_hd=true).
+                    # Roda DEPOIS do GFPGAN/CodeFormer pra ter face base nítida + boca extra HD.
+                    if config.get("mouth_hd", False):
+                        try:
+                            jobs[job_id]["message"] = "MouthSR: refinando região da boca (Wav2Lip HD)..."
+                            _mh_out = os.path.join(OUTPUT_DIR, f"{job_id}_mouthhd.mp4")
+                            if mouth_region_super_resolve_video(avatar_video, _mh_out, job_id=job_id, scale=2):
+                                _safe_rm(avatar_video)
+                                _safe_rename(_mh_out, avatar_video)
+                                print("  [MouthSR] Wav2Lip HD equivalent applied")
+                            else:
+                                print("  [MouthSR] Skipped (Real-ESRGAN unavailable ou falhou)")
+                        except Exception as _mh_err:
+                            print(f"  [MouthSR] Skipped ({_mh_err})")
                     # Validar output do SadTalker+GFPGAN+CodeFormer+FaceBlend antes do body sway
                     _sg_ok, _sg_reason = _validate_video_output(avatar_video, expected_dur=dur)
                     print(f"  [Pipeline] SadTalker+GFPGAN validação: {_sg_reason}")
@@ -6586,6 +6741,9 @@ def api_generate():
     # CodeFormer refinement post-GFPGAN: opt-in (era auto + lento). Default false.
     # Quando true: GFPGAN + CodeFormer refinamento (dobra tempo, qualidade extra).
     codeformer_refine = (request.form.get("codeformer_refine", "false").lower() in ("1","true","yes","on"))
+    # Wav2Lip HD equivalent: aplica Real-ESRGAN x2 só na região da boca após lip sync.
+    # Opt-in pq adiciona ~50% no tempo de geração mas dá ganho mensurável de sharpness.
+    mouth_hd = (request.form.get("mouth_hd", "false").lower() in ("1","true","yes","on"))
     try:
         fade_in  = max(0.0, min(10.0, float(request.form.get("fade_in", "0.5"))))
         fade_out = max(0.0, min(10.0, float(request.form.get("fade_out", "0.5"))))
@@ -6712,6 +6870,7 @@ def api_generate():
         "music_url":       music_url,      "music_volume":  music_volume,
         "music_auto_duck": music_auto_duck,
         "codeformer_refine": codeformer_refine,
+        "mouth_hd":          mouth_hd,
         "enable_fade":     enable_fade,    "fade_in":       fade_in,    "fade_out": fade_out,
         "export_format":   export_format,
         "enhance_image":   enhance_img,
@@ -6767,6 +6926,7 @@ def api_generate():
             enhance_image=bool(config.get("enhance_image")),
             gesture=bool(config.get("gesture_video")),
             codeformer_refine=bool(config.get("codeformer_refine")),
+            mouth_hd=bool(config.get("mouth_hd")),
             queue_ahead=max(0, _cur_workers - 1),
         )
         _vram_free_gb = get_vram_free_gb()
@@ -6784,7 +6944,8 @@ def api_generate():
 
 def _estimate_pipeline_eta(script: str, enhancer: str, captions: bool,
                             enhance_image: bool, gesture: bool,
-                            codeformer_refine: bool, queue_ahead: int) -> tuple:
+                            codeformer_refine: bool, queue_ahead: int,
+                            mouth_hd: bool = False) -> tuple:
     """Estima ETA inicial (segundos) + duração de áudio estimada.
     Multipliers empíricos do RTX 4060 8GB. Fonte única de verdade pra
     api_generate (submit response) E api_preflight.
@@ -6795,9 +6956,10 @@ def _estimate_pipeline_eta(script: str, enhancer: str, captions: bool,
     if enh == "gfpgan":      mult += 1.5
     elif enh == "codeformer": mult += 3.0
     if codeformer_refine:    mult += 1.8
-    if captions:             mult += 0.5
+    if captions:             mult += 0.5  # Whisper transcribe
     if enhance_image:        mult += 0.3
     if gesture:              mult += 1.0
+    if mouth_hd:             mult += 0.5  # Real-ESRGAN só na boca, ~50% extra
     est_pipeline_sec = int(est_audio_sec * mult) + 30  # +overhead constante
     eta_total = est_pipeline_sec + (max(0, queue_ahead) * 180)
     return eta_total, est_audio_sec
@@ -7407,6 +7569,7 @@ def api_preflight():
         enhance_image=bool(data.get("enhance_image")),
         gesture=bool(data.get("gesture_video")),
         codeformer_refine=bool(data.get("codeformer_refine")),
+        mouth_hd=bool(data.get("mouth_hd")),
         queue_ahead=queue_ahead,
     )
 
@@ -9860,6 +10023,7 @@ def api_version():
             "f5_voice_cloning":   True,
             "smart_thumbnail":    True,
             "silence_trim":       True,
+            "mouth_hd":           True,
             "loudnorm_2pass":     True,
             "preflight_endpoint": True,
             "gesture_pack":       True,
