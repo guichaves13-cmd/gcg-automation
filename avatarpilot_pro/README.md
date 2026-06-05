@@ -3,7 +3,7 @@
 > **AI-powered talking avatar generator** — local, offline-capable, HeyGen-quality
 > Foto + texto = vídeo profissional com lip sync, captions, música e movimento natural
 
-[![Tests](https://img.shields.io/badge/tests-226%2F226%20passing-brightgreen)](#-validação)
+[![Tests](https://img.shields.io/badge/tests-280%2B%20passing-brightgreen)](#-validação)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-blue)]()
 [![GPU](https://img.shields.io/badge/GPU-NVIDIA%204GB%2B-orange)]()
 [![License](https://img.shields.io/badge/license-Commercial-purple)](LICENSE.txt)
@@ -19,13 +19,19 @@
 - **Face restoration**: GFPGAN, CodeFormer (HD opt-in), RestoreFormer
 - **HD encode** 1920×1080 @ 5Mbps + Real-ESRGAN upscale x2/x4
 
-### HeyGen-level (novidades)
+### HeyGen-level (novidades v1.1.0)
 - ✨ **Karaoke captions** word-by-word com highlight color (estilo Reels/TikTok)
 - 🎚️ **BGM auto-duck** — música abaixa quando avatar fala (sidechain compression)
+- 👄 **Mouth HD** — Real-ESRGAN x2 SÓ na boca = **+191% sharpness mensurada** ([benchmark](MOUTH_HD_BENCHMARK.md))
+- 🎭 **Multi-speaker dialogue** — `[SPEAKER]:` tags → batch + merge automático
+- 🎬 **Background scenes animadas** — vídeos MP4/WEBM como fundo
+- 📚 **Avatar library com metadata** — categorias business/casual/creator/etc.
+- 📝 **27 templates por nicho** — review, polêmica, hack, análise, pitch, etc.
 - 📊 **Loudnorm EBU R128** 2-pass — broadcast standard -16 LUFS
 - ✂️ **Smart silence trim** — encurta pausas longas (>1.5s) automaticamente
 - 🖼️ **Smart thumbnails** — frame com face + nitidez + brilho otimal
 - ⏱️ **ETA inicial** + `/api/preflight` — usuário vê tempo estimado ao submeter
+- 🔒 **`/api/launch_check`** — 21 checks pré-launch programáticos
 - 🌍 **Caption translate** — SRT em 50+ idiomas (Google free)
 - 🤚 **Gesture pack** — corpo inteiro com gestos reais + InsightFace face swap
 

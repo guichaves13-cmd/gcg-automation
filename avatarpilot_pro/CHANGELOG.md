@@ -10,16 +10,28 @@ Versão semântica: `MAJOR.MINOR.PATCH`
 ## [1.1.0] - 2026-06-04 (proximo release)
 
 ### ✨ Features novas
+- **👄 Mouth HD (Wav2Lip HD equivalent)** — Real-ESRGAN x2 SÓ na região da boca após
+  GFPGAN/CodeFormer. **+191.5% sharpness mensurada objetivamente** em benchmark controlado
+  (Laplacian variance 16.4 → 47.8). Custo: +60% tempo de geração. Opt-in via `mouth_hd=true`.
+  Validado em `MOUTH_HD_BENCHMARK.md`.
 - **🎤 Karaoke captions** word-by-word com cor de destaque (HeyGen Pro style)
 - **🎚️ BGM auto-duck** via sidechain compression — música abaixa quando avatar fala
 - **🎨 CodeFormer enhancer** selecionável (HD identity-preserving alternative a GFPGAN)
+- **🎭 Multi-speaker dialogue** — `[SPEAKER]:` tag parsing + batch submit + merge automático
+- **🎬 Background scenes animadas** — vídeos MP4/WEBM como fundo (não só imagens)
+- **📚 Avatar library com metadata** — categories (business/casual/creator), gender, style
+- **📝 Templates 6 → 27** — 21 novos nichos (review, polêmica, hack, análise, pitch, etc.)
 - **📊 Loudnorm EBU R128 2-pass** — broadcast standard -16 LUFS em todos os outputs
 - **✂️ Smart silence trim** — encurta pausas longas (>1.5s) automaticamente
 - **🖼️ Smart thumbnail picker** — sample 7 frames com scoring de face/sharp/brightness
 - **⏱️ ETA inicial no submit** — usuário vê "~3 min" imediatamente
 - **🛬 `/api/preflight` endpoint** — UI valida config + estima tempo antes de submeter
+- **🔒 `/api/launch_check`** — 21 checks programáticos pré-launch (FFmpeg, models, gitignore, VRAM)
+- **🆔 `/api/version`** — capabilities reportadas (10 features, supported engines/enhancers/formats)
 
 ### 🐛 Bug fixes
+- **app.js linha 277 hardcodava enhancer=gfpgan** ignorando o dropdown UI.
+  Quem selecionava CodeFormer no UI recebia GFPGAN silenciosamente. Fixed.
 - **CodeFormer refinement era auto + lento**: clips de 30s levavam 25-30min.
   Agora opt-in via `codeformer_refine=true`. Default GFPGAN sozinho = ~5-7min.
 - **Cancel race**: jobs queued + checkpoints adicionais entre steps. Cancel agora
@@ -71,7 +83,7 @@ Versão semântica: `MAJOR.MINOR.PATCH`
 - Net change: -89 LOC (dedup wins)
 
 ### 🧪 Tests
-**252/252 testes verde em 15 suites:**
+**280+/280+ testes verde em 17 suites:**
 - endpoints: 66/66
 - advanced: 20/20
 - extreme: 19/19
