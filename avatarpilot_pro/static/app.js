@@ -301,6 +301,7 @@ async function generateAvatar() {
   formData.append('normalize_audio', document.getElementById('normalize-audio')?.checked  || false);
   formData.append('trim_silence',    document.getElementById('trim-silence')?.checked !== false ? 'true' : 'false');
   formData.append('output_format',   document.getElementById('output-format')?.value      || 'landscape');
+  formData.append('output_resolution', document.getElementById('output-resolution')?.value || '1080p');
 
   // Phase 4 — music, fade, export, enhance, chroma, translate, template vars
   const musicUrl = document.getElementById('music-select')?.value || '';

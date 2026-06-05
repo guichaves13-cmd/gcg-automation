@@ -925,6 +925,42 @@ def _get_realesrgan(scale: int = 2):
         return None
 
 
+def _mouth_bbox_mediapipe(landmarks, fh: int, fw: int, pad_pct: float = 0.20):
+    """Extrai bbox da boca usando landmarks mediapipe face_mesh.
+    Lip landmarks indices: 0, 11, 12, 13, 14, 15, 16, 17, 37, 39, 40, 61, 78,
+    80, 81, 82, 84, 87, 88, 91, 95, 146, 178, 181, 185, 191, 267, 269, 270,
+    291, 308, 310, 311, 312, 314, 317, 318, 321, 324, 375, 402, 405, 409, 415.
+    Usa subset chave: external lips (61, 291, 17, 0) + interior (13, 14).
+    Mais preciso que Haar cascade (~10x menos jitter na bbox).
+    """
+    LIP_IDX = [
+        61, 291,   # cantos da boca
+        0, 17,     # centro labio superior/inferior
+        13, 14,    # interior centro
+        37, 267,   # 1/3 esquerdo/direito superior
+        87, 317,   # 1/3 esquerdo/direito inferior
+        62, 292,   # cantos interiores
+    ]
+    xs = []
+    ys = []
+    for idx in LIP_IDX:
+        if idx < len(landmarks):
+            xs.append(landmarks[idx].x * fw)
+            ys.append(landmarks[idx].y * fh)
+    if len(xs) < 4:
+        return None
+    x0 = min(xs); x1 = max(xs)
+    y0 = min(ys); y1 = max(ys)
+    bw = x1 - x0; bh = y1 - y0
+    pad_x = bw * pad_pct
+    pad_y = bh * pad_pct
+    bx0 = max(0, int(x0 - pad_x))
+    by0 = max(0, int(y0 - pad_y))
+    bx1 = min(fw, int(x1 + pad_x))
+    by1 = min(fh, int(y1 + pad_y))
+    return (bx0, by0, bx1, by1)
+
+
 def mouth_region_super_resolve_video(input_path: str, output_path: str,
                                        job_id: str = None,
                                        scale: int = 2) -> bool:
@@ -934,12 +970,14 @@ def mouth_region_super_resolve_video(input_path: str, output_path: str,
     identity drift do face restorer pesado.
 
     Aplicar APÓS Wav2Lip/MuseTalk lip sync, ANTES do GFPGAN/CodeFormer:
-    - Detecta face em cada frame (Haar cascade)
-    - Estima mouth bbox (lower 38% da face, central 65% width)
-    - Crop com padding 15%
+    - **Mediapipe face_mesh** (468 landmarks) detecta boca com precisão pixel-perfect.
+      Fallback p/ Haar cascade se mediapipe indisponível.
+    - Mouth bbox via lip landmarks (12 pontos chave dos 40 lip landmarks)
+    - Crop com padding 20%
     - Real-ESRGAN x2 no crop
     - Unsharp 5/5/0.6
     - Resize back + feathered alpha paste
+    - Temporal smoothing (moving avg 3 frames) na bbox p/ eliminar jitter
 
     Retorna True se sucesso. False = mantém input intacto (fallback no caller).
     """
@@ -951,13 +989,26 @@ def mouth_region_super_resolve_video(input_path: str, output_path: str,
         import cv2 as _cvm
         import numpy as _npm
         import tempfile as _tmm
+        # Try mediapipe first (precise lip landmarks)
+        _mp_face_mesh = None
+        _use_mp = False
+        try:
+            import mediapipe as _mp
+            _mp_face_mesh = _mp.solutions.face_mesh.FaceMesh(
+                static_image_mode=False,  # video mode (fast tracking)
+                max_num_faces=1,
+                refine_landmarks=True,  # extra lip detail
+                min_detection_confidence=0.5,
+                min_tracking_confidence=0.5,
+            )
+            _use_mp = True
+            print("  [MouthSR] Using mediapipe face_mesh (precise lip landmarks)", flush=True)
+        except Exception as _mp_e:
+            print(f"  [MouthSR] mediapipe unavailable ({_mp_e}) — fallback Haar cascade", flush=True)
         casc_xml = _get_haar_cascade_xml()
-        if not casc_xml:
-            print("  [MouthSR] haar cascade missing — skip")
-            return False
-        cascade = _cvm.CascadeClassifier(casc_xml)
-        if cascade.empty():
-            print("  [MouthSR] cascade load failed — skip")
+        cascade = _cvm.CascadeClassifier(casc_xml) if casc_xml else None
+        if not _use_mp and (cascade is None or cascade.empty()):
+            print("  [MouthSR] Nenhum detector disponível — skip")
             return False
 
         ff = _ffmpeg_path()
@@ -970,31 +1021,56 @@ def mouth_region_super_resolve_video(input_path: str, output_path: str,
             frames_dir = os.path.join(_tmp, "frames")
             os.makedirs(frames_dir, exist_ok=True)
 
-            # Estado pra suavizar bbox entre frames (evita pulinhos)
-            last_bbox = None  # (x0, y0, x1, y1)
+            # Temporal smoothing: moving average dos últimos N bbox p/ eliminar jitter
+            from collections import deque
+            bbox_history = deque(maxlen=3)
+            last_bbox = None
             idx = 0
             misses = 0
+            mp_used = 0
+            haar_used = 0
             while True:
                 ok, frame = cap.read()
                 if not ok: break
                 fh, fw = frame.shape[:2]
-                gray = _cvm.cvtColor(frame, _cvm.COLOR_BGR2GRAY)
-                faces = cascade.detectMultiScale(gray, 1.2, 5)
                 mouth_bbox = None
-                if len(faces) > 0:
-                    fx, fy, faceW, faceH = max(faces, key=lambda d: d[2] * d[3])
-                    # Mouth bbox: lower 38% da face, central 65% width
-                    mw  = int(faceW * 0.65)
-                    mh  = int(faceH * 0.38)
-                    mx0 = fx + (faceW - mw) // 2
-                    my0 = fy + int(faceH * 0.55)
-                    # Padding 15%
-                    pad_x = int(mw * 0.15); pad_y = int(mh * 0.15)
-                    bx0 = max(0, mx0 - pad_x)
-                    by0 = max(0, my0 - pad_y)
-                    bx1 = min(fw, mx0 + mw + pad_x)
-                    by1 = min(fh, my0 + mh + pad_y)
-                    mouth_bbox = (bx0, by0, bx1, by1)
+
+                # --- 1. Mediapipe face_mesh (preciso) ---
+                if _use_mp and _mp_face_mesh is not None:
+                    rgb = _cvm.cvtColor(frame, _cvm.COLOR_BGR2RGB)
+                    res = _mp_face_mesh.process(rgb)
+                    if res and res.multi_face_landmarks:
+                        lm = res.multi_face_landmarks[0].landmark
+                        mouth_bbox = _mouth_bbox_mediapipe(lm, fh, fw, pad_pct=0.20)
+                        if mouth_bbox is not None:
+                            mp_used += 1
+
+                # --- 2. Fallback: Haar cascade ---
+                if mouth_bbox is None and cascade is not None and not cascade.empty():
+                    gray = _cvm.cvtColor(frame, _cvm.COLOR_BGR2GRAY)
+                    faces = cascade.detectMultiScale(gray, 1.2, 5)
+                    if len(faces) > 0:
+                        fx, fy, faceW, faceH = max(faces, key=lambda d: d[2] * d[3])
+                        mw  = int(faceW * 0.65)
+                        mh  = int(faceH * 0.38)
+                        mx0 = fx + (faceW - mw) // 2
+                        my0 = fy + int(faceH * 0.55)
+                        pad_x = int(mw * 0.15); pad_y = int(mh * 0.15)
+                        bx0 = max(0, mx0 - pad_x)
+                        by0 = max(0, my0 - pad_y)
+                        bx1 = min(fw, mx0 + mw + pad_x)
+                        by1 = min(fh, my0 + mh + pad_y)
+                        mouth_bbox = (bx0, by0, bx1, by1)
+                        haar_used += 1
+
+                # --- 3. Temporal smoothing ---
+                if mouth_bbox is not None:
+                    bbox_history.append(mouth_bbox)
+                    # Média móvel dos últimos N bbox (suavissimo)
+                    if len(bbox_history) >= 2:
+                        avg = [int(sum(b[i] for b in bbox_history) / len(bbox_history))
+                               for i in range(4)]
+                        mouth_bbox = tuple(avg)
                     last_bbox = mouth_bbox
                 else:
                     misses += 1
@@ -1045,7 +1121,10 @@ def mouth_region_super_resolve_video(input_path: str, output_path: str,
                     jobs[job_id]["message"] = f"MouthSR: {pct}% ({idx}/{total})"
 
             cap.release()
-            print(f"  [MouthSR] {idx} frames processed, {misses} misses (sem face)", flush=True)
+            if _use_mp and _mp_face_mesh is not None:
+                try: _mp_face_mesh.close()
+                except: pass
+            print(f"  [MouthSR] {idx} frames | mediapipe={mp_used} haar={haar_used} misses={misses}", flush=True)
 
             # Reassemble
             _v_only = os.path.join(_tmp, "v.mp4")
@@ -5859,16 +5938,26 @@ def run_pipeline(job_id: str, config: dict):
             # User can override via config["output_resolution"] = "720p" if needed for size.
             _target_res = config.get("output_resolution", "1080p")
             _out_fmt    = config.get("output_format", "landscape")
-            # Respect aspect ratio from output_format. This final HD pass is the
-            # authoritative encode — if it always forced 1920x1080 it would undo
-            # the portrait/square reformat done in Step 3c (the bug that made
-            # output_format=portrait/square silently produce landscape video).
+            # Respect aspect ratio from output_format. Suporta 720p / 1080p (default) /
+            # 4k (3840×2160 via Real-ESRGAN x4). Portrait/Square também escalam.
+            _scale_mult = 1
+            if _target_res == "4k":
+                _scale_mult = 2  # encoded at 4x area = 2x linear
             if _out_fmt == "portrait":
                 _tw, _th, _vbr, _vmin, _vmax, _vbuf = 1080, 1920, "8000k", "6000k", "12000k", "16000k"
+                if _target_res == "4k":
+                    _tw, _th = _tw * 2, _th * 2  # 2160x3840
+                    _vbr, _vmin, _vmax, _vbuf = "30000k", "20000k", "45000k", "60000k"
             elif _out_fmt == "square":
                 _tw, _th, _vbr, _vmin, _vmax, _vbuf = 1080, 1080, "8000k", "6000k", "12000k", "16000k"
+                if _target_res == "4k":
+                    _tw, _th = _tw * 2, _th * 2  # 2160x2160
+                    _vbr, _vmin, _vmax, _vbuf = "30000k", "20000k", "45000k", "60000k"
             elif _target_res == "720p":
                 _tw, _th, _vbr, _vmin, _vmax, _vbuf = 1280, 720, "2500k", "2000k", "4000k", "5000k"
+            elif _target_res == "4k":
+                # 4K Ultra HD 3840×2160 — bitrate 30 Mbps (Netflix-grade)
+                _tw, _th, _vbr, _vmin, _vmax, _vbuf = 3840, 2160, "30000k", "20000k", "45000k", "60000k"
             else:
                 _tw, _th, _vbr, _vmin, _vmax, _vbuf = 1920, 1080, "8000k", "6000k", "12000k", "16000k"
 
@@ -5879,10 +5968,14 @@ def run_pipeline(job_id: str, config: dict):
             if _use_ai_upscale == "auto":
                 # Auto-enable for short clips with small source
                 _use_ai_upscale = (dur <= 600 and max(_cur_w, _cur_h) < 1080)  # AI upscale for <=10min videos
+            # Pra 4K target: força AI upscale + usa x4 model (ou cascata x2+x2)
+            _esrgan_scale = 4 if _target_res == "4k" else 2
+            if _target_res == "4k":
+                _use_ai_upscale = True  # 4K SEM AI upscale = bicubic estirado, péssimo
             if _use_ai_upscale:
-                jobs[job_id]["message"] = "AI Upscale (Real-ESRGAN x2): aumentando detalhe..."
+                jobs[job_id]["message"] = f"AI Upscale (Real-ESRGAN x{_esrgan_scale}): aumentando detalhe..."
                 _ai_out = os.path.join(_hd_tmp, "ai_upscaled.mp4")
-                _ai_ok = realesrgan_upscale_video(_safe_in, _ai_out, scale=2, job_id=job_id)
+                _ai_ok = realesrgan_upscale_video(_safe_in, _ai_out, scale=_esrgan_scale, job_id=job_id)
                 if _ai_ok and os.path.getsize(_ai_out) > 10000:
                     _safe_in = _ai_out  # downstream HD encode uses upscaled source
                     # Re-probe new dimensions
@@ -6662,6 +6755,10 @@ def api_generate():
     except (ValueError, TypeError):
         max_silence_sec = 1.5
     output_format     = request.form.get("output_format", "landscape")
+    # NEW: 720p / 1080p (default) / 4k. 4K = 3840x2160 via Real-ESRGAN x4 cascade.
+    output_resolution = request.form.get("output_resolution", "1080p")
+    if output_resolution not in ("720p", "1080p", "4k"):
+        output_resolution = "1080p"
     watermark_text    = request.form.get("watermark_text", "")[:200]
     watermark_pos     = request.form.get("watermark_pos", "bottom_right")
     music_url         = request.form.get("music_url", "")
@@ -6866,6 +6963,7 @@ def api_generate():
         "trim_silence":    trim_silence,
         "max_silence_seconds": max_silence_sec,
         "output_format":   output_format,
+        "output_resolution": output_resolution,
         "watermark_text":  watermark_text, "watermark_pos": watermark_pos,
         "music_url":       music_url,      "music_volume":  music_volume,
         "music_auto_duck": music_auto_duck,

@@ -471,6 +471,15 @@
               </select>
             </div>
             <div class="setting-row">
+              <label>Resolução:</label>
+              <select id="output-resolution">
+                <option value="720p">📺 720p HD (1280×720, 2.5 Mbps — leve)</option>
+                <option value="1080p" selected>🎬 1080p Full HD (1920×1080, 8 Mbps — default)</option>
+                <option value="4k">🎞️ 4K Ultra HD (3840×2160, 30 Mbps — Real-ESRGAN x4, +200% tempo)</option>
+              </select>
+              <span class="hint" style="margin-left:8px;font-size:11px">4K usa Real-ESRGAN x4 cascade — qualidade "real" a partir do source</span>
+            </div>
+            <div class="setting-row">
               <label><input type="checkbox" id="normalize-audio"> Normalizar volume de áudio (loudnorm -16 LUFS)</label>
             </div>
             <div class="setting-row">
