@@ -1021,7 +1021,10 @@ def mouth_region_super_resolve_video(input_path: str, output_path: str,
             frames_dir = os.path.join(_tmp, "frames")
             os.makedirs(frames_dir, exist_ok=True)
 
-            # Temporal smoothing: moving average dos últimos N bbox p/ eliminar jitter
+            # Temporal smoothing: moving average dos últimos N bbox p/ eliminar jitter.
+            # Empirico: N=3 ganhou N=2 (sharpness 43.5 vs 28.7), provavelmente
+            # porque N=2 reage demais ao último frame quando boca move rapidamente.
+            # N=3 estabiliza sem perder muito SR detail.
             from collections import deque
             bbox_history = deque(maxlen=3)
             last_bbox = None
