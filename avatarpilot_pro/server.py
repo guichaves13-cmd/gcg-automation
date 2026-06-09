@@ -7032,6 +7032,19 @@ def api_generate():
         )
         _vram_free_gb = get_vram_free_gb()
         _warn = "" if _vram_free_gb >= 3.0 else f"VRAM baixa ({_vram_free_gb:.1f}GB) — pode degradar qualidade"
+        # NEW: voice/avatar gender mismatch warning (UX bug fix)
+        try:
+            _img_path = config.get("image_path", "")
+            if _img_path and os.path.exists(_img_path):
+                _avatar_gender = _detect_gender_from_face(_img_path)
+                _voice_gender_v = _voice_gender(voice)
+                if _avatar_gender and _voice_gender_v != "unknown" and \
+                   _avatar_gender != _voice_gender_v:
+                    _mismatch_warn = (f"⚠️ Voz {_voice_gender_v} mas avatar parece "
+                                       f"{_avatar_gender}. Resultado pode soar estranho. "
+                                       f"Use voice clone (F5-TTS) ou voz do gênero matching.")
+                    _warn = _mismatch_warn if not _warn else f"{_warn} | {_mismatch_warn}"
+        except Exception: pass
     except Exception:
         _eta_initial = 0; _vram_free_gb = 0; _warn = ""
     return jsonify({
@@ -10030,6 +10043,54 @@ def api_healthz():
     })
 
 
+def _detect_gender_from_face(image_path: str):
+    """Heurística: detecta gênero do avatar via InsightFace genderage.onnx.
+    Retorna 'male', 'female' ou None se não detectado.
+    Usado pra dar warning quando voz não match (Antonio neural=M vs avatar=F)."""
+    try:
+        # InsightFace já está instalado pra face swap. Usa o mesmo det model.
+        import insightface
+        from insightface.app import FaceAnalysis
+        # Use cached app se existir
+        global _insight_app_genderage
+        if "_insight_app_genderage" not in globals() or _insight_app_genderage is None:
+            _app = FaceAnalysis(name="buffalo_l", allowed_modules=["detection", "genderage"])
+            _app.prepare(ctx_id=0, det_size=(640, 640))
+            globals()["_insight_app_genderage"] = _app
+        else:
+            _app = _insight_app_genderage
+        import cv2 as _cv
+        with open(image_path, "rb") as f:
+            data = f.read()
+        import numpy as _np
+        arr = _cv.imdecode(_np.frombuffer(data, dtype=_np.uint8), _cv.IMREAD_COLOR)
+        if arr is None: return None
+        faces = _app.get(arr)
+        if not faces: return None
+        f = max(faces, key=lambda x: (x.bbox[2]-x.bbox[0])*(x.bbox[3]-x.bbox[1]))
+        # InsightFace: sex_F=0=male, 1=female; ou .gender atributo
+        g = getattr(f, "gender", None)
+        if g is None: return None
+        return "female" if int(g) == 1 else "male"
+    except Exception as _e:
+        return None  # graceful: sem warning
+
+
+def _voice_gender(voice_name: str) -> str:
+    """Mapeia voice name → male/female/unknown. Edge-TTS naming convention."""
+    name = (voice_name or "").lower()
+    # Vozes femininas conhecidas pt-BR + en-US + ptl-PT
+    FEMALE_HINTS = ["francisca", "thalita", "raquel", "fernanda", "jenny",
+                    "aria", "michelle", "ana", "maria", "emma", "olivia"]
+    MALE_HINTS = ["antonio", "duarte", "guy", "tony", "davis", "andrew",
+                  "brian", "ryan", "joao", "carlos", "jose", "miguel"]
+    for h in FEMALE_HINTS:
+        if h in name: return "female"
+    for h in MALE_HINTS:
+        if h in name: return "male"
+    return "unknown"
+
+
 # Versão pública (sync com AvatarPilotPro.iss + CHANGELOG.md)
 APP_VERSION = "1.1.0"
 
@@ -10184,11 +10245,16 @@ def _auto_cleanup_old_outputs():
                           "_fmt.mp4", "_wm.mp4", "_music.mp4", "_fade.mp4",
                           "_fswap.mp4", "_faceblend.mp4", "preview_",
                           "_thumb_old.jpg", ".tmp")
-        # Force more aggressive cleanup if disk pressure
+        # Force more aggressive cleanup if disk pressure.
+        # FIX bug: era retention_days=2 mas o cleanup MTIME check pegava arquivos
+        # recentes em casos extremos (clock skew, watchdog ran during job). Mudei
+        # pra 7 dias mínimo + safeguard: nunca delete arquivos mais novos que 1h.
         if free_mb < 5000:
-            retention_days = 2
+            retention_days = 7  # antes era 2 (perdemos DEMO file). 7 = segurança.
             intermediates_h = 6
             print(f"  [AutoCleanup] DISK PRESSURE ({free_mb:.0f}MB free) — aggressive prune", flush=True)
+        # SAFEGUARD: arquivos com mtime <1h NUNCA deletam (proteção pra outputs ativos)
+        min_age_seconds = 3600  # 1h
         long_cutoff  = now - retention_days * 86400
         short_cutoff = now - intermediates_h * 3600
         try:
@@ -10198,6 +10264,9 @@ def _auto_cleanup_old_outputs():
                 try:
                     mtime = os.path.getmtime(fpath)
                 except Exception: continue
+                # SAFEGUARD: NUNCA deleta arquivo com idade <1h (proteção outputs ativos)
+                if (now - mtime) < min_age_seconds:
+                    continue
                 # Intermediate files
                 if any(p in fname for p in short_patterns):
                     if mtime < short_cutoff:
