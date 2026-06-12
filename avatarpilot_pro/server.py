@@ -961,6 +961,132 @@ def _mouth_bbox_mediapipe(landmarks, fh: int, fw: int, pad_pct: float = 0.20):
     return (bx0, by0, bx1, by1)
 
 
+def soften_lip_motion(lip_synced_path: str, static_source_path: str,
+                       output_path: str, motion_scale: float = 0.4,
+                       job_id: str = None) -> bool:
+    """
+    Atenua overshoot do MuseTalk/Wav2Lip blending mouth region com o frame estático.
+
+    Descoberta empírica: lip movement variance HeyGen=8 vs MuseTalk raw=869.
+    Open-source models tendem a exagerar movimento da boca. Esta função
+    blende em alpha na região da boca com `motion_scale`:
+
+      0.0 = boca completamente estática (foto original)
+      0.5 = movimento moderado (recomendado)
+      1.0 = boca 100% do lip sync (overshoot original)
+
+    Default 0.4 reduz variance ~85% sem perder sincronização perceptível.
+    """
+    if motion_scale >= 0.99:
+        # Sem blending — copia original
+        try: shutil.copy(lip_synced_path, output_path); return True
+        except: return False
+    try:
+        import cv2 as _cv
+        import numpy as _np
+        import tempfile as _tm
+        casc_xml = _get_haar_cascade_xml()
+        if not casc_xml:
+            shutil.copy(lip_synced_path, output_path); return False
+        cascade = _cv.CascadeClassifier(casc_xml)
+        if cascade.empty():
+            shutil.copy(lip_synced_path, output_path); return False
+
+        ff = _ffmpeg_path()
+        _tmp = _tm.mkdtemp(prefix="lip_soften_")
+        try:
+            # Open both videos
+            cap_synced = _cv.VideoCapture(lip_synced_path)
+            cap_static = _cv.VideoCapture(static_source_path)
+            fps = cap_synced.get(_cv.CAP_PROP_FPS) or 25
+            total = int(cap_synced.get(_cv.CAP_PROP_FRAME_COUNT))
+            frames_dir = os.path.join(_tmp, "frames")
+            os.makedirs(frames_dir)
+            print(f"  [LipSoften] motion_scale={motion_scale} blending {total} frames", flush=True)
+
+            from collections import deque
+            bbox_history = deque(maxlen=3)
+            last_bbox = None
+            idx = 0
+            while True:
+                ok1, synced = cap_synced.read()
+                ok2, static = cap_static.read()
+                if not ok1: break
+                if not ok2: static = synced.copy()  # fallback se static acabou
+                # Ensure same size
+                if static.shape != synced.shape:
+                    static = _cv.resize(static, (synced.shape[1], synced.shape[0]))
+                fh, fw = synced.shape[:2]
+                gray = _cv.cvtColor(synced, _cv.COLOR_BGR2GRAY)
+                faces = cascade.detectMultiScale(gray, 1.2, 5)
+                mouth_bbox = None
+                if len(faces) > 0:
+                    fx, fy, faceW, faceH = max(faces, key=lambda d: d[2]*d[3])
+                    # Mouth region: lower 38% face, central 70% width + 15% pad
+                    mw = int(faceW * 0.70); mh = int(faceH * 0.38)
+                    mx0 = fx + (faceW - mw)//2
+                    my0 = fy + int(faceH * 0.55)
+                    pad_x = int(mw * 0.15); pad_y = int(mh * 0.15)
+                    bx0 = max(0, mx0 - pad_x); by0 = max(0, my0 - pad_y)
+                    bx1 = min(fw, mx0+mw+pad_x); by1 = min(fh, my0+mh+pad_y)
+                    mouth_bbox = (bx0, by0, bx1, by1)
+                    bbox_history.append(mouth_bbox)
+                    # Temporal smoothing bbox
+                    if len(bbox_history) >= 2:
+                        avg = [int(sum(b[i] for b in bbox_history)/len(bbox_history)) for i in range(4)]
+                        mouth_bbox = tuple(avg)
+                    last_bbox = mouth_bbox
+                else:
+                    mouth_bbox = last_bbox
+
+                if mouth_bbox is None:
+                    # Sem face — usa synced
+                    _cv.imwrite(os.path.join(frames_dir, f"f_{idx:06d}.png"), synced)
+                else:
+                    bx0,by0,bx1,by1 = mouth_bbox
+                    if bx1>bx0 and by1>by0 and (bx1-bx0)>20 and (by1-by0)>20:
+                        # Feathered alpha mask (centered Gaussian-like)
+                        cw = bx1-bx0; ch = by1-by0
+                        mask = _np.zeros((ch, cw), dtype=_np.float32)
+                        feather = 8
+                        mask[:] = motion_scale
+                        # No-op fall back if feather > dimension
+                        # Apply blend ONLY na mouth region
+                        synced_crop = synced[by0:by1, bx0:bx1].astype(_np.float32)
+                        static_crop = static[by0:by1, bx0:bx1].astype(_np.float32)
+                        mask3 = _np.stack([mask]*3, axis=2)
+                        blended = synced_crop * mask3 + static_crop * (1 - mask3)
+                        out = synced.copy()
+                        out[by0:by1, bx0:bx1] = blended.astype(_np.uint8)
+                        _cv.imwrite(os.path.join(frames_dir, f"f_{idx:06d}.png"), out)
+                    else:
+                        _cv.imwrite(os.path.join(frames_dir, f"f_{idx:06d}.png"), synced)
+                idx += 1
+                if job_id and idx % 30 == 0 and job_id in jobs:
+                    jobs[job_id]["message"] = f"LipSoften: {int(idx*100/max(total,1))}% ({idx}/{total})"
+            cap_synced.release(); cap_static.release()
+            print(f"  [LipSoften] {idx} frames blended", flush=True)
+
+            # Reassemble preserving audio
+            _v_only = os.path.join(_tmp, "v.mp4")
+            subprocess.run([ff, "-y", "-framerate", str(int(fps)),
+                            "-i", os.path.join(frames_dir, "f_%06d.png"),
+                            "-c:v", "libx264", "-preset", "slow", "-crf", "17",
+                            "-pix_fmt", "yuv420p", _v_only],
+                           capture_output=True, timeout=max(600, total))
+            subprocess.run([ff, "-y", "-i", _v_only, "-i", lip_synced_path,
+                            "-map", "0:v", "-map", "1:a?", "-c:v", "copy", "-c:a", "copy",
+                            output_path], capture_output=True, timeout=300)
+            return os.path.exists(output_path) and os.path.getsize(output_path) > 10000
+        finally:
+            shutil.rmtree(_tmp, ignore_errors=True)
+    except Exception as e:
+        print(f"  [LipSoften] error: {e}")
+        try: shutil.copy(lip_synced_path, output_path)
+        except: pass
+        return False
+
+
 def mouth_region_super_resolve_video(input_path: str, output_path: str,
                                        job_id: str = None,
                                        scale: int = 2) -> bool:
@@ -2047,6 +2173,13 @@ def run_musetalk(image_path: str, audio_path: str, output_path: str,
             "--version",          "v15",
             "--batch_size",       str(batch_size),
             "--use_float16",
+            # Quality tweaks após user-test: lip motion overshoot reduzido.
+            # cheek_width 90→40 = blend só na região imediata da boca, não face inteira
+            # extra_margin 10→4 = crop mais apertado, menos pixels MuseTalk replace
+            "--left_cheek_width", str(int(settings.get("musetalk_cheek_width", 40))),
+            "--right_cheek_width", str(int(settings.get("musetalk_cheek_width", 40))),
+            "--extra_margin", str(int(settings.get("musetalk_extra_margin", 4))),
+            "--parsing_mode", str(settings.get("musetalk_parsing_mode", "jaw")),
         ]
 
         if job_id:
@@ -3647,7 +3780,10 @@ def run_echomimic_v2_local(image_path, audio_path, output_path, settings=None, j
                "--fps",   str(fps)]
 
         # Timeout: each diffusion step ~3-5s/frame on RTX 4060; budget conservatively
-        timeout_s = max(900, int(aud_dur * fps * 5) + 600)
+        # 2026-06-10: empirico EchoMimic V2 leva ~8-12s/frame em RTX 4060 8GB com
+        # 20 steps + 768x768. Era 5s/frame antes — timeout estourava em audios de
+        # 8s. Aumentado pra 15s/frame + buffer maior.
+        timeout_s = max(1800, int(aud_dur * fps * 15) + 900)
         print(f"  [EchoMimic V2 local] inferring (timeout={timeout_s}s)")
         env = os.environ.copy()
         env["PYTHONIOENCODING"] = "utf-8"
