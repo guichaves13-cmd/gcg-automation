@@ -104,34 +104,39 @@ class BeatPlan:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-_VISION_PROMPT_TEMPLATE = """Você é um auditor visual rigoroso para um pipeline de vídeo profissional.
+_VISION_PROMPT_TEMPLATE = """Você é um editor de vídeo profissional verificando se uma imagem stock serve para ilustrar uma narração.
 
-Analise esta imagem e responda HONESTAMENTE se ela é adequada para ilustrar
-exatamente o seguinte segmento de áudio narrado:
+CONTEXTO DO SEGMENTO NARRADO:
+- Texto: "{text}"
+- Entidade principal: {entity}
+- Ação/estado: {action}
+- Tema/contexto geral: {theme}
 
-CONTEXTO DO SEGMENTO:
-- Texto sendo dito: "{text}"
-- Entidade principal que DEVE aparecer: {entity}
-- Ação ou estado: {action}
-- Estilo visual desejado: {visual_context}
+REGRAS DE SCORE (use criteriosamente, não seja arbitrariamente rigoroso):
+- 90-100: A imagem mostra EXATAMENTE a entidade fazendo EXATAMENTE a ação descrita
+- 75-89: Mostra a entidade certa, OU mostra elemento icônico/símbolo direto do tema
+         (ex: hieróglifos para Egito Antigo, microscópio para ciência, futebol em campo para esporte)
+- 60-74: Mostra algo CLARAMENTE relacionado ao tema, mesmo que não seja a entidade exata
+         (ex: paisagem antiga para narração histórica, vista de cidade moderna para tecnologia)
+- 30-59: Conexão temática fraca mas existe (ex: pessoa qualquer para narração sobre humanos)
+- 0-29: Nada a ver com o segmento (ex: gato para narração sobre arquitetura)
 
-REGRAS PARA SCORE:
-- 90-100: A imagem mostra EXATAMENTE a entidade fazendo EXATAMENTE a ação
-- 70-89: Mostra a entidade certa mas em ação/contexto diferente
-- 40-69: Mostra algo relacionado mas não a entidade exata
-- 0-39: Não tem nada a ver com o que está sendo dito
+PRINCÍPIO CHAVE:
+- Para narrações ABSTRATAS (conceitos históricos, opiniões, ações políticas), um clip
+  visualmente icônico do TEMA é aceitável (75-89), não exija a ação literal.
+- Para narrações CONCRETAS ("o cachorro late"), exija o objeto exato (≥80) ou rejeite.
+- NUNCA aprove um clip que mostre conceito ERRADO (ex: feliz quando narração é triste).
 
 Responda APENAS em JSON estrito:
 {{
   "score": <inteiro 0-100>,
   "what_i_see": "<descrição curta do que está REALMENTE na imagem, máx 80 chars>",
   "matches_entity": <true ou false>,
-  "matches_action": <true ou false>,
-  "rejection_reason": "<se score<80: motivo curto. Se score>=80: ''>"
+  "matches_theme": <true ou false>,
+  "rejection_reason": "<se score<60: motivo curto. Se score>=60: ''>"
 }}
 
-Seja BRUTALMENTE HONESTO. Se a imagem mostra peixes mas estamos falando de máquina agrícola, score 0.
-NUNCA dê score alto por compaixão. PIOR cenário é um clip errado entrar no vídeo final."""
+PIOR CENÁRIO: um clip CONTRADITÓRIO entrar no vídeo final (felicidade para narração de tristeza, prédio moderno para conteúdo medieval). MELHOR CENÁRIO: clip temático relevante mesmo sem ação exata."""
 
 
 class VisionVerifier:
@@ -166,8 +171,12 @@ class VisionVerifier:
             return None
 
     def verify(self, image_url: str, intent: SegmentIntent,
-               timeout: float = 15.0) -> tuple:
+               timeout: float = 15.0, theme: str = "") -> tuple:
         """Verifica se uma imagem é adequada para o intent.
+
+        Args:
+            theme: contexto temático geral do vídeo (ex: "Ancient Egypt",
+                "agronegócio") — usado para credit thematic matches em narrações abstratas.
 
         Returns: (score: int 0-100, description: str, reason_if_rejected: str)
         """
@@ -189,7 +198,7 @@ class VisionVerifier:
             text=intent.text[:200],
             entity=intent.main_entity or "(não definido)",
             action=intent.action or "(não definido)",
-            visual_context=intent.visual_context or "real, sem texto na tela",
+            theme=theme or intent.visual_context or "geral",
         )
 
         # Try Gemini first (unless we've determined it's dead this session)
@@ -498,8 +507,8 @@ class MultiSourceSearcher:
             return []
 
     def _search_pixabay(self, query: str, min_dur: float) -> list:
-        """pixabay_stock.search_videos returns normalized:
-           {id, url, duration, width, height}"""
+        """pixabay_stock.search_videos returns:
+           {id, url, duration, width, height, thumbnail_url, tags, page_url}"""
         try:
             from core.pixabay_stock import search_videos
             raw = search_videos(self.pixabay_key, query, count=self.max_per_source,
@@ -509,14 +518,18 @@ class MultiSourceSearcher:
                 if not v.get("url"):
                     continue
                 vid = str(v.get("id", ""))
+                thumb = v.get("thumbnail_url", "")
+                # Skip candidates without a valid thumbnail — Vision can't score them
+                # (returns wrong description of broken-image placeholder)
+                if not thumb:
+                    continue
                 out.append(ClipCandidate(
                     source="pixabay",
                     source_id=vid,
-                    title=f"pixabay {vid}",
-                    page_url=f"https://pixabay.com/videos/id-{vid}/",
+                    title=str(v.get("tags", "") or f"pixabay {vid}")[:120],
+                    page_url=str(v.get("page_url", "") or f"https://pixabay.com/videos/id-{vid}/"),
                     download_url=str(v["url"]),
-                    # Pixabay doesn't return thumbnail in normalized form — fetch via known pattern
-                    thumbnail_url=f"https://i.vimeocdn.com/video/{vid}_640x360.jpg",
+                    thumbnail_url=thumb,
                     duration=float(v.get("duration", 0)),
                     width=int(v.get("width", 0)),
                     height=int(v.get("height", 0)),
@@ -578,31 +591,63 @@ def segment_audio_with_whisper(audio_path: str, model_size: str = "base",
                                 language: str = "pt") -> list:
     """Transcreve áudio com Whisper word-level e agrupa em segmentos de 3-8s.
 
+    Tries faster_whisper first (4-10× faster), falls back to openai-whisper.
+
     Returns: list[dict] {start, end, text}
     """
+    all_words = []
+    backend = None
+
+    # Try faster_whisper first
     try:
         from faster_whisper import WhisperModel
-        model = WhisperModel(model_size, device="cuda", compute_type="float16")
-    except Exception:
-        # CPU fallback
-        from faster_whisper import WhisperModel
-        model = WhisperModel(model_size, device="cpu", compute_type="int8")
-
-    segments, _info = model.transcribe(
-        audio_path, language=language,
-        word_timestamps=True, beam_size=5,
-    )
-
-    # Convert generator to list of word-level data
-    all_words = []
-    for seg in segments:
-        if not hasattr(seg, "words") or not seg.words:
-            all_words.append({"start": seg.start, "end": seg.end, "text": seg.text})
-            continue
-        for w in seg.words:
-            all_words.append({
-                "start": float(w.start), "end": float(w.end), "text": w.word.strip(),
-            })
+        backend = "faster_whisper"
+        try:
+            model = WhisperModel(model_size, device="cuda", compute_type="float16")
+        except Exception:
+            model = WhisperModel(model_size, device="cpu", compute_type="int8")
+        segments, _info = model.transcribe(
+            audio_path, language=language,
+            word_timestamps=True, beam_size=5,
+        )
+        for seg in segments:
+            if not hasattr(seg, "words") or not seg.words:
+                all_words.append({"start": seg.start, "end": seg.end, "text": seg.text})
+                continue
+            for w in seg.words:
+                all_words.append({
+                    "start": float(w.start), "end": float(w.end), "text": w.word.strip(),
+                })
+    except ImportError:
+        # Fallback: openai-whisper
+        import whisper
+        backend = "openai-whisper"
+        device = "cuda"
+        try:
+            import torch
+            if not torch.cuda.is_available():
+                device = "cpu"
+        except Exception:
+            device = "cpu"
+        model = whisper.load_model(model_size, device=device)
+        result = model.transcribe(
+            audio_path, language=language,
+            word_timestamps=True, verbose=False,
+        )
+        for seg in result.get("segments", []):
+            words = seg.get("words") or []
+            if not words:
+                all_words.append({
+                    "start": float(seg["start"]), "end": float(seg["end"]),
+                    "text": seg["text"].strip(),
+                })
+                continue
+            for w in words:
+                all_words.append({
+                    "start": float(w["start"]), "end": float(w["end"]),
+                    "text": (w.get("word") or "").strip(),
+                })
+    print(f"  [Whisper] {backend}: {len(all_words)} words/segments")
 
     # Group words into target_segment_dur chunks at sentence boundaries
     chunks = []
@@ -728,8 +773,8 @@ class IntelligentBrollEngine:
             print(f"  Intent: {intent.main_entity} | {intent.action}")
             print(f"  Queries: {intent.search_queries[:3]}")
 
-            # Verify + select best clip
-            plan = self._find_clip_for_intent(intent, min_relevance=min_relevance)
+            # Verify + select best clip (pass theme so Vision can credit thematic matches)
+            plan = self._find_clip_for_intent(intent, min_relevance=min_relevance, theme=theme)
             plans.append(plan)
 
         # ─── ETAPA 7: download dos aprovados ───────────────────────────
@@ -753,20 +798,24 @@ class IntelligentBrollEngine:
         return out
 
     def _find_clip_for_intent(self, intent: SegmentIntent,
-                              min_relevance: int = 80) -> BeatPlan:
-        """Etapas 3-5: busca + verificação visual + seleção."""
+                              min_relevance: int = 80,
+                              theme: str = "") -> BeatPlan:
+        """Etapas 3-5: busca + verificação visual + seleção.
+
+        Tracks the BEST candidate across all attempts — if no clip clears
+        min_relevance but we found something above 50, returns it as a fallback
+        so abstract narrations get thematic clips instead of leaving gaps.
+        """
+        best_so_far = None  # (score, candidate) tuple
+
         for attempt in range(self.max_attempts):
             for query in intent.search_queries:
                 candidates = self.searcher.search_all(query)
                 if not candidates:
                     continue
 
-                # Cap candidates
                 candidates = candidates[:self.max_candidates]
-
-                # Verify each via thumbnail (sequential pra não estourar quota)
                 for cand in candidates:
-                    # Anti-duplicate across video
                     if cand.source_id in self._used_clip_ids:
                         continue
                     if not cand.thumbnail_url:
@@ -774,7 +823,9 @@ class IntelligentBrollEngine:
                         cand.rejection_reason = "no thumbnail"
                         continue
 
-                    score, desc, reason = self.verifier.verify(cand.thumbnail_url, intent)
+                    score, desc, reason = self.verifier.verify(
+                        cand.thumbnail_url, intent, theme=theme,
+                    )
                     cand.relevance_score = score
                     cand.vision_description = desc
                     cand.rejection_reason = reason
@@ -783,16 +834,28 @@ class IntelligentBrollEngine:
                           f"{desc[:70]}")
 
                     if score >= min_relevance:
-                        # WINNER!
                         self._used_clip_ids.add(cand.source_id)
                         return BeatPlan(intent=intent, clip=cand)
+
+                    # Track best-so-far in case nothing passes threshold
+                    if score > 50 and (best_so_far is None or score > best_so_far[0]):
+                        best_so_far = (score, cand)
 
             # All candidates rejected → refine queries for next attempt
             intent.rejected_terms.extend(intent.search_queries)
             intent.search_queries = self._refine_queries(intent)
             print(f"  [refine attempt {attempt+1}] new queries: {intent.search_queries[:3]}")
 
-        # All attempts failed — flag manual review
+        # All attempts failed — but if we found something decent (≥50), use it
+        # rather than leaving a gap. Better thematic clip than missing footage.
+        if best_so_far is not None:
+            score, cand = best_so_far
+            self._used_clip_ids.add(cand.source_id)
+            print(f"  ⚡ Fallback: using best-so-far clip "
+                  f"{cand.source}#{cand.source_id[:8]} score={score}")
+            return BeatPlan(intent=intent, clip=cand)
+
+        # Truly nothing matched — flag manual review
         return BeatPlan(
             intent=intent, clip=None, needs_manual_review=True,
             error=f"Nenhum clip atingiu score ≥{min_relevance} após {self.max_attempts} tentativas",

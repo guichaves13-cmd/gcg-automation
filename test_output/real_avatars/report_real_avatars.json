@@ -1,0 +1,199 @@
+{
+  "videos": [
+    {
+      "name": "Cosmetics (3000 years male beauty)",
+      "elapsed_sec": 182.08933544158936,
+      "n_segments": 4,
+      "n_solved": 4,
+      "scores": [
+        95,
+        60,
+        80,
+        85
+      ],
+      "segments": [
+        {
+          "idx": 0,
+          "start": 0.0,
+          "end": 6.58,
+          "text": "not just culturally but psychologically, socially, even physically. That's what this documentary is really about.",
+          "entity": "homem com maquiagem",
+          "score": 95,
+          "source": "pexels",
+          "vision_saw": "homem aplicando maquiagem",
+          "url": "https://www.pexels.com/video/5067893/",
+          "resolved": true
+        },
+        {
+          "idx": 1,
+          "start": 7.36,
+          "end": 15.5,
+          "text": "Because when you dig into the real history of male beauty, you don't just find face paint and powder. You find empires built on image.",
+          "entity": "Imperador",
+          "score": 60,
+          "source": "pixabay",
+          "vision_saw": "Homem com pintura facial colorida",
+          "url": "https://pixabay.com/videos/id-21536/",
+          "resolved": true
+        },
+        {
+          "idx": 2,
+          "start": 16.24,
+          "end": 24.12,
+          "text": "You find wars one because of appearance. You find political systems that weaponized male aesthetics to control populations.",
+          "entity": "homens",
+          "score": 80,
+          "source": "pexels",
+          "vision_saw": "Um homem aplicando maquiagem em outro homem",
+          "url": "https://www.pexels.com/video/32250113/",
+          "resolved": true
+        },
+        {
+          "idx": 3,
+          "start": 24.72,
+          "end": 29.98,
+          "text": "And you find one of the most deliberate cultural reversals in modern history, a shift that happened...",
+          "entity": "homem",
+          "score": 85,
+          "source": "pexels",
+          "vision_saw": "homem aplicando maquiagem",
+          "url": "https://www.pexels.com/video/10435626/",
+          "resolved": true
+        }
+      ]
+    },
+    {
+      "name": "Ancient Egypt (cosmic knowledge)",
+      "elapsed_sec": 162.1851646900177,
+      "n_segments": 4,
+      "n_solved": 4,
+      "scores": [
+        75,
+        75,
+        75,
+        75
+      ],
+      "segments": [
+        {
+          "idx": 0,
+          "start": 0.0,
+          "end": 7.46,
+          "text": "We'd recognize, because the knowledge was encoded in something permanent, something that could survive any fire, any flood, any invasion.",
+          "entity": "Papiro",
+          "score": 75,
+          "source": "pexels",
+          "vision_saw": "Papiro antigo com hieróglifos",
+          "url": "https://www.pexels.com/video/7575433/",
+          "resolved": true
+        },
+        {
+          "idx": 1,
+          "start": 8.1,
+          "end": 16.78,
+          "text": "It was encoded in stone, in proportion, in orientation, in the physical laws of the universe itself, and they knew exactly what they were doing.",
+          "entity": "pedra",
+          "score": 75,
+          "source": "pexels",
+          "vision_saw": "Hieróglifos egípcios antigos",
+          "url": "https://www.pexels.com/video/7492694/",
+          "resolved": true
+        },
+        {
+          "idx": 2,
+          "start": 17.36,
+          "end": 23.6,
+          "text": "The Dendera Temple complex in Upper Egypt contains a ceiling that stopped astronomers cold when they first studied it in detail.",
+          "entity": "Teto do Templo de Dendera",
+          "score": 75,
+          "source": "pexels",
+          "vision_saw": "Teto com hieróglifos",
+          "url": "https://www.pexels.com/video/32537390/",
+          "resolved": true
+        },
+        {
+          "idx": 3,
+          "start": 24.24,
+          "end": 29.52,
+          "text": "Carved directly into limestone, the Dendera Zodiac depicts a complete star map of the night sky.",
+          "entity": "Dendera Zodiac",
+          "score": 75,
+          "source": "pexels",
+          "vision_saw": "Mapa estelar antigo",
+          "url": "https://www.pexels.com/video/854234/",
+          "resolved": true
+        }
+      ]
+    },
+    {
+      "name": "Cleopatra",
+      "elapsed_sec": 239.40708231925964,
+      "n_segments": 4,
+      "n_solved": 4,
+      "scores": [
+        75,
+        60,
+        75,
+        75
+      ],
+      "segments": [
+        {
+          "idx": 0,
+          "start": 0.0,
+          "end": 9.0,
+          "text": "crippled by famine and increasingly at the mercy of Rome's expanding empire. Her father, Tallah me the twelfth, had literally bought his throne back from Rome,",
+          "entity": "Tallah me",
+          "score": 75,
+          "source": "pexels",
+          "vision_saw": "Sarcófago egípcio antigo",
+          "url": "https://www.pexels.com/video/7575361/",
+          "resolved": true
+        },
+        {
+          "idx": 1,
+          "start": 9.42,
+          "end": 17.16,
+          "text": "using public funds, leaving the country in debt and its people furious. Cleopatra was handed a burning ship and told to sail it.",
+          "entity": "Cleopatra",
+          "score": 60,
+          "source": "pexels",
+          "vision_saw": "Cabeça de sarcófago egípcio",
+          "url": "https://www.pexels.com/video/7575431/",
+          "resolved": true
+        },
+        {
+          "idx": 2,
+          "start": 17.64,
+          "end": 26.84,
+          "text": "And she did. By the time she was 22, she had already survived an attempted coup led by her own brother. The man Rome recognized as Egypt's legitimate ruler.",
+          "entity": "Cleopatra",
+          "score": 75,
+          "source": "pexels",
+          "vision_saw": "estátuas de pessoas em um museu",
+          "url": "https://www.pexels.com/video/31808982/",
+          "resolved": true
+        },
+        {
+          "idx": 3,
+          "start": 27.62,
+          "end": 29.98,
+          "text": "She didn't flee the country and beg for help like her father.",
+          "entity": "Cleopatra",
+          "score": 75,
+          "source": "pexels",
+          "vision_saw": "mulher com véu",
+          "url": "https://www.pexels.com/video/5973395/",
+          "resolved": true
+        }
+      ]
+    }
+  ],
+  "total_segments": 12,
+  "total_solved": 12,
+  "score_sum": 905,
+  "score_count": 12,
+  "elapsed": 584.1668155193329,
+  "sources": {
+    "pexels": 11,
+    "pixabay": 1
+  }
+}
