@@ -82,10 +82,16 @@ def get_gemini():
 
 def ask_gemini(prompt, max_retries=2, timeout=90):
     """Send prompt to Gemini with model fallback and retry logic.
-    Models ordered: fastest first for better UX.
+    Models ordered: most available first for reliability.
     """
-    models = ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-flash"]
+    models = [
+        "gemini-2.5-flash-lite",   # Fastest, highest quota
+        "gemini-2.0-flash-lite",   # Fallback
+        "gemini-2.0-flash",        # More capable, lower quota
+        "gemini-2.5-flash",        # Most capable, lowest quota
+    ]
     last_err = ""
+
     
     def _call(model):
         client = get_gemini()
