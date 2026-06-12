@@ -470,27 +470,27 @@ class MultiSourceSearcher:
         return results
 
     def _search_pexels(self, query: str, min_dur: float) -> list:
+        """pexels_stock.search_videos returns normalized:
+           {id, url, duration, width, height, preview_url}"""
         try:
             from core.pexels_stock import search_videos
             raw = search_videos(self.pexels_key, query, count=self.max_per_source,
                                 min_duration=int(min_dur))
             out = []
             for v in raw or []:
-                # Pexels schema: {id, url, image, video_files: [{link, width, height, ...}], duration}
-                files = v.get("video_files") or []
-                if not files:
+                if not v.get("url"):
                     continue
-                best = max(files, key=lambda f: f.get("width", 0))
+                vid = str(v.get("id", ""))
                 out.append(ClipCandidate(
                     source="pexels",
-                    source_id=str(v.get("id", "")),
-                    title=str(v.get("user", {}).get("name", "") or "pexels clip"),
-                    page_url=str(v.get("url", "")),
-                    download_url=str(best.get("link", "")),
-                    thumbnail_url=str(v.get("image", "")),
+                    source_id=vid,
+                    title=f"pexels {vid}",
+                    page_url=f"https://www.pexels.com/video/{vid}/",
+                    download_url=str(v["url"]),
+                    thumbnail_url=str(v.get("preview_url", "")),
                     duration=float(v.get("duration", 0)),
-                    width=int(best.get("width", 0)),
-                    height=int(best.get("height", 0)),
+                    width=int(v.get("width", 0)),
+                    height=int(v.get("height", 0)),
                 ))
             return out
         except Exception as e:
@@ -498,31 +498,28 @@ class MultiSourceSearcher:
             return []
 
     def _search_pixabay(self, query: str, min_dur: float) -> list:
+        """pixabay_stock.search_videos returns normalized:
+           {id, url, duration, width, height}"""
         try:
             from core.pixabay_stock import search_videos
             raw = search_videos(self.pixabay_key, query, count=self.max_per_source,
                                 min_duration=int(min_dur))
             out = []
             for v in raw or []:
-                videos = v.get("videos", {})
-                best_url = ""
-                best_w = 0
-                for q in ("large", "medium", "small"):
-                    info = videos.get(q, {})
-                    if info.get("url") and info.get("width", 0) > best_w:
-                        best_url = info["url"]
-                        best_w = info.get("width", 0)
-                if not best_url:
+                if not v.get("url"):
                     continue
+                vid = str(v.get("id", ""))
                 out.append(ClipCandidate(
                     source="pixabay",
-                    source_id=str(v.get("id", "")),
-                    title=str(v.get("tags", "") or "pixabay clip"),
-                    page_url=str(v.get("pageURL", "")),
-                    download_url=best_url,
-                    thumbnail_url=f"https://i.vimeocdn.com/video/{v.get('picture_id','')}_640x360.jpg" if v.get("picture_id") else "",
+                    source_id=vid,
+                    title=f"pixabay {vid}",
+                    page_url=f"https://pixabay.com/videos/id-{vid}/",
+                    download_url=str(v["url"]),
+                    # Pixabay doesn't return thumbnail in normalized form — fetch via known pattern
+                    thumbnail_url=f"https://i.vimeocdn.com/video/{vid}_640x360.jpg",
                     duration=float(v.get("duration", 0)),
-                    width=best_w,
+                    width=int(v.get("width", 0)),
+                    height=int(v.get("height", 0)),
                 ))
             return out
         except Exception as e:
