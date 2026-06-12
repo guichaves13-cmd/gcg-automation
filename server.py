@@ -55,28 +55,50 @@ def get_gemini():
         _gemini_client = genai.Client(api_key=GOOGLE_API_KEY)
     return _gemini_client
 
-def ask_gemini(prompt, max_retries=3):
-    """Send prompt to Gemini with model fallback and retry logic."""
-    models = ["gemini-2.5-flash", "gemini-2.0-flash-lite", "gemini-2.5-flash-lite"]
+def ask_gemini(prompt, max_retries=2, timeout=90):
+    """Send prompt to Gemini with model fallback and retry logic.
+    Models ordered: fastest first for better UX.
+    """
+    models = ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-flash"]
     last_err = ""
+    
+    def _call(model):
+        client = get_gemini()
+        r = client.models.generate_content(
+            model=model,
+            contents=prompt,
+        )
+        return r.text if r and r.text else ""
+
     for model in models:
         for attempt in range(max_retries):
             try:
-                client = get_gemini()
-                r = client.models.generate_content(
-                    model=model,
-                    contents=prompt,
-                )
-                return r.text if r and r.text else ""
+                # Run with thread timeout
+                result = [None]
+                error = [None]
+                def _run():
+                    try:
+                        result[0] = _call(model)
+                    except Exception as e:
+                        error[0] = e
+                t = threading.Thread(target=_run, daemon=True)
+                t.start()
+                t.join(timeout=timeout)
+                if t.is_alive():
+                    # Timed out — try next model
+                    last_err = f"[Timeout {timeout}s on {model}]"
+                    break
+                if error[0]:
+                    raise error[0]
+                return result[0]
             except Exception as e:
                 last_err = str(e)
                 err = last_err.lower()
                 if "429" in err or "quota" in err or "resource_exhausted" in err:
-                    # Extract retry delay if available
-                    import re
-                    delay_match = re.search(r'retry.*?(\d+)', last_err)
+                    import re as _re
+                    delay_match = _re.search(r'retry.*?(\d+)', last_err)
                     wait = int(delay_match.group(1)) if delay_match else (5 * (attempt + 1))
-                    wait = min(wait, 30)  # cap at 30s
+                    wait = min(wait, 20)  # cap at 20s
                     if attempt < max_retries - 1:
                         time.sleep(wait)
                         continue
