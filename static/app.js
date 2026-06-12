@@ -661,10 +661,16 @@ async function findSubniches(){
       const oppColor=n.opportunity>=6?'#4ecca3':n.opportunity>=3?'#f59e0b':'#e94560';
       let titles=(n.example_titles||[]).map(t=>`<div class="title-item" style="margin:4px 0"><div class="title-text">${escHtml(t)}</div><div class="title-len">${t.length}c</div></div>`).join('');
       let kws=(n.keywords||[]).map(k=>`<span class="tag tag-blue">${k}</span>`).join('');
+      const bos = n.blue_ocean_score || 0;
+      const bosColor = bos >= 80 ? '#4ecca3' : bos >= 60 ? '#f59e0b' : '#e94560';
       html+=`<div class="niche-card">
         <div style="display:flex;justify-content:space-between;align-items:start">
           <h3 style="margin:0">#${i+1} ${escHtml(n.name)}</h3>
-          <button class="btn-primary" style="font-size:11px;padding:4px 8px" onclick="useInRemix('${escHtml(n.name).replace(/'/g, "\\'")}')">🔀 Use in Remix</button>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <span style="background:${bosColor}20;color:${bosColor};padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">BOS ${bos}</span>
+            <button class="btn-primary" style="font-size:11px;padding:4px 8px;background:#7c3aed" onclick="findMicroNicho('${escHtml(n.name).replace(/'/g, "\\'")}','${escHtml(theme).replace(/'/g, "\\'")}')">🔬 Micro-Nichos</button>
+            <button class="btn-primary" style="font-size:11px;padding:4px 8px" onclick="useInRemix('${escHtml(n.name).replace(/'/g, "\\'")}')">🔀 Remix</button>
+          </div>
         </div>
         <div class="niche-meter" style="margin-top:12px">
           <div class="meter"><div class="meter-label">DEMAND</div><div class="meter-bar"><div class="meter-fill" style="width:${n.demand*10}%;background:${demColor}"></div></div><div style="font-size:11px;color:${demColor};margin-top:2px">${n.demand}/10</div></div>
@@ -674,10 +680,13 @@ async function findSubniches(){
         <div style="font-size:12px;color:#aaa;margin:8px 0">👤 <b>Audience:</b> ${escHtml(n.target_audience||'')}</div>
         <div style="font-size:12px;color:#aaa;margin:4px 0">😤 <b>Pain:</b> ${escHtml(n.audience_pain||'')}</div>
         <div style="font-size:12px;color:#aaa;margin:4px 0">🎯 <b>Angle:</b> ${escHtml(n.content_angle||'')}</div>
+        ${n.first_video_idea ? `<div style="font-size:12px;color:#4ecca3;margin:4px 0;padding:6px;background:rgba(78,204,163,0.08);border-radius:4px">🎬 <b>1º Vídeo:</b> ${escHtml(n.first_video_idea)}</div>` : ''}
+        ${n.rpm_estimate ? `<div style="font-size:12px;color:#f59e0b;margin:4px 0">💰 <b>RPM:</b> ${escHtml(n.rpm_estimate)}</div>` : ''}
         <div style="font-size:12px;color:#aaa;margin:4px 0">📊 <b>Est. views:</b> ${escHtml(n.estimated_views_per_video||'')}</div>
         <div class="tags" style="margin:8px 0">${kws}</div>
         <div style="margin-top:8px"><b style="font-size:11px;color:#4ecca3">EXAMPLE TITLES</b>${titles}</div>
       </div>`;
+
     });
   } else if(r.raw){
     html=`<div class="ai-text">${escHtml(r.raw)}</div>`;
@@ -1358,3 +1367,142 @@ document.getElementById('analyze-input')?.addEventListener('keydown',e=>{if(e.ke
 document.getElementById('gen-topic')?.addEventListener('keydown',e=>{if(e.key==='Enter')generateTitles()});
 document.getElementById('yt-ch-input')?.addEventListener('keydown',e=>{if(e.key==='Enter')scanChannel()});
 document.getElementById('yt-niche-q')?.addEventListener('keydown',e=>{if(e.key==='Enter')scanNiche()});
+
+// ─── NOVO: MICRO-NICHO ───
+async function findMicroNicho(subniche, parentNiche) {
+  loading(true, `🔬 Analisando micro-nichos de "${subniche}"...`);
+  try {
+    const lang = document.getElementById('sub-lang')?.value || 'Portuguese';
+    const r = await post('/api/micronicho', { subniche, parent_niche: parentNiche || '', language: lang });
+    if (r.error) { alert('Erro: ' + r.error); return; }
+    const micros = r.micronichos || [];
+    
+    let html = `<div class="score-card" style="margin-top:16px">
+      <h3 style="color:var(--accent);margin-bottom:12px">🔬 Micro-nichos de: ${escHtml(subniche)}</h3>
+      <div style="display:grid;gap:12px">`;
+    
+    micros.forEach((m, i) => {
+      const bos = m.blue_ocean_score || 0;
+      const bosColor = bos >= 80 ? '#4ecca3' : bos >= 60 ? '#f59e0b' : '#e94560';
+      const compColor = {'Very Low':'#4ecca3','Low':'#86efac','Medium':'#f59e0b','High':'#f97316','Very High':'#e94560'}[m.competition_level] || '#666';
+      html += `<div style="border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <strong style="color:#fff;font-size:14px">${i+1}. ${escHtml(m.name)}</strong>
+          <div style="display:flex;gap:8px">
+            <span style="background:${bosColor}20;color:${bosColor};padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">BOS ${bos}</span>
+            <span style="background:${compColor}20;color:${compColor};padding:2px 8px;border-radius:20px;font-size:11px">${escHtml(m.competition_level||'')}</span>
+          </div>
+        </div>
+        ${m.unique_angle ? `<div style="font-size:12px;color:#a0a0a0;margin-bottom:6px">🎯 <b style="color:#4ecca3">Ângulo único:</b> ${escHtml(m.unique_angle)}</div>` : ''}
+        ${m.target_avatar ? `<div style="font-size:12px;color:#a0a0a0;margin-bottom:6px">👤 <b>Avatar:</b> ${escHtml(m.target_avatar)}</div>` : ''}
+        ${m.content_gap ? `<div style="font-size:12px;color:#a0a0a0;margin-bottom:6px">📭 <b>Gap:</b> ${escHtml(m.content_gap)}</div>` : ''}
+        ${m.first_3_videos && m.first_3_videos.length > 0 ? `
+        <div style="margin-top:8px">
+          <div style="font-size:11px;color:#666;margin-bottom:4px">PRIMEIROS 3 VÍDEOS:</div>
+          ${m.first_3_videos.map((v,vi) => `<div style="font-size:12px;color:#e0e0e0;padding:3px 0;border-bottom:1px solid rgba(255,255,255,0.05)">${vi+1}. ${escHtml(v)}</div>`).join('')}
+        </div>` : ''}
+        <div style="display:flex;gap:12px;margin-top:8px;font-size:11px;color:#666">
+          ${m.estimated_rpm ? `<span>💰 ${escHtml(m.estimated_rpm)}</span>` : ''}
+          ${m.time_to_monetize ? `<span>⏱️ ${escHtml(m.time_to_monetize)}</span>` : ''}
+          ${m.why_now ? `<span title="${escHtml(m.why_now)}">🔥 Por que agora</span>` : ''}
+        </div>
+      </div>`;
+    });
+    
+    html += `</div></div>`;
+    
+    // Inserir após o card do sub-nicho pai
+    const container = document.getElementById('sub-result');
+    if (container) {
+      const existing = container.querySelector('.micros-container-' + subniche.replace(/\s/g,'_'));
+      if (existing) existing.remove();
+      const div = document.createElement('div');
+      div.className = 'micros-container-' + subniche.replace(/\s/g,'_');
+      div.innerHTML = html;
+      container.appendChild(div);
+    }
+  } catch(e) { alert('Erro: ' + e.message); }
+  finally { loading(false); }
+}
+
+// ─── NOVO: ESTRATÉGIA COMPLETA 3 NÍVEIS ───
+async function nicheStrategyComplete() {
+  const niche = document.getElementById('sub-theme')?.value?.trim();
+  if (!niche) { alert('Digite um nicho!'); return; }
+  const lang = document.getElementById('sub-lang')?.value || 'Portuguese';
+  
+  loading(true, `🗺️ Gerando mapa estratégico completo de "${niche}"...`);
+  try {
+    const r = await post('/api/niche_strategy_complete', { niche, language: lang });
+    if (r.error) { alert('Erro: ' + r.error); return; }
+    const st = r.strategy || {};
+    const mn = st.main_niche || {};
+    const subs = st.subniches || [];
+    
+    let html = `<div class="score-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <h3 style="color:var(--accent);margin:0">🗺️ Mapa Estratégico: ${escHtml(mn.name || niche)}</h3>
+        <div style="font-size:12px;color:#666">${subs.length} sub-nichos · ${subs.reduce((a,s)=>a+(s.micronichos||[]).length,0)} micro-nichos</div>
+      </div>`;
+    
+    if (mn.opportunity_summary) {
+      html += `<div style="background:rgba(78,204,163,0.08);border:1px solid rgba(78,204,163,0.2);border-radius:8px;padding:12px;margin-bottom:16px;font-size:13px;color:#a0a0a0">${escHtml(mn.opportunity_summary)}</div>`;
+    }
+    
+    if (mn.avg_rpm || mn.market_size) {
+      html += `<div style="display:flex;gap:16px;margin-bottom:16px;font-size:12px">
+        ${mn.avg_rpm ? `<span style="color:#4ecca3">💰 RPM médio: ${escHtml(mn.avg_rpm)}</span>` : ''}
+        ${mn.market_size ? `<span style="color:#a0a0a0">📊 Mercado: ${escHtml(mn.market_size)}</span>` : ''}
+        ${mn.competition ? `<span style="color:#f59e0b">⚔️ Competição: ${escHtml(mn.competition)}</span>` : ''}
+      </div>`;
+    }
+    
+    subs.forEach((sub, si) => {
+      const bos = sub.blue_ocean_score || 0;
+      const bosColor = bos >= 80 ? '#4ecca3' : bos >= 60 ? '#f59e0b' : '#e94560';
+      const micros = sub.micronichos || [];
+      
+      html += `<details style="margin-bottom:10px" open>
+        <summary style="cursor:pointer;padding:12px;background:rgba(255,255,255,0.04);border-radius:8px;list-style:none;display:flex;justify-content:space-between;align-items:center">
+          <span style="font-weight:600;color:#fff">${si+1}. ${escHtml(sub.name)}</span>
+          <div style="display:flex;gap:8px;align-items:center">
+            <span style="background:${bosColor}20;color:${bosColor};padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">BOS ${bos}</span>
+            ${sub.rpm_estimate ? `<span style="color:#666;font-size:11px">${escHtml(sub.rpm_estimate)}</span>` : ''}
+            <span style="color:#666;font-size:11px">${micros.length} micro</span>
+          </div>
+        </summary>
+        <div style="padding:12px;border:1px solid rgba(255,255,255,0.06);border-top:none;border-radius:0 0 8px 8px">
+          ${sub.content_angle ? `<div style="font-size:12px;color:#a0a0a0;margin-bottom:6px">🎯 ${escHtml(sub.content_angle)}</div>` : ''}
+          ${sub.first_video_idea ? `<div style="font-size:12px;color:#4ecca3;margin-bottom:8px;padding:6px;background:rgba(78,204,163,0.08);border-radius:4px">🎬 1º vídeo: ${escHtml(sub.first_video_idea)}</div>` : ''}
+          ${sub.example_titles && sub.example_titles.length ? `<div style="margin-bottom:10px">${sub.example_titles.map(t=>`<div style="font-size:12px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.05);color:#e0e0e0">• ${escHtml(t)}</div>`).join('')}</div>` : ''}
+          ${micros.length > 0 ? `
+          <div style="margin-top:10px">
+            <div style="font-size:11px;color:#666;margin-bottom:8px;letter-spacing:0.5px">MICRO-NICHOS:</div>
+            <div style="display:grid;gap:8px">
+              ${micros.map((mc, mi) => {
+                const mbos = mc.blue_ocean_score || 0;
+                const mc_color = mbos >= 80 ? '#4ecca3' : mbos >= 60 ? '#f59e0b' : '#e94560';
+                return `<div style="padding:10px;background:rgba(255,255,255,0.02);border-radius:6px;border-left:3px solid ${mc_color}">
+                  <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+                    <span style="font-size:12px;font-weight:600;color:#fff">${escHtml(mc.name)}</span>
+                    <span style="font-size:10px;color:${mc_color}">BOS ${mbos}</span>
+                  </div>
+                  ${mc.unique_angle ? `<div style="font-size:11px;color:#808080;margin-bottom:3px">→ ${escHtml(mc.unique_angle)}</div>` : ''}
+                  ${mc.first_3_videos && mc.first_3_videos.length ? `<div style="font-size:11px;color:#606060">${mc.first_3_videos.slice(0,2).map((v,vi)=>`${vi+1}. ${escHtml(v)}`).join(' · ')}</div>` : ''}
+                  <div style="font-size:10px;color:#555;margin-top:4px">${mc.estimated_rpm ? mc.estimated_rpm : ''} ${mc.time_to_monetize ? '· '+mc.time_to_monetize : ''}</div>
+                </div>`;
+              }).join('')}
+            </div>
+          </div>` : ''}
+        </div>
+      </details>`;
+    });
+    
+    html += `</div>`;
+    
+    const res = document.getElementById('sub-result');
+    if (res) res.innerHTML = html;
+  } catch(e) { alert('Erro: ' + e.message); }
+  finally { loading(false); }
+}
+

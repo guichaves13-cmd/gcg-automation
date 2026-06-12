@@ -87,45 +87,81 @@ def ask_gemini(prompt, max_retries=3):
                     break  # try next model
     return f"[AI Error: All models failed. Last: {last_err[:150]}]"
 
+def safe_parse_json(text, expected_type="dict"):
+    """
+    Safely extract and parse JSON from a Gemini response string.
+    Handles markdown code blocks and garbage text surrounding the JSON.
+    expected_type: 'dict' for {...} or 'list' for [...]
+    """
+    if text.startswith("[AI Error"):
+        raise ValueError(text)
+        
+    cleaned = text.strip()
+    cleaned = re.sub(r'^```json\s*', '', cleaned)
+    cleaned = re.sub(r'^```\s*', '', cleaned)
+    cleaned = re.sub(r'\s*```$', '', cleaned)
+    
+    # Try direct parse first
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
+        
+    # Regex extraction fallback
+    pattern = r'\{.*\}' if expected_type == "dict" else r'\[.*\]'
+    match = re.search(pattern, cleaned, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group())
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Extracted JSON was still invalid: {str(e)}")
+            
+    raise ValueError("Could not locate valid JSON structure in AI response.")
+
 # =============================================
 # VIRAL ANALYSIS ENGINE — Multi-Language
 # =============================================
 _VIRAL_STRUCTURES_BY_LANG = {
     "en": {
         "curiosity_gap": {
-            "pattern": r"(?:why|how|what|the real reason|the truth|nobody|secret|hidden|no one)",
+            "pattern": r"(?:why|how|what|the real reason|the truth|nobody|secret|hidden|no one|they don|didn't|never told|nobody knows)",
             "name": "Curiosity Gap", "ctr_boost": 1.40,
             "desc": "Creates information gap the viewer MUST close",
         },
         "superlative": {
-            "pattern": r"(?:most|largest|biggest|deadliest|worst|best|extreme|impossible|insane|craziest)",
+            "pattern": r"(?:\b\w+est\b|most|largest|biggest|deadliest|worst|best|extreme|impossible|insane|craziest|greatest|strongest|fastest|deepest|tallest|oldest|scariest|rarest|strangest|weirdest|richest|poorest)",
             "name": "Superlative", "ctr_boost": 1.35,
             "desc": "Extreme claims that demand attention",
         },
         "specific_number": {
-            "pattern": r"(?:\$[\d,.]+|\b\d+\b).*(?:that|which|reason|way|thing|fact|place)",
+            "pattern": r"(?:\$[\d,.]+|\b\d+\b)",
             "name": "Specific Number", "ctr_boost": 1.30,
             "desc": "Numbers add credibility and specificity",
         },
         "permanence": {
-            "pattern": r"(?:never|forever|always|still|remains|eternal|no longer|ended)",
+            "pattern": r"(?:never|forever|always|still|remains|eternal|no longer|ended|changed everything|will never)",
             "name": "Permanence Claim", "ctr_boost": 1.25,
             "desc": "Permanence creates urgency and weight",
         },
         "authority_emotion": {
-            "pattern": r"(?:scientist|government|nasa|expert|doctor|military|fbi|cia).*(?:hid|warn|afraid|shock|terrif|speechless|panic)",
+            "pattern": r"(?:scientist|government|nasa|expert|doctor|military|fbi|cia|researcher|study|studies|discovered|found|reveals)",
             "name": "Authority + Emotion", "ctr_boost": 1.45,
             "desc": "Authority figures + emotional reaction = highest CTR",
         },
         "contrast": {
-            "pattern": r"(?:but|however|yet|despite|instead|actually|turns out|thought.*wrong)",
+            "pattern": r"(?:but|however|yet|despite|instead|actually|turns out|thought.*wrong|what really|the truth about)",
             "name": "Contrast Hook", "ctr_boost": 1.30,
             "desc": "Unexpected twist creates cognitive dissonance",
         },
         "forbidden": {
-            "pattern": r"(?:forbidden|banned|illegal|restricted|classified|censored|deleted)",
+            "pattern": r"(?:forbidden|banned|illegal|restricted|classified|censored|deleted|covered up|they don't want)",
             "name": "Forbidden Content", "ctr_boost": 1.40,
             "desc": "Restricted = must-see content",
+        },
+        "discovery": {
+            "pattern": r"(?:discovered|found|drilled|excavated|uncovered|revealed|happened|inside|beneath|under|world's)",
+            "name": "Discovery", "ctr_boost": 1.25,
+            "desc": "Discovery framing creates compelling watch reason",
         },
     },
     "pt": {
@@ -499,77 +535,229 @@ def api_subniche():
 {"MAIN THEME: " + theme if theme else "Analyze ALL trending YouTube themes."}
 TARGET LANGUAGE: {language}
 
-Your task: Find the most PROFITABLE subniches that have:
+Your task: Find the most PROFITABLE sub-niches that have:
 - HIGH viewer demand (people actively searching)
 - LOW creator supply (few channels covering it well)
 - VIRAL potential (emotional, curiosity-driven topics)
 
-For each subniche provide:
-1. SUBNICHE NAME (specific, not broad)
-2. DEMAND LEVEL (1-10): How much viewers want this content
-3. SUPPLY LEVEL (1-10): How many creators already do this well
-4. OPPORTUNITY SCORE: demand minus supply
-5. TARGET AUDIENCE: Who watches this
-6. AUDIENCE PAIN: What problem/curiosity they have
-7. CONTENT ANGLE: The unique approach to stand out
-8. 3 EXAMPLE VIRAL TITLES: Using proven structures, max 100 chars each
+For each sub-niche return a JSON object with EXACTLY these fields:
+{{
+  "name": "Sub-niche Name (specific)",
+  "demand": 9,
+  "supply": 2,
+  "opportunity": 7,
+  "blue_ocean_score": 85,
+  "target_audience": "Who watches this content",
+  "audience_pain": "The core problem/curiosity they have",
+  "content_angle": "The unique approach to dominate this sub-niche",
+  "first_video_idea": "Exact title and concept for the FIRST video you should make to start this channel",
+  "rpm_estimate": "$3-6 RPM",
+  "example_titles": ["Viral Title 1 (max 100 chars)", "Viral Title 2", "Viral Title 3"],
+  "keywords": ["keyword1", "keyword2", "keyword3", "keyword4"],
+  "estimated_views_per_video": "50K-200K"
+}}
 
-Return exactly 8 subniches in this JSON format:
-[
-  {{
-    "name": "Subniche Name",
-    "demand": 9,
-    "supply": 2,
-    "opportunity": 7,
-    "target_audience": "Description",
-    "audience_pain": "What they want to know",
-    "content_angle": "How to stand out",
-    "example_titles": ["Title 1", "Title 2", "Title 3"],
-    "keywords": ["keyword1", "keyword2", "keyword3"],
-    "estimated_views_per_video": "50K-200K"
-  }}
-]
+blue_ocean_score: 0-100. 100 = completely untapped (no competition, high demand). 0 = red ocean (oversaturated).
+first_video_idea: Be SPECIFIC — not just a topic, but the exact title and why it will work as a first video.
+rpm_estimate: Real CPM/RPM range for this niche.
 
-Return ONLY valid JSON array. No markdown, no explanation."""
+Return exactly 8 sub-niches as a valid JSON array. NO markdown, NO explanation."""
 
     result = ask_gemini(prompt)
     
-    # Check for AI errors
     if result.startswith("[AI Error"):
         return jsonify({"niches": [], "raw": result, "theme": theme, "error": result})
     
-    # Parse JSON
     try:
-        # Strip markdown code fences
-        cleaned = result.strip()
-        cleaned = re.sub(r'^```json\s*', '', cleaned)
-        cleaned = re.sub(r'^```\s*', '', cleaned)
-        cleaned = re.sub(r'\s*```$', '', cleaned)
+        niches = safe_parse_json(result, "list")
         
-        # Find JSON array in response
-        match = re.search(r'\[.*\]', cleaned, re.DOTALL)
-        if match:
-            niches = json.loads(match.group())
-        else:
-            niches = json.loads(cleaned)
-        
-        # Ensure all items have required fields
         for n in niches:
             n.setdefault("demand", 5)
             n.setdefault("supply", 5)
             n.setdefault("opportunity", n.get("demand", 5) - n.get("supply", 5))
+            n.setdefault("blue_ocean_score", max(0, min(100, int((n.get("opportunity", 5) / 10) * 100))))
             n.setdefault("keywords", [])
             n.setdefault("example_titles", [])
             n.setdefault("target_audience", "")
             n.setdefault("audience_pain", "")
             n.setdefault("content_angle", "")
+            n.setdefault("first_video_idea", "")
+            n.setdefault("rpm_estimate", "")
             n.setdefault("estimated_views_per_video", "")
         
-        # Sort by opportunity
-        niches.sort(key=lambda x: x.get("opportunity", 0), reverse=True)
+        niches.sort(key=lambda x: x.get("blue_ocean_score", x.get("opportunity", 0)), reverse=True)
         return jsonify({"niches": niches, "theme": theme})
     except Exception as e:
         return jsonify({"niches": [], "raw": result, "theme": theme, "error": f"JSON parse error: {str(e)[:80]}"})
+
+@app.route("/api/micronicho", methods=["POST"])
+def api_micronicho():
+    """Level 3: Find micro-niches within a sub-niche."""
+    data = request.json
+    subniche = data.get("subniche", data.get("name", ""))
+    parent = data.get("parent_niche", data.get("theme", ""))
+    language = data.get("language", "English")
+
+    if not subniche:
+        return jsonify({"error": "subniche is required"}), 400
+
+    prompt = f"""You are an elite YouTube micro-niche specialist. Your job is to find hyper-specific, UNTAPPED micro-niches.
+
+PARENT NICHE: {parent or 'General'}
+SUB-NICHE: {subniche}
+LANGUAGE: {language}
+
+Find 6 MICRO-NICHES within "{subniche}". Each must be:
+- Extremely specific (not broad)
+- Searchable and monetizable
+- Underserved by existing content creators
+- Emotionally compelling for the viewer
+
+For each micro-niche, return:
+{{
+  "name": "Micro-niche Name",
+  "blue_ocean_score": 92,
+  "competition_level": "Very Low",
+  "target_avatar": "Precise description of the viewer (age, interests, pain)",
+  "unique_angle": "The specific content angle that NOBODY is doing",
+  "content_gap": "What content is missing that people desperately want",
+  "first_3_videos": ["Video title 1", "Video title 2", "Video title 3"],
+  "estimated_rpm": "$4-8",
+  "time_to_monetize": "3-6 months",
+  "why_now": "Why this micro-niche is at its peak opportunity RIGHT NOW"
+}}
+
+competition_level options: "Very Low", "Low", "Medium", "High", "Very High"
+
+Return a JSON array of 6 micro-niches. ONLY valid JSON, no markdown."""
+
+    result = ask_gemini(prompt)
+    if result.startswith("[AI Error"):
+        return jsonify({"error": result, "micronichos": []})
+    
+    try:
+        micronichos = safe_parse_json(result, "list")
+        for m in micronichos:
+            m.setdefault("blue_ocean_score", 75)
+            m.setdefault("competition_level", "Low")
+            m.setdefault("target_avatar", "")
+            m.setdefault("unique_angle", "")
+            m.setdefault("content_gap", "")
+            m.setdefault("first_3_videos", [])
+            m.setdefault("estimated_rpm", "")
+            m.setdefault("time_to_monetize", "")
+            m.setdefault("why_now", "")
+        micronichos.sort(key=lambda x: x.get("blue_ocean_score", 0), reverse=True)
+        return jsonify({"micronichos": micronichos, "subniche": subniche, "parent": parent})
+    except Exception as e:
+        return jsonify({"error": f"JSON parse error: {str(e)[:80]}", "micronichos": [], "raw": result})
+
+@app.route("/api/niche_strategy_complete", methods=["POST"])
+def api_niche_strategy_complete():
+    """Complete 3-level niche strategy: Niche > Sub-niches > Micro-niches"""
+    data = request.json
+    niche = data.get("niche", "")
+    language = data.get("language", "English")
+
+    if not niche:
+        return jsonify({"error": "niche is required"}), 400
+
+    prompt = f"""You are the world's #1 YouTube channel strategist. Generate a COMPLETE 3-level niche strategy map.
+
+NICHE: {niche}
+LANGUAGE: {language}
+
+Generate a complete strategy JSON with this structure:
+{{
+  "main_niche": {{
+    "name": "{niche}",
+    "competition": "Medium",
+    "opportunity_summary": "Why this niche has massive potential right now",
+    "avg_rpm": "$3-7",
+    "market_size": "~2.4B searches/month",
+    "best_content_types": ["Documentary", "Listicle", "Deep Dive"]
+  }},
+  "subniches": [
+    {{
+      "name": "Sub-niche 1",
+      "demand": 9,
+      "supply": 3,
+      "opportunity": 6,
+      "blue_ocean_score": 78,
+      "rpm_estimate": "$4-8",
+      "content_angle": "Specific angle to dominate",
+      "first_video_idea": "Exact first video concept and why it works",
+      "example_titles": ["Viral title 1", "Viral title 2"],
+      "micronichos": [
+        {{
+          "name": "Micro-niche 1",
+          "blue_ocean_score": 90,
+          "competition_level": "Very Low",
+          "target_avatar": "Who watches this",
+          "unique_angle": "What nobody is doing",
+          "first_3_videos": ["Title 1", "Title 2", "Title 3"],
+          "estimated_rpm": "$5-10",
+          "time_to_monetize": "2-4 months"
+        }},
+        {{
+          "name": "Micro-niche 2",
+          "blue_ocean_score": 85,
+          "competition_level": "Low",
+          "target_avatar": "Who watches this",
+          "unique_angle": "What nobody is doing",
+          "first_3_videos": ["Title 1", "Title 2", "Title 3"],
+          "estimated_rpm": "$4-8",
+          "time_to_monetize": "3-5 months"
+        }},
+        {{
+          "name": "Micro-niche 3",
+          "blue_ocean_score": 80,
+          "competition_level": "Low",
+          "target_avatar": "Who watches this",
+          "unique_angle": "What nobody is doing",
+          "first_3_videos": ["Title 1", "Title 2", "Title 3"],
+          "estimated_rpm": "$3-6",
+          "time_to_monetize": "4-6 months"
+        }}
+      ]
+    }}
+  ]
+}}
+
+Provide 5 sub-niches each with 3 micro-niches = 15 micro-niche opportunities total.
+Return ONLY valid JSON. No markdown. No explanation."""
+
+    result = ask_gemini(prompt)
+    if result.startswith("[AI Error"):
+        return jsonify({"error": result, "strategy": None})
+    
+    try:
+        strategy = safe_parse_json(result, "dict")
+        # Ensure structure
+        strategy.setdefault("main_niche", {"name": niche})
+        strategy.setdefault("subniches", [])
+        for sub in strategy.get("subniches", []):
+            sub.setdefault("blue_ocean_score", 70)
+            sub.setdefault("demand", 7)
+            sub.setdefault("supply", 4)
+            sub.setdefault("opportunity", sub.get("demand", 7) - sub.get("supply", 4))
+            sub.setdefault("rpm_estimate", "")
+            sub.setdefault("content_angle", "")
+            sub.setdefault("first_video_idea", "")
+            sub.setdefault("example_titles", [])
+            sub.setdefault("micronichos", [])
+            for mc in sub.get("micronichos", []):
+                mc.setdefault("blue_ocean_score", 75)
+                mc.setdefault("competition_level", "Low")
+                mc.setdefault("target_avatar", "")
+                mc.setdefault("unique_angle", "")
+                mc.setdefault("first_3_videos", [])
+                mc.setdefault("estimated_rpm", "")
+                mc.setdefault("time_to_monetize", "")
+        return jsonify({"strategy": strategy, "niche": niche})
+    except Exception as e:
+        return jsonify({"error": f"JSON parse error: {str(e)[:80]}", "strategy": None, "raw": result})
+
 
 @app.route("/api/deep_analysis", methods=["POST"])
 def api_deep_analysis():
@@ -617,10 +805,7 @@ Be brutally honest. No generic advice. Return ONLY valid JSON."""
     try:
         cleaned = result.strip()
         cleaned = re.sub(r'^```json\s*', '', cleaned)
-        cleaned = re.sub(r'^```\s*', '', cleaned)
-        cleaned = re.sub(r'\s*```$', '', cleaned)
-        match = re.search(r'\{.*\}', cleaned, re.DOTALL)
-        ai_json = json.loads(match.group()) if match else json.loads(cleaned)
+        ai_json = safe_parse_json(result, "dict")
         basic["ai_deep_analysis"] = ai_json
     except Exception as e:
         basic["ai_deep_analysis"] = {"error": f"JSON parse error: {str(e)[:80]}", "raw": result}
@@ -683,10 +868,7 @@ Make the connection logical but shocking. Return ONLY valid JSON. No markdown ou
     try:
         cleaned = result.strip()
         cleaned = re.sub(r'^```json\s*', '', cleaned)
-        cleaned = re.sub(r'^```\s*', '', cleaned)
-        cleaned = re.sub(r'\s*```$', '', cleaned)
-        match = re.search(r'\{.*\}', cleaned, re.DOTALL)
-        crossover_json = json.loads(match.group()) if match else json.loads(cleaned)
+        crossover_json = safe_parse_json(result, "dict")
         return jsonify({"crossover_data": crossover_json})
     except Exception as e:
         return jsonify({"error": f"JSON parse error: {str(e)[:80]}", "raw": result})
@@ -724,9 +906,7 @@ Return ONLY valid JSON."""
     result = ask_gemini(prompt)
     if result.startswith("[AI Error"): return jsonify({"error": result})
     try:
-        cleaned = re.sub(r'^```json\s*|^```\s*|\s*```$', '', result.strip())
-        match = re.search(r'\{.*\}', cleaned, re.DOTALL)
-        return jsonify({"hijack_data": json.loads(match.group()) if match else json.loads(cleaned)})
+        return jsonify({"hijack_data": safe_parse_json(result, "dict")})
     except Exception as e:
         return jsonify({"error": f"JSON parse error: {str(e)[:80]}"})
 
@@ -754,9 +934,7 @@ Return ONLY valid JSON."""
     result = ask_gemini(prompt)
     if result.startswith("[AI Error"): return jsonify({"error": result})
     try:
-        cleaned = re.sub(r'^```json\s*|^```\s*|\s*```$', '', result.strip())
-        match = re.search(r'\{.*\}', cleaned, re.DOTALL)
-        return jsonify({"blueprint_data": json.loads(match.group()) if match else json.loads(cleaned)})
+        return jsonify({"blueprint_data": safe_parse_json(result, "dict")})
     except Exception as e:
         return jsonify({"error": f"JSON parse error: {str(e)[:80]}"})
 
@@ -803,9 +981,7 @@ Return ONLY valid JSON."""
     result = ask_gemini(prompt)
     if result.startswith("[AI Error"): return jsonify({"error": result})
     try:
-        cleaned = re.sub(r'^```json\s*|^```\s*|\s*```$', '', result.strip())
-        match = re.search(r'\{.*\}', cleaned, re.DOTALL)
-        ai_data = json.loads(match.group()) if match else json.loads(cleaned)
+        ai_data = safe_parse_json(result, "dict")
         
         return jsonify({
             "outliers_found": top_3,
@@ -895,9 +1071,7 @@ Return ONLY valid JSON."""
     result = ask_gemini(prompt)
     if result.startswith("[AI Error"): return jsonify({"error": result})
     try:
-        cleaned = re.sub(r'^```json\s*|^```\s*|\s*```$', '', result.strip())
-        match = re.search(r'\{.*\}', cleaned, re.DOTALL)
-        ai_data = json.loads(match.group()) if match else json.loads(cleaned)
+        ai_data = safe_parse_json(result, "dict")
         
         return jsonify({
             "channel_stats": {
@@ -1021,9 +1195,7 @@ Return ONLY valid JSON."""
     result = ask_gemini(prompt)
     if result.startswith("[AI Error"): return jsonify({"error": result})
     try:
-        cleaned = re.sub(r'^```json\s*|^```\s*|\s*```$', '', result.strip())
-        match = re.search(r'\{.*\}', cleaned, re.DOTALL)
-        ai_data = json.loads(match.group()) if match else json.loads(cleaned)
+        ai_data = safe_parse_json(result, "dict")
         
         return jsonify({
             "metrics": {
@@ -1072,9 +1244,7 @@ Return ONLY valid JSON."""
     result = ask_gemini(prompt)
     if result.startswith("[AI Error"): return jsonify({"error": result})
     try:
-        cleaned = re.sub(r'^```json\s*|^```\s*|\s*```$', '', result.strip())
-        match = re.search(r'\{.*\}', cleaned, re.DOTALL)
-        ai_data = json.loads(match.group()) if match else json.loads(cleaned)
+        ai_data = safe_parse_json(result, "dict")
         return jsonify(ai_data)
     except Exception as e:
         return jsonify({"error": f"JSON parse error: {str(e)[:80]}"})
@@ -1134,10 +1304,7 @@ Return ONLY valid JSON. No markdown formatting outside the JSON."""
     try:
         cleaned = result.strip()
         cleaned = re.sub(r'^```json\s*', '', cleaned)
-        cleaned = re.sub(r'^```\s*', '', cleaned)
-        cleaned = re.sub(r'\s*```$', '', cleaned)
-        match = re.search(r'\{.*\}', cleaned, re.DOTALL)
-        strategy_json = json.loads(match.group()) if match else json.loads(cleaned)
+        strategy_json = safe_parse_json(result, "dict")
         
         return jsonify({"strategy_data": strategy_json, "channel_type": channel_type})
     except Exception as e:
@@ -1232,10 +1399,7 @@ Return ONLY valid JSON array."""
     try:
         cleaned = result.strip()
         cleaned = re.sub(r'^```json\s*', '', cleaned)
-        cleaned = re.sub(r'^```\s*', '', cleaned)
-        cleaned = re.sub(r'\s*```$', '', cleaned)
-        match = re.search(r'\[.*\]', cleaned, re.DOTALL)
-        structures = json.loads(match.group()) if match else json.loads(cleaned)
+        structures = safe_parse_json(result, "list")
         
         for s in structures:
             s.setdefault("subniche", "")
@@ -1354,10 +1518,7 @@ Return ONLY valid JSON. No markdown, no explanation."""
     try:
         cleaned = result.strip()
         cleaned = re.sub(r'^```json\s*', '', cleaned)
-        cleaned = re.sub(r'^```\s*', '', cleaned)
-        cleaned = re.sub(r'\s*```$', '', cleaned)
-        
-        parsed = json.loads(cleaned)
+        parsed = safe_parse_json(result, "list")
         
         # Analyze each generated title
         for strategy in ["strategy_a", "strategy_b"]:
@@ -1428,10 +1589,7 @@ Return ONLY valid JSON. No markdown outside the JSON."""
     try:
         cleaned = result.strip()
         cleaned = re.sub(r'^```json\s*', '', cleaned)
-        cleaned = re.sub(r'^```\s*', '', cleaned)
-        cleaned = re.sub(r'\s*```$', '', cleaned)
-        match = re.search(r'\{.*\}', cleaned, re.DOTALL)
-        trends_json = json.loads(match.group()) if match else json.loads(cleaned)
+        trends_json = safe_parse_json(result, "dict")
         
         return jsonify({"trends_data": trends_json, "category": category, "date": datetime.now().isoformat()})
     except Exception as e:
@@ -1685,10 +1843,7 @@ Return ONLY valid JSON. No markdown outside the JSON."""
     try:
         cleaned = result.strip()
         cleaned = re.sub(r'^```json\s*', '', cleaned)
-        cleaned = re.sub(r'^```\s*', '', cleaned)
-        cleaned = re.sub(r'\s*```$', '', cleaned)
-        match = re.search(r'\{.*\}', cleaned, re.DOTALL)
-        analysis_json = json.loads(match.group()) if match else json.loads(cleaned)
+        analysis_json = safe_parse_json(result, "dict")
         
         return jsonify({"analysis_data": analysis_json, "channel": channel})
     except Exception as e:
@@ -1825,10 +1980,7 @@ Return ONLY valid JSON. No markdown outside the JSON."""
     try:
         cleaned = result.strip()
         cleaned = re.sub(r'^```json\s*', '', cleaned)
-        cleaned = re.sub(r'^```\s*', '', cleaned)
-        cleaned = re.sub(r'\s*```$', '', cleaned)
-        match = re.search(r'\{.*\}', cleaned, re.DOTALL)
-        radar_json = json.loads(match.group()) if match else json.loads(cleaned)
+        radar_json = safe_parse_json(result, "dict")
         
         # Attach the raw videos for the UI
         radar_json["top_videos"] = top_videos
@@ -1883,10 +2035,7 @@ Return ONLY valid JSON. No markdown outside the JSON."""
     try:
         cleaned = result.strip()
         cleaned = re.sub(r'^```json\s*', '', cleaned)
-        cleaned = re.sub(r'^```\s*', '', cleaned)
-        cleaned = re.sub(r'\s*```$', '', cleaned)
-        match = re.search(r'\{.*\}', cleaned, re.DOTALL)
-        ab_json = json.loads(match.group()) if match else json.loads(cleaned)
+        ab_json = safe_parse_json(result, "dict")
         
         return jsonify({"ab_data": ab_json})
     except Exception as e:
@@ -1906,4 +2055,4 @@ if __name__ == "__main__":
     print("="*50 + "\n")
     
     threading.Thread(target=open_browser, daemon=True).start()
-    app.run(host="127.0.0.1", port=5050, debug=False)
+    app.run(host="127.0.0.1", port=5050, debug=False, threaded=True)

@@ -264,13 +264,16 @@
     <!-- SUBNICHE PAGE -->
     <div class="page" id="page-subniche">
       <div class="page-header">
-        <h1>🔥 Subniche Finder</h1>
-        <p>Discover high-demand, low-competition subniches with AI</p>
+        <h1>🔥 Niche Strategy Hub</h1>
+        <p>Discover sub-niches, micro-niches and build a complete 3-level strategy map</p>
       </div>
       <div class="input-row">
-        <input type="text" id="sub-theme" placeholder="Theme (e.g., Ocean, History, Health) or leave empty for all">
+        <input type="text" id="sub-theme" placeholder="Theme (e.g., History, Finance, Health) or leave empty for all">
         <select id="sub-lang"><option>English</option><option>Portuguese</option><option>Spanish</option></select>
-        <button class="btn-primary" onclick="findSubniches()">🔍 Find Subniches</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px;margin-bottom:12px">
+        <button class="btn-primary" style="flex:1" onclick="findSubniches()">🔍 Find Sub-Niches</button>
+        <button class="btn-primary" style="flex:1;background:linear-gradient(135deg,#7c3aed,#4c1d95)" onclick="nicheStrategyComplete()">🗺️ MAPA ESTRATÉGICO COMPLETO (3 NÍVEIS)</button>
       </div>
       <div id="sub-result" class="result-area"></div>
     </div>

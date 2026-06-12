@@ -1,5 +1,5 @@
 @echo off
-title TitlePilot Pro
+title TitlePilot Pro Server
 cd /d "%~dp0"
-python server.py
+"C:\Users\Guilherme\AppData\Local\Programs\Python\Python311\python.exe" server.py
 pause
