@@ -1,0 +1,422 @@
+{
+  "total_segments": 24,
+  "matched": 23,
+  "match_rate": 0.9583333333333334,
+  "avg_score": 88.69565217391305,
+  "elapsed_seconds": 3115.9215528964996,
+  "score_buckets": {
+    "90-100": 15,
+    "0-39": 1,
+    "80-89": 5,
+    "70-79": 3,
+    "40-69": 0
+  },
+  "sources_used": {
+    "pexels": 23,
+    "none": 1
+  },
+  "by_niche": {
+    "Aquarismo": [
+      {
+        "scene": 1,
+        "expected": [
+          "betta",
+          "peixe",
+          "lutador",
+          "aquário"
+        ],
+        "entity": "peixes betta",
+        "score": 90,
+        "source": "pexels",
+        "vision_saw": "Peixe betta nadando em água calma",
+        "page_url": "https://www.pexels.com/video/6590365/",
+        "matched": true,
+        "entity_match": true
+      },
+      {
+        "scene": 2,
+        "expected": [
+          "filtro",
+          "canister",
+          "água",
+          "aquário"
+        ],
+        "entity": "filtro biológico",
+        "score": 0,
+        "source": "none",
+        "vision_saw": "",
+        "page_url": "",
+        "matched": false,
+        "entity_match": false
+      },
+      {
+        "scene": 3,
+        "expected": [
+          "planta",
+          "anubias",
+          "pedra",
+          "aquário"
+        ],
+        "entity": "plantas anubias",
+        "score": 80,
+        "source": "pexels",
+        "vision_saw": "Pedra coberta de musgo",
+        "page_url": "https://www.pexels.com/video/34917744/",
+        "matched": true,
+        "entity_match": true
+      }
+    ],
+    "Agronegócio": [
+      {
+        "scene": 1,
+        "expected": [
+          "colheitadeira",
+          "soja",
+          "máquina",
+          "agrícola"
+        ],
+        "entity": "Colheitadeira John Deere",
+        "score": 100,
+        "source": "pexels",
+        "vision_saw": "Colheitadeira John Deere colhendo soja em uma fazenda",
+        "page_url": "https://www.pexels.com/video/32760164/",
+        "matched": true,
+        "entity_match": true
+      },
+      {
+        "scene": 2,
+        "expected": [
+          "drone",
+          "defensivo",
+          "agrícola",
+          "aplicação"
+        ],
+        "entity": "drone",
+        "score": 90,
+        "source": "pexels",
+        "vision_saw": "Drone autônomo aplicando defensivos agrícolas",
+        "page_url": "https://www.pexels.com/video/34182419/",
+        "matched": true,
+        "entity_match": true
+      },
+      {
+        "scene": 3,
+        "expected": [
+          "gado",
+          "nelore",
+          "pasto",
+          "boi",
+          "vaca"
+        ],
+        "entity": "gado nelore",
+        "score": 100,
+        "source": "pexels",
+        "vision_saw": "Gado nelore pastando em campo",
+        "page_url": "https://www.pexels.com/video/31289115/",
+        "matched": true,
+        "entity_match": true
+      }
+    ],
+    "Medicina": [
+      {
+        "scene": 1,
+        "expected": [
+          "cirurgia",
+          "médico",
+          "operação",
+          "cirurgião"
+        ],
+        "entity": "Cirurgiões",
+        "score": 100,
+        "source": "pexels",
+        "vision_saw": "Cirurgiões realizando operação cardíaca",
+        "page_url": "https://www.pexels.com/video/35107836/",
+        "matched": true,
+        "entity_match": true
+      },
+      {
+        "scene": 2,
+        "expected": [
+          "enfermeir",
+          "paciente",
+          "uti",
+          "hospital"
+        ],
+        "entity": "enfermeiros",
+        "score": 70,
+        "source": "pexels",
+        "vision_saw": "Enfermeira cuidando paciente",
+        "page_url": "https://www.pexels.com/video/6130037/",
+        "matched": true,
+        "entity_match": true
+      },
+      {
+        "scene": 3,
+        "expected": [
+          "ressonância",
+          "exame",
+          "máquina",
+          "diagnóstico"
+        ],
+        "entity": "ressonância magnética",
+        "score": 90,
+        "source": "pexels",
+        "vision_saw": "Um homem de jaleco branco observando uma pessoa dentro de uma ressonância magnética",
+        "page_url": "https://www.pexels.com/video/7089593/",
+        "matched": true,
+        "entity_match": true
+      }
+    ],
+    "Tecnologia": [
+      {
+        "scene": 1,
+        "expected": [
+          "servidor",
+          "data center",
+          "rack",
+          "computador"
+        ],
+        "entity": "servidores",
+        "score": 80,
+        "source": "pexels",
+        "vision_saw": "Servidores em rack",
+        "page_url": "https://www.pexels.com/video/7140928/",
+        "matched": true,
+        "entity_match": true
+      },
+      {
+        "scene": 2,
+        "expected": [
+          "robô",
+          "smartphone",
+          "fábrica",
+          "linha de montagem"
+        ],
+        "entity": "robôs industriais",
+        "score": 70,
+        "source": "pexels",
+        "vision_saw": "Robô industrial em uma fábrica",
+        "page_url": "https://www.pexels.com/video/32386532/",
+        "matched": true,
+        "entity_match": true
+      },
+      {
+        "scene": 3,
+        "expected": [
+          "programador",
+          "código",
+          "tela",
+          "computador"
+        ],
+        "entity": "Engenheiros",
+        "score": 80,
+        "source": "pexels",
+        "vision_saw": "Homem sentado em frente a telas de computador",
+        "page_url": "https://www.pexels.com/video/6804647/",
+        "matched": true,
+        "entity_match": true
+      }
+    ],
+    "Culinária": [
+      {
+        "scene": 1,
+        "expected": [
+          "massa",
+          "italiana",
+          "prato",
+          "manjericão",
+          "comida"
+        ],
+        "entity": "chef",
+        "score": 80,
+        "source": "pexels",
+        "vision_saw": "Mãos de chef finalizando prato de massa italiana",
+        "page_url": "https://www.pexels.com/video/6222566/",
+        "matched": true,
+        "entity_match": true
+      },
+      {
+        "scene": 2,
+        "expected": [
+          "tomate",
+          "faca",
+          "corte",
+          "cozinha"
+        ],
+        "entity": "mão com faca",
+        "score": 100,
+        "source": "pexels",
+        "vision_saw": "Mão cortando tomate",
+        "page_url": "https://www.pexels.com/video/11643656/",
+        "matched": true,
+        "entity_match": true
+      },
+      {
+        "scene": 3,
+        "expected": [
+          "panela",
+          "água fervente",
+          "cozinhar",
+          "massa"
+        ],
+        "entity": "massa",
+        "score": 100,
+        "source": "pexels",
+        "vision_saw": "Massa cozinhando em água fervente com sal grosso",
+        "page_url": "https://www.pexels.com/video/6288312/",
+        "matched": true,
+        "entity_match": true
+      }
+    ],
+    "Esportes": [
+      {
+        "scene": 1,
+        "expected": [
+          "futebol",
+          "gol",
+          "bola",
+          "chute",
+          "atacante"
+        ],
+        "entity": "atacante",
+        "score": 90,
+        "source": "pexels",
+        "vision_saw": "Atacante chutando bola",
+        "page_url": "https://www.pexels.com/video/6077713/",
+        "matched": true,
+        "entity_match": true
+      },
+      {
+        "scene": 2,
+        "expected": [
+          "torcida",
+          "estádio",
+          "bandeira",
+          "comemoração"
+        ],
+        "entity": "torcida",
+        "score": 90,
+        "source": "pexels",
+        "vision_saw": "torcida lotada no estádio com bandeiras",
+        "page_url": "https://www.pexels.com/video/11208468/",
+        "matched": true,
+        "entity_match": true
+      },
+      {
+        "scene": 3,
+        "expected": [
+          "jogador",
+          "treino",
+          "campo",
+          "futebol"
+        ],
+        "entity": "jogadores",
+        "score": 95,
+        "source": "pexels",
+        "vision_saw": "Jogadores correndo em campo de futebol",
+        "page_url": "https://www.pexels.com/video/14551030/",
+        "matched": true,
+        "entity_match": true
+      }
+    ],
+    "Natureza/Animais": [
+      {
+        "scene": 1,
+        "expected": [
+          "leão",
+          "savana",
+          "áfrica"
+        ],
+        "entity": "leão",
+        "score": 80,
+        "source": "pexels",
+        "vision_saw": "Leão caminha em grama seca",
+        "page_url": "https://www.pexels.com/video/32420380/",
+        "matched": true,
+        "entity_match": true
+      },
+      {
+        "scene": 2,
+        "expected": [
+          "elefante",
+          "manada",
+          "rio"
+        ],
+        "entity": "elefantes",
+        "score": 95,
+        "source": "pexels",
+        "vision_saw": "Elefantes atravessando rio",
+        "page_url": "https://www.pexels.com/video/30024337/",
+        "matched": true,
+        "entity_match": true
+      },
+      {
+        "scene": 3,
+        "expected": [
+          "girafa",
+          "folha",
+          "árvore"
+        ],
+        "entity": "girafa",
+        "score": 90,
+        "source": "pexels",
+        "vision_saw": "Girafa comendo folhas de acácia",
+        "page_url": "https://www.pexels.com/video/37393249/",
+        "matched": true,
+        "entity_match": true
+      }
+    ],
+    "Construção": [
+      {
+        "scene": 1,
+        "expected": [
+          "pedreiro",
+          "operário",
+          "tijolo",
+          "parede",
+          "construção"
+        ],
+        "entity": "operário",
+        "score": 100,
+        "source": "pexels",
+        "vision_saw": "Um operário de capacete coloca tijolos em uma parede de construção.",
+        "page_url": "https://www.pexels.com/video/13359848/",
+        "matched": true,
+        "entity_match": true
+      },
+      {
+        "scene": 2,
+        "expected": [
+          "betoneira",
+          "concreto",
+          "obra",
+          "construção"
+        ],
+        "entity": "betoneira",
+        "score": 100,
+        "source": "pexels",
+        "vision_saw": "Betoneira despejando concreto",
+        "page_url": "https://www.pexels.com/video/30836670/",
+        "matched": true,
+        "entity_match": true
+      },
+      {
+        "scene": 3,
+        "expected": [
+          "guindaste",
+          "viga",
+          "aço",
+          "edifício",
+          "construção"
+        ],
+        "entity": "guindaste",
+        "score": 70,
+        "source": "pexels",
+        "vision_saw": "Guindaste e vigas de aço",
+        "page_url": "https://www.pexels.com/video/27650124/",
+        "matched": true,
+        "entity_match": true
+      }
+    ]
+  }
+}
