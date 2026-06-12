@@ -141,11 +141,15 @@ class VisionVerifier:
     Latência: ~1-2s por verificação.
     """
 
-    def __init__(self, gemini_api_key: str = "", model: str = "gemini-2.0-flash"):
+    def __init__(self, gemini_api_key: str = "", model: str = "gemini-2.0-flash",
+                 nvidia_api_key: str = ""):
         self.api_key = gemini_api_key or os.environ.get("GOOGLE_API_KEY", "")
+        self.nvidia_key = nvidia_api_key or os.environ.get("NVIDIA_API_KEY", "")
         self.model = model
         self._client = None
         self._lock = threading.Lock()
+        # If Gemini hits quota repeatedly, stop trying to save time
+        self._gemini_dead = False
 
     @property
     def client(self):
@@ -188,33 +192,78 @@ class VisionVerifier:
             visual_context=intent.visual_context or "real, sem texto na tela",
         )
 
-        try:
-            from google.genai import types as gtypes
-            cfg = gtypes.GenerateContentConfig(
-                temperature=0.1,                # Determinístico, sem criatividade
-                response_mime_type="application/json",
-                max_output_tokens=400,
-            )
-            # Build multimodal content
-            image_part = gtypes.Part.from_bytes(data=img_bytes, mime_type="image/jpeg")
-            response = self.client.models.generate_content(
-                model=self.model,
-                contents=[prompt, image_part],
-                config=cfg,
-            )
-            if not response or not response.text:
-                return 0, "[empty Gemini response]", "Gemini returned nothing"
+        # Try Gemini first (unless we've determined it's dead this session)
+        if self.client and not self._gemini_dead:
+            try:
+                from google.genai import types as gtypes
+                cfg = gtypes.GenerateContentConfig(
+                    temperature=0.1,
+                    response_mime_type="application/json",
+                    max_output_tokens=400,
+                )
+                image_part = gtypes.Part.from_bytes(data=img_bytes, mime_type="image/jpeg")
+                response = self.client.models.generate_content(
+                    model=self.model,
+                    contents=[prompt, image_part],
+                    config=cfg,
+                )
+                if response and response.text:
+                    data = json.loads(response.text.strip())
+                    score = int(data.get("score", 0))
+                    score = max(0, min(100, score))
+                    desc = str(data.get("what_i_see", ""))[:100]
+                    reason = str(data.get("rejection_reason", ""))[:200]
+                    return score, desc, reason
+            except Exception as e:
+                err_str = str(e)
+                if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
+                    with self._lock:
+                        if not self._gemini_dead:
+                            print(f"  [VisionVerifier] Gemini quota — switching to NVIDIA NIM for rest of session")
+                            self._gemini_dead = True
 
-            data = json.loads(response.text.strip())
-            score = int(data.get("score", 0))
-            score = max(0, min(100, score))
-            desc = str(data.get("what_i_see", ""))[:100]
-            reason = str(data.get("rejection_reason", ""))[:200]
+        # NVIDIA NIM vision fallback (llama-3.2-90b-vision-instruct)
+        if self.nvidia_key:
+            try:
+                import requests, base64
+                img_b64 = base64.b64encode(img_bytes).decode()
+                r = requests.post(
+                    "https://integrate.api.nvidia.com/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {self.nvidia_key}",
+                             "Content-Type": "application/json", "Accept": "application/json"},
+                    json={
+                        "model": "meta/llama-3.2-90b-vision-instruct",
+                        "messages": [{
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": prompt + "\n\nResponda APENAS JSON puro, sem markdown."},
+                                {"type": "image_url",
+                                 "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}},
+                            ],
+                        }],
+                        "max_tokens": 400,
+                        "temperature": 0.1,
+                    },
+                    timeout=timeout,
+                )
+                r.raise_for_status()
+                content = r.json()["choices"][0]["message"]["content"].strip()
+                # Strip markdown fences if present
+                if content.startswith("```"):
+                    content = content.split("```")[1]
+                    if content.startswith("json"):
+                        content = content[4:]
+                content = content.strip()
+                data = json.loads(content)
+                score = int(data.get("score", 0))
+                score = max(0, min(100, score))
+                desc = str(data.get("what_i_see", ""))[:100]
+                reason = str(data.get("rejection_reason", ""))[:200]
+                return score, desc, reason
+            except Exception as e:
+                return 0, "[vision error]", f"NVIDIA NIM failed: {str(e)[:200]}"
 
-            return score, desc, reason
-
-        except Exception as e:
-            return 0, "[vision error]", f"Gemini vision call failed: {e}"
+        return 0, "[no vision available]", "Both Gemini and NVIDIA NIM unavailable"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -258,15 +307,17 @@ class IntentExtractor:
     """Extrai SegmentIntent estruturado de um pedaço de texto narrado."""
 
     def __init__(self, ai_ask_func=None, gemini_api_key: str = "",
-                 model: str = "gemini-2.0-flash"):
+                 model: str = "gemini-2.0-flash", groq_api_key: str = ""):
         """
         Args:
             ai_ask_func: função opcional (prompt, json_response=True) → str
                           (pra usar AI engine compartilhada do projeto).
             gemini_api_key: fallback direto.
+            groq_api_key: fallback quando Gemini hit quota.
         """
         self.ai_ask = ai_ask_func
         self.api_key = gemini_api_key or os.environ.get("GOOGLE_API_KEY", "")
+        self.groq_key = groq_api_key or os.environ.get("GROQ_API_KEY", "")
         self.model = model
         self._client = None
 
@@ -310,7 +361,36 @@ class IntentExtractor:
                 if response and response.text:
                     return self._parse(response.text, text)
             except Exception as e:
-                print(f"  [IntentExtractor] Gemini err: {e}")
+                err_str = str(e)
+                # Quota errors → try Groq fallback
+                if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower():
+                    print(f"  [IntentExtractor] Gemini quota hit → Groq fallback")
+                else:
+                    print(f"  [IntentExtractor] Gemini err: {err_str[:120]}")
+
+        # Groq fallback (llama-3.3-70b → fast, JSON mode, no quota)
+        if self.groq_key:
+            try:
+                import requests
+                r = requests.post(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {self.groq_key}",
+                             "Content-Type": "application/json"},
+                    json={
+                        "model": "llama-3.3-70b-versatile",
+                        "messages": [{"role": "user", "content": prompt}],
+                        "temperature": 0.3,
+                        "max_tokens": 500,
+                        "response_format": {"type": "json_object"},
+                    },
+                    timeout=20,
+                )
+                r.raise_for_status()
+                content = r.json()["choices"][0]["message"]["content"]
+                if content:
+                    return self._parse(content, text)
+            except Exception as e:
+                print(f"  [IntentExtractor] Groq err: {str(e)[:120]}")
 
         # Last resort: heuristic
         return self._heuristic(text, theme)
@@ -452,12 +532,18 @@ class MultiSourceSearcher:
     def _search_youtube(self, query: str, min_dur: float) -> list:
         """Busca no YouTube via yt-dlp (sem download — só metadata)."""
         try:
-            import subprocess
-            cmd = ["yt-dlp", "--default-search", "ytsearch",
+            import subprocess, sys as _sys
+            # Try standalone exe first, fall back to python -m yt_dlp (always works)
+            cmd_base = ["yt-dlp"]
+            try:
+                subprocess.run(["yt-dlp", "--version"], capture_output=True, timeout=5)
+            except (FileNotFoundError, OSError):
+                cmd_base = [_sys.executable, "-m", "yt_dlp"]
+            cmd = cmd_base + ["--default-search", "ytsearch",
                    "--no-download", "--dump-json", "--flat-playlist",
                    "--playlist-end", str(self.max_per_source),
                    f"ytsearch{self.max_per_source}:{query}"]
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
             out = []
             for line in (result.stdout or "").splitlines():
                 line = line.strip()
@@ -578,12 +664,15 @@ class IntelligentBrollEngine:
                  verifier_model: str = "gemini-2.0-flash",
                  max_candidates_per_intent: int = 12,
                  max_search_attempts: int = 3,
-                 ai_ask_func=None):
+                 ai_ask_func=None,
+                 groq_api_key: str = "",
+                 nvidia_api_key: str = ""):
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         self.intent_extractor = IntentExtractor(
             ai_ask_func=ai_ask_func, gemini_api_key=gemini_api_key,
+            groq_api_key=groq_api_key,
         )
         self.searcher = MultiSourceSearcher(
             pexels_key=pexels_key, pixabay_key=pixabay_key,
@@ -591,7 +680,8 @@ class IntelligentBrollEngine:
             max_per_source=max(4, max_candidates_per_intent // 3),
         )
         self.verifier = VisionVerifier(gemini_api_key=gemini_api_key,
-                                        model=verifier_model)
+                                        model=verifier_model,
+                                        nvidia_api_key=nvidia_api_key)
         self.max_candidates = max_candidates_per_intent
         self.max_attempts = max_search_attempts
         self._used_clip_ids = set()  # Anti-duplicate across video
@@ -728,12 +818,14 @@ class IntelligentBrollEngine:
 
         try:
             if clip.source == "youtube":
-                # Use youtube_broll for proper download
-                from core.youtube_broll import _ensure_ytdlp
-                if not _ensure_ytdlp():
-                    return ""
-                import subprocess
-                cmd = ["yt-dlp", "-f", "mp4[height<=1080]/best",
+                # Use python -m yt_dlp directly (avoids PATH issues)
+                import subprocess, sys as _sys
+                cmd_base = ["yt-dlp"]
+                try:
+                    subprocess.run(["yt-dlp", "--version"], capture_output=True, timeout=5)
+                except (FileNotFoundError, OSError):
+                    cmd_base = [_sys.executable, "-m", "yt_dlp"]
+                cmd = cmd_base + ["-f", "mp4[height<=1080]/best",
                        "--no-playlist", "--quiet",
                        "-o", str(out), clip.download_url]
                 r = subprocess.run(cmd, capture_output=True, timeout=180)
