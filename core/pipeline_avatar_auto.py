@@ -181,9 +181,14 @@ def run_auto(config: dict, on_progress=None):
     pexels_key = config.get("pexels_api_key", "")
     pixabay_key = config.get("pixabay_api_key", "")
     unsplash_key = config.get("unsplash_api_key", "")
+    groq_key = config.get("groq_api_key", "")
+    nvidia_key = config.get("nvidia_api_key", "")
     width, height = _get_resolution(config.get("resolution", "1080p"))
     fps = config.get("fps", 30)
     broll_count = config.get("auto_broll_count", 30)
+    # v10: B-roll Intelligence — pre-download Vision verification (default ON)
+    # Set use_intelligent_broll=False to revert to legacy smart_broll behavior.
+    use_intelligent_broll = config.get("use_intelligent_broll", True)
 
     # =============================================
     # CLEAN ALL PREVIOUS TEMP DATA
@@ -228,34 +233,114 @@ def run_auto(config: dict, on_progress=None):
         # =============================================
         # STEP 2: DOWNLOAD STOCK FOOTAGE (FRESH!)
         # =============================================
-        if on_progress:
-            on_progress(20, 100, f"Phase 2: Downloading {broll_count} B-roll clips...")
-        console.print(f"\n[yellow]Step 2/6: Downloading B-roll (target: {broll_count} clips)...[/yellow]")
+        # v10 path: B-roll Intelligence (PRE-download Vision verify, validated 96%)
+        # ───────────────────────────────────────────────────────────────────
+        # The intelligent path replaces the legacy shot_list → download → post-validate
+        # loop with: Whisper word-timestamps → Groq intent → multi-source search →
+        # NVIDIA NIM Vision (score≥70) → download winner. Falls back to legacy on error.
+        mapped_clips = None
+        if use_intelligent_broll:
+            try:
+                if on_progress:
+                    on_progress(20, 100, "Phase 2 (v10): Intelligent B-roll with Vision verify...")
+                console.print("\n[yellow]Step 2/6 (v10): Intelligent B-roll Engine...[/yellow]")
 
-        # Use shot list from intelligence engine
-        # Pass the intel validator + theme so each download can be content-validated
-        # (rejects B-rolls that don't visually match the search term)
-        # PHASE 6: when youtube_api_key is configured we auto-enable youtube_priority.
-        # YouTube has real contextual footage that often beats stock libraries for
-        # topical content (history, news, science explainer). User can override
-        # explicitly with youtube_priority=False.
-        _yt_key = config.get("youtube_api_key", "")
-        _yt_priority = config.get("youtube_priority", bool(_yt_key))
+                from core.intelligent_broll import IntelligentBrollEngine
 
-        mapped_clips = _download_from_shot_list(
-            analysis["shot_list"],
-            stock_folder,
-            pexels_key, pixabay_key, unsplash_key,
-            max_clips=broll_count,
-            on_progress=on_progress,
-            youtube_api_key=_yt_key,
-            youtube_channel_ids=config.get("youtube_channel_ids", ""),
-            youtube_priority=_yt_priority,
-            # PHASE 2: pass validator + theme for post-download Gemini Vision check
-            validator=intel,
-            video_theme=analysis.get("theme", "general"),
-            min_validation_score=config.get("broll_min_score", 0.4),
-        )
+                # Extract narration audio from avatar video (no API needed)
+                narration_audio = os.path.join(temp_dir, "narration_only.wav")
+                _ff = _find_ffmpeg()
+                _ffx = subprocess.run(
+                    [_ff, "-y", "-i", avatar_path, "-vn", "-acodec", "pcm_s16le",
+                     "-ar", "16000", "-ac", "1", narration_audio],
+                    capture_output=True, timeout=60,
+                )
+                if not os.path.exists(narration_audio):
+                    raise RuntimeError("Failed to extract narration audio for intelligent_broll")
+
+                engine = IntelligentBrollEngine(
+                    gemini_api_key=google_key,
+                    groq_api_key=groq_key,
+                    nvidia_api_key=nvidia_key,
+                    pexels_key=pexels_key,
+                    pixabay_key=pixabay_key,
+                    youtube_enabled=True,
+                    output_dir=stock_folder,
+                    max_candidates_per_intent=8,
+                    max_search_attempts=2,
+                )
+
+                plans = engine.build(
+                    audio_path=narration_audio,
+                    theme=analysis.get("theme", "general"),
+                    min_relevance=int(config.get("broll_min_score", 0.7) * 100)
+                                  if config.get("broll_min_score", 0.4) <= 1.0
+                                  else int(config.get("broll_min_score", 70)),
+                    language=analysis.get("language", "pt")[:2].lower(),
+                )
+
+                mapped_clips = []
+                for plan in plans:
+                    if not (plan.clip and plan.download_path and
+                            os.path.exists(plan.download_path)):
+                        continue
+                    mapped_clips.append({
+                        "timeline_start": float(plan.intent.start),
+                        "timeline_end": float(plan.intent.end),
+                        "file": plan.download_path,
+                        "keyword": plan.intent.main_entity or plan.intent.text[:60],
+                        "source": plan.clip.source,
+                        "shot_type": "wide",
+                        "mood": "informative",
+                        "_intelligent": True,
+                        "_vision_score": plan.clip.relevance_score,
+                        "_vision_desc": plan.clip.vision_description,
+                    })
+
+                solved = sum(1 for p in plans if p.is_solved())
+                console.print(
+                    f"  [bold green]Intelligent B-roll: {solved}/{len(plans)} segments resolved[/bold green] "
+                    f"(score avg={sum(c['_vision_score'] for c in mapped_clips)/max(1,len(mapped_clips)):.0f})"
+                )
+
+                # Hard sanity: if engine produced fewer than 20% of expected, fall back
+                if len(mapped_clips) < max(1, len(plans) // 5):
+                    console.print(
+                        "[red]  Intelligent broll produced too few clips — falling back to legacy[/red]"
+                    )
+                    mapped_clips = None
+
+            except Exception as ib_err:
+                console.print(f"[red]  Intelligent B-roll failed ({ib_err}) — falling back[/red]")
+                mapped_clips = None
+
+        # Legacy path: shot_list → multi-source download → post-validate
+        if mapped_clips is None:
+            if on_progress:
+                on_progress(20, 100, f"Phase 2: Downloading {broll_count} B-roll clips...")
+            console.print(f"\n[yellow]Step 2/6: Downloading B-roll (target: {broll_count} clips)...[/yellow]")
+
+            # Use shot list from intelligence engine
+            # Pass the intel validator + theme so each download can be content-validated
+            # (rejects B-rolls that don't visually match the search term)
+            # PHASE 6: when youtube_api_key is configured we auto-enable youtube_priority.
+            _yt_key = config.get("youtube_api_key", "")
+            _yt_priority = config.get("youtube_priority", bool(_yt_key))
+
+            mapped_clips = _download_from_shot_list(
+                analysis["shot_list"],
+                stock_folder,
+                pexels_key, pixabay_key, unsplash_key,
+                max_clips=broll_count,
+                on_progress=on_progress,
+                youtube_api_key=_yt_key,
+                youtube_channel_ids=config.get("youtube_channel_ids", ""),
+                youtube_priority=_yt_priority,
+                # PHASE 2: pass validator + theme for post-download Gemini Vision check
+                validator=intel,
+                video_theme=analysis.get("theme", "general"),
+                min_validation_score=config.get("broll_min_score", 0.4),
+            )
 
         console.print(f"  Downloaded [bold green]{len(mapped_clips)}[/bold green] content-matched clips")
         for clip in mapped_clips[:5]:
