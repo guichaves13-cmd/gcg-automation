@@ -29,19 +29,44 @@ def handle_exception(e):
     err_str = traceback.format_exc()
     return jsonify({"error": f"Internal Server Error: {str(e)}", "trace": err_str}), 200
 
-# Load API key
+# Load API key — suporta modo standalone e integrado
 def _load_key():
+    # 1. Try core module (works in both modes)
     try:
         from core.api_keys import load_api_key
-        return load_api_key("google_ai")
-    except:
-        kf = os.path.join(PARENT_DIR, "api_keys.json")
+        key = load_api_key("google_ai")
+        if key:
+            return key
+    except Exception:
+        pass
+    
+    # 2. Try .api_keys.json in same dir (standalone)
+    for search_dir in [BASE_DIR, PARENT_DIR]:
+        kf = os.path.join(search_dir, ".api_keys.json")
         if os.path.exists(kf):
-            with open(kf) as f:
-                return json.load(f).get("google_ai", "")
-    return ""
+            try:
+                import base64
+                with open(kf) as f:
+                    data = json.load(f)
+                encoded = data.get("gemini") or data.get("google_ai") or ""
+                if encoded:
+                    return base64.b64decode(encoded).decode()
+            except Exception:
+                pass
+        # Also try without dot prefix
+        kf2 = os.path.join(search_dir, "api_keys.json")
+        if os.path.exists(kf2):
+            try:
+                with open(kf2) as f:
+                    return json.load(f).get("google_ai", "")
+            except Exception:
+                pass
+    
+    # 3. Try environment variable
+    return os.environ.get("GEMINI_API_KEY", "")
 
 GOOGLE_API_KEY = _load_key()
+
 
 # =============================================
 # GEMINI AI ENGINE
@@ -1621,12 +1646,28 @@ Return ONLY valid JSON. No markdown outside the JSON."""
 # YOUTUBE DATA API — Real metrics
 # =============================================
 def _load_yt_key():
+    # 1. Try core module
     try:
         from core.api_keys import load_api_key
         k = load_api_key("youtube")
         if k: return k
-    except: pass
-    return ""
+    except Exception:
+        pass
+    # 2. Try .api_keys.json directly
+    import base64
+    for search_dir in [BASE_DIR, PARENT_DIR]:
+        kf = os.path.join(search_dir, ".api_keys.json")
+        if os.path.exists(kf):
+            try:
+                with open(kf) as f:
+                    data = json.load(f)
+                encoded = data.get("youtube", "")
+                if encoded:
+                    return base64.b64decode(encoded).decode()
+            except Exception:
+                pass
+    # 3. Environment variable
+    return os.environ.get("YOUTUBE_API_KEY", "")
 
 YOUTUBE_API_KEY = _load_yt_key()
 
@@ -1637,10 +1678,29 @@ def save_yt_key():
     key = data.get("key", "").strip()
     if not key:
         return jsonify({"error": "No key"}), 400
-    from core.api_keys import save_api_key
-    save_api_key("youtube", key)
+    # Try core module first
+    try:
+        from core.api_keys import save_api_key
+        save_api_key("youtube", key)
+    except Exception:
+        # Fallback: save directly to .api_keys.json
+        import base64
+        for search_dir in [BASE_DIR, PARENT_DIR]:
+            kf = os.path.join(search_dir, ".api_keys.json")
+            try:
+                data_existing = {}
+                if os.path.exists(kf):
+                    with open(kf) as f:
+                        data_existing = json.load(f)
+                data_existing["youtube"] = base64.b64encode(key.encode()).decode()
+                with open(kf, "w") as f:
+                    json.dump(data_existing, f, indent=2)
+                break
+            except Exception:
+                pass
     YOUTUBE_API_KEY = key
-    return jsonify({"status": "ok"})
+    return jsonify({"status": "ok", "key_saved": True})
+
 
 @app.route("/api/youtube/channel", methods=["POST"])
 def yt_channel():
