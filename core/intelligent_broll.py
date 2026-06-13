@@ -167,6 +167,16 @@ PRINCÍPIO CHAVE:
 - Se a cena já apareceu no vídeo (veja DIVERSITY HINT acima), PENALIZE -15 pontos
   para incentivar variedade visual.
 
+CULTURA E ÉPOCA — REGRA CRÍTICA:
+- Se o tema é uma civilização antiga (Egito, Maia, Romana, Grega, Asteca):
+  - REJEITAR (score ≤30) imagens de arquitetura europeia medieval/moderna
+    (catedrais góticas, igrejas barrocas, prédios contemporâneos)
+  - REJEITAR (score ≤30) pessoas em roupas modernas
+  - REJEITAR (score ≤30) tecnologia moderna (carros, telefones, computadores)
+  - PREFERIR pirâmides/templos/ruínas/artefatos da CIVILIZAÇÃO CORRETA
+- Se o tema é moderno (tech, esportes, ciência atual):
+  - REJEITAR ruínas antigas, pessoas em traje histórico
+
 Responda APENAS em JSON estrito:
 {{
   "score": <inteiro 0-100>,
@@ -344,7 +354,8 @@ SEGMENTO DE ÁUDIO:
 TEMA GERAL DO VÍDEO: {theme}
 
 Extraia O QUE deve aparecer visualmente neste segmento e gere 5 queries de
-busca (3 em português, 2 em inglês) que tragam EXATAMENTE essa imagem.
+busca. IMPORTANTE: 4 em INGLÊS (Pexels/Pixabay são bancos americanos com 90%+
+conteúdo em EN) e 1 em português. Use termos visuais concretos e populares.
 
 Responda APENAS em JSON estrito:
 {{
@@ -352,11 +363,11 @@ Responda APENAS em JSON estrito:
   "action": "<o que essa entidade está fazendo, máx 60 chars>",
   "visual_context": "<estilo visual: close-up/wide, realista/cinemático, dia/noite>",
   "search_queries": [
-    "<query pt 1 - específica>",
-    "<query pt 2 - alternativa>",
-    "<query pt 3 - sinônimo>",
-    "<query en 1 - direct translation>",
-    "<query en 2 - alternative>"
+    "<query EN 1 - main entity + action, very specific>",
+    "<query EN 2 - alternative phrasing, iconic visual>",
+    "<query EN 3 - thematic context (e.g. 'ancient egyptian temple', 'pyramid of giza')>",
+    "<query EN 4 - generic backup (e.g. 'desert sunset', 'old ruins')>",
+    "<query PT 1 - termo em português>"
   ]
 }}
 
@@ -825,7 +836,7 @@ class IntelligentBrollEngine:
         self._phash_dedup_threshold = 0.85    # >85% visually similar = reject
 
     def build(self, audio_path: str = "", script: str = "",
-              theme: str = "general", min_relevance: int = 80,
+              theme: str = "general", min_relevance: int = 60,
               language: str = "pt") -> list:
         """Constrói plano completo de B-roll para o áudio/roteiro.
 
@@ -931,11 +942,11 @@ class IntelligentBrollEngine:
         for attempt in range(self.max_attempts):
             for query in intent.search_queries:
                 candidates = self.searcher.search_all(query)
-                # If attempt > 0 OR few video candidates, ALSO pull photos (Ken Burns)
-                if attempt > 0 or len(candidates) < 4:
-                    photos = self.searcher.search_photos(query, count=4)
-                    if photos:
-                        candidates = candidates + photos
+                # ALWAYS also pull photos (Ken Burns) — Pexels photo library is
+                # ~50× bigger than video, much better coverage for abstract topics
+                photos = self.searcher.search_photos(query, count=4)
+                if photos:
+                    candidates = candidates + photos
                 if not candidates:
                     continue
 
@@ -975,9 +986,8 @@ class IntelligentBrollEngine:
 
                     # Track best-so-far + add medium scorers to spare pool
                     if score >= 60:
-                        # Pool aceita medio-bom como reserva pra gap-fill diversificado
                         self._spare_pool.append(cand)
-                    if score > 50 and (best_so_far is None or score > best_so_far[0]):
+                    if score > 45 and (best_so_far is None or score > best_so_far[0]):
                         best_so_far = (score, cand)
 
             # All candidates rejected → refine queries for next attempt
