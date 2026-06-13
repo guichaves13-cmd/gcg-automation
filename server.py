@@ -67,9 +67,45 @@ def _load_key():
 
 GOOGLE_API_KEY = _load_key()
 
+# =============================================
+# GROQ AI ENGINE (Primary — embedded key, no user config needed)
+# =============================================
+# Embedded key — friends don't need to configure anything
+# Key is injected at build time via environment variable GROQ_API_KEY
+# For distribution: the compiled .exe has the key embedded via PyInstaller
+_GROQ_KEY = os.environ.get("GROQ_API_KEY", "")
+
+def ask_groq(prompt, timeout=90):
+    """Call Groq API — Llama 3.3 70B (faster & better than Gemini Flash)."""
+    try:
+        from groq import Groq
+        client = Groq(api_key=_GROQ_KEY)
+        result = [None]
+        error = [None]
+        def _run():
+            try:
+                resp = client.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.7,
+                    max_tokens=4096,
+                )
+                result[0] = resp.choices[0].message.content
+            except Exception as e:
+                error[0] = e
+        t = threading.Thread(target=_run, daemon=True)
+        t.start()
+        t.join(timeout=timeout)
+        if t.is_alive():
+            return None  # timeout — try fallback
+        if error[0]:
+            raise error[0]
+        return result[0]
+    except Exception as e:
+        return None  # any error — try fallback
 
 # =============================================
-# GEMINI AI ENGINE
+# GEMINI AI ENGINE (Fallback — only if key configured)
 # =============================================
 _gemini_client = None
 
@@ -80,65 +116,47 @@ def get_gemini():
         _gemini_client = genai.Client(api_key=GOOGLE_API_KEY)
     return _gemini_client
 
-def ask_gemini(prompt, max_retries=2, timeout=90):
-    """Send prompt to Gemini with model fallback and retry logic.
-    Models ordered: most available first for reliability.
-    """
-    models = [
-        "gemini-2.5-flash-lite",   # Fastest, highest quota
-        "gemini-2.0-flash-lite",   # Fallback
-        "gemini-2.0-flash",        # More capable, lower quota
-        "gemini-2.5-flash",        # Most capable, lowest quota
-    ]
-    last_err = ""
-
-    
-    def _call(model):
-        client = get_gemini()
-        r = client.models.generate_content(
-            model=model,
-            contents=prompt,
-        )
-        return r.text if r and r.text else ""
-
+def ask_gemini_fallback(prompt, timeout=90):
+    """Gemini fallback — only used if Groq fails and Gemini key is configured."""
+    if not GOOGLE_API_KEY:
+        return None
+    models = ["gemini-2.5-flash-lite", "gemini-2.0-flash-lite", "gemini-2.0-flash"]
     for model in models:
-        for attempt in range(max_retries):
-            try:
-                # Run with thread timeout
-                result = [None]
-                error = [None]
-                def _run():
-                    try:
-                        result[0] = _call(model)
-                    except Exception as e:
-                        error[0] = e
-                t = threading.Thread(target=_run, daemon=True)
-                t.start()
-                t.join(timeout=timeout)
-                if t.is_alive():
-                    # Timed out — try next model
-                    last_err = f"[Timeout {timeout}s on {model}]"
-                    break
-                if error[0]:
-                    raise error[0]
-                return result[0]
-            except Exception as e:
-                last_err = str(e)
-                err = last_err.lower()
-                if "429" in err or "quota" in err or "resource_exhausted" in err:
-                    import re as _re
-                    delay_match = _re.search(r'retry.*?(\d+)', last_err)
-                    wait = int(delay_match.group(1)) if delay_match else (5 * (attempt + 1))
-                    wait = min(wait, 20)  # cap at 20s
-                    if attempt < max_retries - 1:
-                        time.sleep(wait)
-                        continue
-                    else:
-                        break  # try next model
-                else:
-                    last_err = f"[AI Error ({model}): {str(e)[:120]}]"
-                    break  # try next model
-    return f"[AI Error: All models failed. Last: {last_err[:150]}]"
+        try:
+            result = [None]
+            error = [None]
+            def _run():
+                try:
+                    client = get_gemini()
+                    r = client.models.generate_content(model=model, contents=prompt)
+                    result[0] = r.text if r and r.text else ""
+                except Exception as e:
+                    error[0] = e
+            t = threading.Thread(target=_run, daemon=True)
+            t.start()
+            t.join(timeout=timeout)
+            if t.is_alive() or error[0]:
+                continue
+            return result[0]
+        except Exception:
+            continue
+    return None
+
+def ask_gemini(prompt, max_retries=2, timeout=90):
+    """Main AI function — tries Groq first, then Gemini fallback."""
+    # 1. Try Groq (primary)
+    if _GROQ_KEY and _GROQ_KEY != "GROQ_KEY_PLACEHOLDER":
+        resp = ask_groq(prompt, timeout=timeout)
+        if resp:
+            return resp
+
+    # 2. Try Gemini (fallback)
+    resp = ask_gemini_fallback(prompt, timeout=timeout)
+    if resp:
+        return resp
+
+    return "[AI Error: Could not reach AI service. Check your internet connection.]"
+
 
 def safe_parse_json(text, expected_type="dict"):
     """
