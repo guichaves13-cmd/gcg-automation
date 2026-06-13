@@ -104,51 +104,188 @@ NO MARKDOWN. NO BULLETS. Clean sentences only."""
 
 
 def write_script_from_title(title: str, theme: str, language: str,
-                            groq_key: str, target_sec: int = 90) -> dict:
-    """Use Groq llama-3.3-70b to write a viral retention-optimized script.
+                            groq_key: str, target_sec: int = 90,
+                            gemini_key: str = "",
+                            max_retries: int = 3) -> dict:
+    """Use Groq llama-3.3-70b (with retry + Gemini fallback) to write viral script.
 
-    Args:
-        target_sec: target narration duration in seconds (controls word count).
-            Use 60-90 for shorts, 120-180 for medium, 300+ for long-form.
+    For long videos (target_sec > 240), generates in CHUNKS to stay under
+    token limits and avoid Groq rate-limit drops.
     """
-    if not groq_key:
-        return {"script": title, "estimated_duration_sec": 30, "key_visuals": [theme]}
-
-    # Edge-TTS at -5% rate ≈ 2.4 words/sec → estimate word target
     target_words = int(target_sec * 2.4)
+
+    # For long videos: chunk generation. Each chunk = ~3-4 min worth.
+    if target_sec > 240:
+        return _write_script_chunked(title, theme, language, groq_key,
+                                     target_sec, gemini_key, max_retries)
 
     prompt = _SCRIPT_PROMPT.format(
         title=title, theme=theme, language=language,
         target_sec=target_sec, target_words=target_words,
     )
+
+    # Try Groq with retry + backoff
+    for attempt in range(max_retries):
+        try:
+            r = requests.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {groq_key}",
+                         "Content-Type": "application/json"},
+                json={
+                    "model": "llama-3.3-70b-versatile",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.85,
+                    "max_tokens": min(4000, int(target_words * 4)),
+                    "response_format": {"type": "json_object"},
+                },
+                timeout=60,
+            )
+            if r.status_code == 429:
+                wait = (attempt + 1) * 30
+                print(f"  [script writer] Groq 429, waiting {wait}s...")
+                import time; time.sleep(wait)
+                continue
+            r.raise_for_status()
+            content = r.json()["choices"][0]["message"]["content"]
+            data = json.loads(content)
+            return {
+                "script": data.get("script", title)[:8000],
+                "hook_strategy": data.get("hook_strategy", ""),
+                "open_loops": data.get("open_loops", []),
+                "estimated_duration_sec": int(data.get("estimated_duration_sec", target_sec)),
+                "key_visuals": data.get("key_visuals", [])[:15],
+                "emotional_arc": data.get("emotional_arc", []),
+            }
+        except Exception as e:
+            print(f"  [script writer] Groq attempt {attempt+1} err: {str(e)[:120]}")
+
+    # Gemini fallback
+    if gemini_key:
+        result = _write_via_gemini(prompt, gemini_key)
+        if result:
+            return result
+
+    print(f"  [script writer] All attempts failed, returning title-only fallback")
+    return {"script": title, "estimated_duration_sec": 30, "key_visuals": [theme]}
+
+
+def _write_via_gemini(prompt: str, gemini_key: str) -> dict:
+    """Gemini-2.0-flash fallback for script writing."""
     try:
-        r = requests.post(
-            "https://api.groq.com/openai/v1/chat/completions",
-            headers={"Authorization": f"Bearer {groq_key}",
-                     "Content-Type": "application/json"},
-            json={
-                "model": "llama-3.3-70b-versatile",
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.85,
-                "max_tokens": min(4000, int(target_words * 4)),
-                "response_format": {"type": "json_object"},
-            },
-            timeout=60,
+        from google import genai
+        from google.genai import types as gtypes
+        client = genai.Client(api_key=gemini_key)
+        cfg = gtypes.GenerateContentConfig(
+            temperature=0.85,
+            response_mime_type="application/json",
+            max_output_tokens=8000,
         )
-        r.raise_for_status()
-        content = r.json()["choices"][0]["message"]["content"]
-        data = json.loads(content)
-        return {
-            "script": data.get("script", title)[:8000],
-            "hook_strategy": data.get("hook_strategy", ""),
-            "open_loops": data.get("open_loops", []),
-            "estimated_duration_sec": int(data.get("estimated_duration_sec", target_sec)),
-            "key_visuals": data.get("key_visuals", [])[:15],
-            "emotional_arc": data.get("emotional_arc", []),
-        }
+        response = client.models.generate_content(
+            model="gemini-2.0-flash", contents=prompt, config=cfg,
+        )
+        if response and response.text:
+            data = json.loads(response.text.strip())
+            return {
+                "script": data.get("script", "")[:8000],
+                "hook_strategy": data.get("hook_strategy", ""),
+                "open_loops": data.get("open_loops", []),
+                "estimated_duration_sec": int(data.get("estimated_duration_sec", 90)),
+                "key_visuals": data.get("key_visuals", [])[:15],
+                "emotional_arc": data.get("emotional_arc", []),
+            }
     except Exception as e:
-        print(f"  [script writer] err: {e}")
-        return {"script": title, "estimated_duration_sec": 30, "key_visuals": [theme]}
+        print(f"  [script writer] Gemini fallback err: {str(e)[:120]}")
+    return None
+
+
+def _write_script_chunked(title: str, theme: str, language: str, groq_key: str,
+                          target_sec: int, gemini_key: str, max_retries: int) -> dict:
+    """For long videos: write in 3-4 chunks (intro, body parts, conclusion).
+
+    Total ~target_sec seconds with internal narrative continuity.
+    """
+    import time
+    n_chunks = max(2, (target_sec + 179) // 180)  # ~3 min per chunk
+    chunk_sec = target_sec // n_chunks
+    chunk_words = int(chunk_sec * 2.4)
+
+    chunks = []
+    hook_strategy = ""
+    all_open_loops = []
+    all_emotions = []
+    all_visuals = []
+
+    for i in range(n_chunks):
+        if i == 0:
+            role = "OPENING (first chunk — strong hook, set the stakes, plant open loops)"
+        elif i == n_chunks - 1:
+            role = "CONCLUSION (last chunk — pay off open loops, twist, cliffhanger)"
+        else:
+            role = f"MIDDLE PART {i}/{n_chunks-2} (build tension, deliver surprises)"
+
+        prev_summary = ""
+        if chunks:
+            prev_text = " ".join(chunks)[-600:]
+            prev_summary = f"\n\nPREVIOUS CHUNKS ENDED WITH: \"...{prev_text[-300:]}\"\nCONTINUE seamlessly from here. DO NOT repeat ideas."
+
+        chunk_prompt = _SCRIPT_PROMPT.format(
+            title=title, theme=theme, language=language,
+            target_sec=chunk_sec, target_words=chunk_words,
+        ) + f"\n\nCHUNK ROLE: {role}{prev_summary}\nThis is chunk {i+1} of {n_chunks}."
+
+        # Try Groq with retry
+        chunk_data = None
+        for attempt in range(max_retries):
+            try:
+                r = requests.post(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {groq_key}",
+                             "Content-Type": "application/json"},
+                    json={
+                        "model": "llama-3.3-70b-versatile",
+                        "messages": [{"role": "user", "content": chunk_prompt}],
+                        "temperature": 0.85,
+                        "max_tokens": min(4000, chunk_words * 4),
+                        "response_format": {"type": "json_object"},
+                    },
+                    timeout=60,
+                )
+                if r.status_code == 429:
+                    wait = (attempt + 1) * 30
+                    print(f"    [chunk {i+1}] Groq 429, waiting {wait}s...")
+                    time.sleep(wait)
+                    continue
+                r.raise_for_status()
+                chunk_data = json.loads(r.json()["choices"][0]["message"]["content"])
+                break
+            except Exception as e:
+                print(f"    [chunk {i+1}] Groq attempt {attempt+1} err: {str(e)[:100]}")
+
+        # Gemini fallback per chunk
+        if not chunk_data and gemini_key:
+            chunk_data = _write_via_gemini(chunk_prompt, gemini_key)
+
+        if chunk_data and chunk_data.get("script"):
+            chunks.append(chunk_data["script"])
+            if i == 0:
+                hook_strategy = chunk_data.get("hook_strategy", "")
+            all_open_loops.extend(chunk_data.get("open_loops", []))
+            all_emotions.extend(chunk_data.get("emotional_arc", []))
+            all_visuals.extend(chunk_data.get("key_visuals", []))
+            print(f"    [chunk {i+1}/{n_chunks}] {len(chunk_data['script'].split())} words")
+            time.sleep(5)  # brief pause between chunks
+        else:
+            print(f"    [chunk {i+1}/{n_chunks}] FAILED — skipping")
+
+    full_script = " ".join(chunks)
+    return {
+        "script": full_script,
+        "hook_strategy": hook_strategy,
+        "open_loops": all_open_loops[:8],
+        "estimated_duration_sec": target_sec,
+        "key_visuals": all_visuals[:20],
+        "emotional_arc": all_emotions[:8],
+    }
 
 
 async def _generate_tts(script: str, voice: str, output_path: str, rate: str = "-5%"):
@@ -191,6 +328,7 @@ def generate_one_shot_video(
 
     engine_kwargs = engine_kwargs or {}
     groq_key = engine_kwargs.get("groq_api_key", "")
+    gemini_key = engine_kwargs.get("gemini_api_key", "")
 
     result = {
         "title": title, "theme": theme, "language": language, "voice": voice,
@@ -266,8 +404,10 @@ def generate_one_shot_video(
         try:
             # For avatar modes, use original audio for word timestamps
             audio_for_subs = audio_path if mode == "tts_only" else avatar_video
+            # Pass the SCRIPT TEXT so karaoke uses correct words (forced alignment)
             add_karaoke_to_video(composed_path, audio_for_subs, final_path,
-                                language=language)
+                                language=language,
+                                script_text=script_data.get("script", ""))
             result["files"]["final"] = final_path
             result["karaoke"] = True
         except Exception as e:

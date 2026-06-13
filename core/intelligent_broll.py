@@ -71,28 +71,57 @@ _THEME_NEGATIVE_TERMS = {
 
 
 def detect_theme_negatives(theme: str) -> list:
-    """Heuristically pick negative terms for a given theme description."""
+    """Pick negative terms for a given theme description.
+
+    Uses STRONG signals first (specific civilization names) — only falls back
+    to weak signals (generic "history" or "tech") if no specific match.
+    This prevents Silicon Valley (which has "history" in description) from
+    being treated as an ancient civilization theme.
+    """
     theme_low = (theme or "").lower()
     terms = list(_THEME_NEGATIVE_TERMS["default"])
 
-    if any(k in theme_low for k in ["maya", "maia"]):
-        terms += _THEME_NEGATIVE_TERMS["maya"]
-    elif any(k in theme_low for k in ["egypt", "egito", "pharaoh", "pirâmide", "piramide"]):
-        terms += _THEME_NEGATIVE_TERMS["egypt"]
-    elif any(k in theme_low for k in ["aztec", "azteca", "tenochtitlan"]):
-        terms += _THEME_NEGATIVE_TERMS["aztec"]
-    elif any(k in theme_low for k in ["roman", "roma", "caesar", "gladiator"]):
-        terms += _THEME_NEGATIVE_TERMS["roman"]
-    elif any(k in theme_low for k in ["greek", "grego", "atenas", "spartan"]):
-        terms += _THEME_NEGATIVE_TERMS["greek"]
-    elif any(k in theme_low for k in ["antig", "ancient", "civiliz", "histor"]):
-        terms += _THEME_NEGATIVE_TERMS["ancient_civilization"]
-    elif any(k in theme_low for k in ["tech", "ai", "software", "computer", "moderno"]):
-        terms += _THEME_NEGATIVE_TERMS["modern_tech"]
-    elif any(k in theme_low for k in ["nature", "animal", "wildlife", "savan", "selva"]):
-        terms += _THEME_NEGATIVE_TERMS["nature_animals"]
+    # ── STRONG SIGNALS (specific civilizations / topics) ──
+    if any(k in theme_low for k in ["silicon valley", "tech ", "technology",
+                                     "computer", "software", "startup", "ai ",
+                                     "machine learning", "robot", "smartphone",
+                                     "internet", "digital"]):
+        return list(set(terms + _THEME_NEGATIVE_TERMS["modern_tech"]))
 
-    return list(set(terms))
+    if any(k in theme_low for k in ["maya", "maia", "mayan"]):
+        return list(set(terms + _THEME_NEGATIVE_TERMS["maya"]))
+
+    if any(k in theme_low for k in ["egypt", "egito", "pharaoh", "pirâmide",
+                                     "piramide", "giza", "cleopatra", "tutankhamun"]):
+        return list(set(terms + _THEME_NEGATIVE_TERMS["egypt"]))
+
+    if any(k in theme_low for k in ["aztec", "azteca", "tenochtitlan"]):
+        return list(set(terms + _THEME_NEGATIVE_TERMS["aztec"]))
+
+    if any(k in theme_low for k in ["roman", "roma ", "caesar", "gladiator",
+                                     "colosseum", "legion"]):
+        return list(set(terms + _THEME_NEGATIVE_TERMS["roman"]))
+
+    if any(k in theme_low for k in ["greek", "grego", "atenas", "spartan",
+                                     "acropolis", "delphi"]):
+        return list(set(terms + _THEME_NEGATIVE_TERMS["greek"]))
+
+    if any(k in theme_low for k in ["whale", "marine", "ocean ", "deep sea",
+                                     "wildlife", "savan", "selva", "jungle",
+                                     "rainforest", "polar", "arctic"]):
+        return list(set(terms + _THEME_NEGATIVE_TERMS["nature_animals"]))
+
+    if any(k in theme_low for k in ["stonehenge", "druid", "prehist", "neolithic",
+                                     "bronze age", "iron age"]):
+        return list(set(terms + _THEME_NEGATIVE_TERMS["ancient_civilization"]))
+
+    # ── WEAK SIGNALS (fallback only — generic terms) ──
+    # Only fire if NO strong signal matched
+    if any(k in theme_low for k in ["antig", "ancient", "civiliz"]):
+        return list(set(terms + _THEME_NEGATIVE_TERMS["ancient_civilization"]))
+
+    # Don't auto-add negatives for vague "history" alone — too ambiguous
+    return terms
 
 
 @dataclass
@@ -877,13 +906,15 @@ class IntelligentBrollEngine:
         self.max_attempts = max_search_attempts
 
         # ── Anti-duplicate state (per video instance) ──
-        self._used_clip_ids = set()           # IDs from same source
+        self._used_clip_ids = []              # IDs in selection order (list, not set)
         self._used_phashes = []               # pHashes of clips selected so far
         self._used_descriptions = []          # Vision descs of what was picked (for diversity hint)
         self._spare_pool = []                 # ClipCandidates approved but not winners
                                               # used to fill gaps with variety
         self._phash_dedup_threshold = 0.85    # >85% visually similar = reject
         self._negative_terms = []             # Theme-based exclusion list (set in build())
+        self._cooldown_segments = 12          # Allow reuse of a clip after N segments
+                                              # (for long videos — pool may run out)
 
     def build(self, audio_path: str = "", script: str = "",
               theme: str = "general", min_relevance: int = 60,
@@ -960,12 +991,17 @@ class IntelligentBrollEngine:
         return out
 
     def _is_visually_duplicate(self, phash: str) -> tuple:
-        """Returns (is_dup: bool, max_similarity: float, matching_phash: str)."""
+        """Returns (is_dup: bool, max_similarity: float, matching_phash: str).
+
+        Only checks against pHashes used WITHIN the cooldown window.
+        For long videos, clips outside the cooldown can repeat with fresh context.
+        """
         if not phash or not self._used_phashes:
             return False, 0.0, ""
+        recent = self._used_phashes[-self._cooldown_segments:]
         max_sim = 0.0
         matching = ""
-        for used in self._used_phashes:
+        for used in recent:
             sim = phash_similarity(phash, used)
             if sim > max_sim:
                 max_sim = sim
@@ -973,8 +1009,8 @@ class IntelligentBrollEngine:
         return max_sim >= self._phash_dedup_threshold, max_sim, matching
 
     def _mark_used(self, cand: ClipCandidate):
-        """Mark a clip as used so future segments don't pick it again."""
-        self._used_clip_ids.add(cand.source_id)
+        """Mark a clip as used. Now appends to list (cooldown semantics)."""
+        self._used_clip_ids.append(cand.source_id)
         if cand.perceptual_hash:
             self._used_phashes.append(cand.perceptual_hash)
         if cand.vision_description:
@@ -1007,8 +1043,10 @@ class IntelligentBrollEngine:
 
                 candidates = candidates[:self.max_candidates]
                 for cand in candidates:
-                    # Layer 1: exact ID dedup
-                    if cand.source_id in self._used_clip_ids:
+                    # Layer 1: ID cooldown — clip can be reused after N segments
+                    # (so long videos don't run out of pool)
+                    recent_ids = self._used_clip_ids[-self._cooldown_segments:]
+                    if cand.source_id in recent_ids:
                         continue
                     if not cand.thumbnail_url:
                         cand.relevance_score = 0
@@ -1073,7 +1111,8 @@ class IntelligentBrollEngine:
 
         # Try spare pool: previously-approved clips not yet used in this video
         for spare in sorted(self._spare_pool, key=lambda c: -c.relevance_score):
-            if spare.source_id in self._used_clip_ids:
+            recent_ids = self._used_clip_ids[-self._cooldown_segments:]
+            if spare.source_id in recent_ids:
                 continue
             is_dup, _, _ = self._is_visually_duplicate(spare.perceptual_hash)
             if is_dup:
