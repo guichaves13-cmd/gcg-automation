@@ -67,20 +67,22 @@ class SegmentIntent:
 @dataclass
 class ClipCandidate:
     """Candidato de clip de qualquer fonte."""
-    source: str                              # "pexels" | "pixabay" | "youtube" | "mixkit"
+    source: str                              # "pexels" | "pixabay" | "youtube" | "mixkit" | "pexels_photo"
     source_id: str                           # ID nativo da fonte (pra dedup)
     title: str                               # Texto descritivo do clip
     page_url: str                            # URL da página de download
-    download_url: str                        # URL direta do MP4
+    download_url: str                        # URL direta do MP4 (ou imagem)
     thumbnail_url: str                       # URL do thumbnail/poster
     duration: float                          # Segundos
     width: int = 0
     height: int = 0
+    is_photo: bool = False                   # True = foto estática (vai virar Ken Burns)
 
     # Preenchidos durante verificação:
     relevance_score: int = 0                 # 0-100 do Gemini Vision
     vision_description: str = ""             # O que Gemini disse que vê
     rejection_reason: str = ""               # Por que foi rejeitado (se foi)
+    perceptual_hash: str = ""                # pHash do thumbnail pra anti-duplicate visual
 
     def short_label(self) -> str:
         return f"[{self.source}#{self.source_id}] {self.title[:50]}"
@@ -100,6 +102,41 @@ class BeatPlan:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# VISUAL FINGERPRINT (anti-duplicate)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def compute_phash(image_bytes: bytes) -> str:
+    """Compute perceptual hash of image bytes for visual similarity dedup.
+    Returns hex string; empty on failure.
+    """
+    try:
+        import imagehash
+        from PIL import Image
+        import io
+        img = Image.open(io.BytesIO(image_bytes))
+        return str(imagehash.phash(img, hash_size=8))
+    except Exception:
+        return ""
+
+
+def phash_similarity(h1: str, h2: str) -> float:
+    """Return 0.0-1.0 visual similarity between two pHash hex strings.
+    1.0 = identical. ≥0.85 means basically the same scene.
+    """
+    if not h1 or not h2 or len(h1) != len(h2):
+        return 0.0
+    try:
+        import imagehash
+        ih1 = imagehash.hex_to_hash(h1)
+        ih2 = imagehash.hex_to_hash(h2)
+        bits = len(ih1.hash.flatten())
+        return 1.0 - (ih1 - ih2) / bits
+    except Exception:
+        return 0.0
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # VISION VERIFIER
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -111,6 +148,7 @@ CONTEXTO DO SEGMENTO NARRADO:
 - Entidade principal: {entity}
 - Ação/estado: {action}
 - Tema/contexto geral: {theme}
+{diversity_hint}
 
 REGRAS DE SCORE (use criteriosamente, não seja arbitrariamente rigoroso):
 - 90-100: A imagem mostra EXATAMENTE a entidade fazendo EXATAMENTE a ação descrita
@@ -126,6 +164,8 @@ PRINCÍPIO CHAVE:
   visualmente icônico do TEMA é aceitável (75-89), não exija a ação literal.
 - Para narrações CONCRETAS ("o cachorro late"), exija o objeto exato (≥80) ou rejeite.
 - NUNCA aprove um clip que mostre conceito ERRADO (ex: feliz quando narração é triste).
+- Se a cena já apareceu no vídeo (veja DIVERSITY HINT acima), PENALIZE -15 pontos
+  para incentivar variedade visual.
 
 Responda APENAS em JSON estrito:
 {{
@@ -171,34 +211,49 @@ class VisionVerifier:
             return None
 
     def verify(self, image_url: str, intent: SegmentIntent,
-               timeout: float = 15.0, theme: str = "") -> tuple:
+               timeout: float = 15.0, theme: str = "",
+               already_used_descriptions: list = None) -> tuple:
         """Verifica se uma imagem é adequada para o intent.
 
         Args:
-            theme: contexto temático geral do vídeo (ex: "Ancient Egypt",
-                "agronegócio") — usado para credit thematic matches em narrações abstratas.
+            theme: contexto temático geral do vídeo
+            already_used_descriptions: lista de descrições visuais já usadas no
+                video, pro Vision penalizar repetições.
 
-        Returns: (score: int 0-100, description: str, reason_if_rejected: str)
+        Returns: (score: int 0-100, description: str, reason_if_rejected: str, phash: str)
         """
-        if not self.client:
-            # Fallback heurístico: confia no search (assume score 60 default)
-            return 60, "[no vision verifier available]", ""
+        if not self.client and not self.nvidia_key:
+            return 60, "[no vision verifier available]", "", ""
 
         # Download thumbnail para bytes
         try:
             import requests
             img_resp = requests.get(image_url, timeout=10)
             if img_resp.status_code != 200 or len(img_resp.content) < 1000:
-                return 0, "[thumbnail unavailable]", "thumbnail download failed"
+                return 0, "[thumbnail unavailable]", "thumbnail download failed", ""
             img_bytes = img_resp.content
         except Exception as e:
-            return 0, "[thumbnail error]", f"thumb fetch error: {e}"
+            return 0, "[thumbnail error]", f"thumb fetch error: {e}", ""
+
+        # Compute pHash for visual dedup (cheap, ~5ms)
+        phash = compute_phash(img_bytes)
+
+        # Build diversity hint from previously-used clip descriptions
+        diversity_hint = ""
+        if already_used_descriptions:
+            descs = [d for d in already_used_descriptions if d][-5:]
+            if descs:
+                diversity_hint = (
+                    "\n\nDIVERSITY HINT — cenas já usadas neste vídeo (evite repetir):\n"
+                    + "\n".join(f"  - {d}" for d in descs)
+                )
 
         prompt = _VISION_PROMPT_TEMPLATE.format(
             text=intent.text[:200],
             entity=intent.main_entity or "(não definido)",
             action=intent.action or "(não definido)",
             theme=theme or intent.visual_context or "geral",
+            diversity_hint=diversity_hint,
         )
 
         # Try Gemini first (unless we've determined it's dead this session)
@@ -222,7 +277,7 @@ class VisionVerifier:
                     score = max(0, min(100, score))
                     desc = str(data.get("what_i_see", ""))[:100]
                     reason = str(data.get("rejection_reason", ""))[:200]
-                    return score, desc, reason
+                    return score, desc, reason, phash
             except Exception as e:
                 err_str = str(e)
                 if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
@@ -268,11 +323,11 @@ class VisionVerifier:
                 score = max(0, min(100, score))
                 desc = str(data.get("what_i_see", ""))[:100]
                 reason = str(data.get("rejection_reason", ""))[:200]
-                return score, desc, reason
+                return score, desc, reason, phash
             except Exception as e:
-                return 0, "[vision error]", f"NVIDIA NIM failed: {str(e)[:200]}"
+                return 0, "[vision error]", f"NVIDIA NIM failed: {str(e)[:200]}", phash
 
-        return 0, "[no vision available]", "Both Gemini and NVIDIA NIM unavailable"
+        return 0, "[no vision available]", "Both Gemini and NVIDIA NIM unavailable", phash
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -580,6 +635,40 @@ class MultiSourceSearcher:
             print(f"  [youtube] err: {e}")
             return []
 
+    def search_photos(self, query: str, count: int = 6) -> list:
+        """Search Pexels PHOTOS as fallback when no video matches.
+        Photos get Ken Burns motion applied later → look like B-roll.
+
+        Pexels has a MASSIVE photo library (much larger than videos), so this
+        dramatically increases coverage for abstract/historical topics.
+        """
+        if not self.pexels_key:
+            return []
+        try:
+            from core.pexels_stock import search_photos
+            raw = search_photos(self.pexels_key, query, count=count)
+            out = []
+            for p in raw or []:
+                if not p.get("url"):
+                    continue
+                pid = str(p.get("id", ""))
+                out.append(ClipCandidate(
+                    source="pexels_photo",
+                    source_id=pid,
+                    title=f"pexels photo {pid}",
+                    page_url=f"https://www.pexels.com/photo/{pid}/",
+                    download_url=str(p["url"]),
+                    thumbnail_url=str(p.get("preview_url", "") or p["url"]),
+                    duration=8.0,  # virtual — vai virar Ken Burns
+                    width=int(p.get("width", 1920)),
+                    height=int(p.get("height", 1080)),
+                    is_photo=True,
+                ))
+            return out
+        except Exception as e:
+            print(f"  [pexels_photo] err: {e}")
+            return []
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # WHISPER SEGMENTER
@@ -726,7 +815,14 @@ class IntelligentBrollEngine:
                                         nvidia_api_key=nvidia_api_key)
         self.max_candidates = max_candidates_per_intent
         self.max_attempts = max_search_attempts
-        self._used_clip_ids = set()  # Anti-duplicate across video
+
+        # ── Anti-duplicate state (per video instance) ──
+        self._used_clip_ids = set()           # IDs from same source
+        self._used_phashes = []               # pHashes of clips selected so far
+        self._used_descriptions = []          # Vision descs of what was picked (for diversity hint)
+        self._spare_pool = []                 # ClipCandidates approved but not winners
+                                              # used to fill gaps with variety
+        self._phash_dedup_threshold = 0.85    # >85% visually similar = reject
 
     def build(self, audio_path: str = "", script: str = "",
               theme: str = "general", min_relevance: int = 80,
@@ -797,25 +893,55 @@ class IntelligentBrollEngine:
             t += dur
         return out
 
+    def _is_visually_duplicate(self, phash: str) -> tuple:
+        """Returns (is_dup: bool, max_similarity: float, matching_phash: str)."""
+        if not phash or not self._used_phashes:
+            return False, 0.0, ""
+        max_sim = 0.0
+        matching = ""
+        for used in self._used_phashes:
+            sim = phash_similarity(phash, used)
+            if sim > max_sim:
+                max_sim = sim
+                matching = used
+        return max_sim >= self._phash_dedup_threshold, max_sim, matching
+
+    def _mark_used(self, cand: ClipCandidate):
+        """Mark a clip as used so future segments don't pick it again."""
+        self._used_clip_ids.add(cand.source_id)
+        if cand.perceptual_hash:
+            self._used_phashes.append(cand.perceptual_hash)
+        if cand.vision_description:
+            self._used_descriptions.append(cand.vision_description)
+
     def _find_clip_for_intent(self, intent: SegmentIntent,
                               min_relevance: int = 80,
                               theme: str = "") -> BeatPlan:
-        """Etapas 3-5: busca + verificação visual + seleção.
+        """Etapas 3-5: busca + verificação visual + seleção com anti-duplicate.
 
-        Tracks the BEST candidate across all attempts — if no clip clears
-        min_relevance but we found something above 50, returns it as a fallback
-        so abstract narrations get thematic clips instead of leaving gaps.
+        Anti-repetition layers (in order of cheapness):
+        1. source_id dedup (free, exact match)
+        2. pHash dedup (cheap, ~5ms — catches resized/recompressed same scene)
+        3. Diversity hint in Vision prompt (penalizes scenes too similar to used ones)
+
+        Best-so-far fallback for abstract narrations + spare pool for gap-fills.
         """
-        best_so_far = None  # (score, candidate) tuple
+        best_so_far = None  # (score, candidate)
 
         for attempt in range(self.max_attempts):
             for query in intent.search_queries:
                 candidates = self.searcher.search_all(query)
+                # If attempt > 0 OR few video candidates, ALSO pull photos (Ken Burns)
+                if attempt > 0 or len(candidates) < 4:
+                    photos = self.searcher.search_photos(query, count=4)
+                    if photos:
+                        candidates = candidates + photos
                 if not candidates:
                     continue
 
                 candidates = candidates[:self.max_candidates]
                 for cand in candidates:
+                    # Layer 1: exact ID dedup
                     if cand.source_id in self._used_clip_ids:
                         continue
                     if not cand.thumbnail_url:
@@ -823,21 +949,34 @@ class IntelligentBrollEngine:
                         cand.rejection_reason = "no thumbnail"
                         continue
 
-                    score, desc, reason = self.verifier.verify(
+                    # Vision verify (with diversity hint based on what's been used)
+                    score, desc, reason, phash = self.verifier.verify(
                         cand.thumbnail_url, intent, theme=theme,
+                        already_used_descriptions=self._used_descriptions,
                     )
                     cand.relevance_score = score
                     cand.vision_description = desc
                     cand.rejection_reason = reason
+                    cand.perceptual_hash = phash
+
+                    # Layer 2: perceptual hash dedup
+                    is_dup, sim, _ = self._is_visually_duplicate(phash)
+                    if is_dup:
+                        print(f"    [{score:3d}] {cand.source}#{cand.source_id[:8]}: "
+                              f"{desc[:60]} — ❌ {sim*100:.0f}% similar to already used")
+                        continue
 
                     print(f"    [{score:3d}] {cand.source}#{cand.source_id[:8]}: "
                           f"{desc[:70]}")
 
                     if score >= min_relevance:
-                        self._used_clip_ids.add(cand.source_id)
+                        self._mark_used(cand)
                         return BeatPlan(intent=intent, clip=cand)
 
-                    # Track best-so-far in case nothing passes threshold
+                    # Track best-so-far + add medium scorers to spare pool
+                    if score >= 60:
+                        # Pool aceita medio-bom como reserva pra gap-fill diversificado
+                        self._spare_pool.append(cand)
                     if score > 50 and (best_so_far is None or score > best_so_far[0]):
                         best_so_far = (score, cand)
 
@@ -846,14 +985,28 @@ class IntelligentBrollEngine:
             intent.search_queries = self._refine_queries(intent)
             print(f"  [refine attempt {attempt+1}] new queries: {intent.search_queries[:3]}")
 
-        # All attempts failed — but if we found something decent (≥50), use it
-        # rather than leaving a gap. Better thematic clip than missing footage.
+        # All attempts failed — try best-so-far if not dup
         if best_so_far is not None:
             score, cand = best_so_far
-            self._used_clip_ids.add(cand.source_id)
-            print(f"  ⚡ Fallback: using best-so-far clip "
-                  f"{cand.source}#{cand.source_id[:8]} score={score}")
-            return BeatPlan(intent=intent, clip=cand)
+            is_dup, _, _ = self._is_visually_duplicate(cand.perceptual_hash)
+            if not is_dup:
+                self._mark_used(cand)
+                print(f"  ⚡ Fallback: using best-so-far clip "
+                      f"{cand.source}#{cand.source_id[:8]} score={score}")
+                return BeatPlan(intent=intent, clip=cand)
+
+        # Try spare pool: previously-approved clips not yet used in this video
+        for spare in sorted(self._spare_pool, key=lambda c: -c.relevance_score):
+            if spare.source_id in self._used_clip_ids:
+                continue
+            is_dup, _, _ = self._is_visually_duplicate(spare.perceptual_hash)
+            if is_dup:
+                continue
+            self._mark_used(spare)
+            self._spare_pool.remove(spare)
+            print(f"  🎁 Spare pool: reusing {spare.source}#{spare.source_id[:8]} "
+                  f"({spare.vision_description[:50]}) score={spare.relevance_score}")
+            return BeatPlan(intent=intent, clip=spare)
 
         # Truly nothing matched — flag manual review
         return BeatPlan(
@@ -869,8 +1022,17 @@ class IntelligentBrollEngine:
         return data["search_queries"]
 
     def _download_clip(self, clip: ClipCandidate, intent: SegmentIntent) -> str:
-        """Baixa o clip aprovado. Returns path local."""
+        """Baixa o clip aprovado. Returns path local.
+
+        For photo candidates, downloads the image then converts to a Ken Burns
+        video (zoom+pan) so it looks like B-roll in the final composition.
+        """
         safe_id = hashlib.md5(f"{clip.source}_{clip.source_id}".encode()).hexdigest()[:12]
+
+        # Photos: download img, convert to Ken Burns video
+        if clip.is_photo or clip.source == "pexels_photo":
+            return self._photo_to_kenburns(clip, intent, safe_id)
+
         ext = ".mp4"
         out = self.output_dir / f"intent{intent.index:03d}_{clip.source}_{safe_id}{ext}"
         if out.exists() and out.stat().st_size > 50_000:
@@ -905,6 +1067,64 @@ class IntelligentBrollEngine:
                 return ""
         except Exception as e:
             print(f"  [download err] {clip.source}#{clip.source_id}: {e}")
+            return ""
+
+    def _photo_to_kenburns(self, clip: ClipCandidate, intent: SegmentIntent,
+                          safe_id: str, target_dur: float = 8.0) -> str:
+        """Download a photo then ffmpeg-convert it to a Ken Burns video.
+
+        Ken Burns = subtle zoom + pan over time. Makes a still photo feel like
+        cinematographic B-roll.
+        """
+        import subprocess, requests, random
+        img_path = self.output_dir / f"intent{intent.index:03d}_photo_{safe_id}.jpg"
+        out = self.output_dir / f"intent{intent.index:03d}_kb_{safe_id}.mp4"
+        if out.exists() and out.stat().st_size > 50_000:
+            return str(out)
+
+        # Download image
+        try:
+            r = requests.get(clip.download_url, timeout=60)
+            r.raise_for_status()
+            with open(img_path, "wb") as f:
+                f.write(r.content)
+        except Exception as e:
+            print(f"  [photo dl err] {e}")
+            return ""
+
+        # Use segment duration if known
+        seg_dur = max(3.0, intent.end - intent.start) if intent.end > intent.start else target_dur
+
+        # 4 Ken Burns variants — randomize per segment for variety
+        rng = random.Random(hash(safe_id))
+        kb_modes = [
+            # (zoom_start, zoom_end, x_start, x_end, y_start, y_end)
+            "zoompan=z='min(zoom+0.0015,1.5)':d={frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={W}x{H}:fps=30",
+            "zoompan=z='if(eq(on,1),1.5,max(1.001,zoom-0.0015))':d={frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={W}x{H}:fps=30",
+            "zoompan=z='1.2+0.1*sin(on/30)':d={frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={W}x{H}:fps=30",
+        ]
+        kb = rng.choice(kb_modes)
+        W, H = 1920, 1080
+        frames = int(seg_dur * 30)
+        filter_str = kb.format(W=W, H=H, frames=frames)
+        # Scale input first for higher quality zoom
+        full_filter = f"scale=3840:2160:force_original_aspect_ratio=increase,crop=3840:2160,{filter_str}"
+
+        try:
+            r = subprocess.run([
+                "ffmpeg", "-y",
+                "-loop", "1", "-t", f"{seg_dur:.2f}", "-i", str(img_path),
+                "-vf", full_filter,
+                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "22",
+                "-pix_fmt", "yuv420p", "-r", "30",
+                str(out),
+            ], capture_output=True, timeout=120)
+            if out.exists() and out.stat().st_size > 50_000:
+                return str(out)
+            print(f"  [kenburns err] ffmpeg failed: {r.stderr.decode(errors='replace')[-200:]}")
+            return ""
+        except Exception as e:
+            print(f"  [kenburns err] {e}")
             return ""
 
 
