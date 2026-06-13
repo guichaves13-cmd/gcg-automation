@@ -64,7 +64,10 @@ _THEME_NEGATIVE_TERMS = {
               "victorian"],
     "greek": ["egypt", "maya", "asian", "gothic", "cathedral", "modern"],
     "modern_tech": ["ancient", "medieval", "ruins", "pyramid", "cathedral",
-                    "renaissance", "horse", "candle", "fire"],
+                    "renaissance", "horse", "candle", "fire",
+                    # Generic pet/animal clips don't fit tech narratives:
+                    "dog", "cat", "cachorro", "gato", "puppy", "kitten",
+                    "rabbit", "hamster", "fish", "aquarium", "bird in cage"],
     "nature_animals": ["building", "car", "computer", "phone", "indoor", "office"],
     "default": [],
 }
@@ -254,6 +257,14 @@ CULTURA E ÉPOCA — REGRA CRÍTICA:
   - PREFERIR pirâmides/templos/ruínas/artefatos da CIVILIZAÇÃO CORRETA
 - Se o tema é moderno (tech, esportes, ciência atual):
   - REJEITAR ruínas antigas, pessoas em traje histórico
+
+ANIMAIS EM CONTEÚDO NÃO-PET:
+- Se o tema NÃO é sobre animais/pets (ex: tema é tecnologia, finanças,
+  história industrial, política):
+  - REJEITAR (score ≤25) imagens de animais domésticos (cachorros, gatos,
+    coelhos, hamsters), peixes em aquário, pássaros engaiolados.
+  - Esses clips são genéricos demais e quebram a coerência narrativa.
+- Exceção: se a narração MENCIONA o animal explicitamente, aceitar.
 
 Responda APENAS em JSON estrito:
 {{

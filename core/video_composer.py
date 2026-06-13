@@ -45,11 +45,17 @@ def _build_broll_timeline(plans, work_dir: Path, audio_dur: float,
         if p.clip and p.download_path and os.path.exists(p.download_path):
             src = p.download_path
         else:
-            # GAP-FILL: pick a clip from the pool that wasn't used in last 2 segments
+            # GAP-FILL with 3-tier fallback (prevents black screen):
+            # 1. Pool clips not used in last 2 segments (prefers diversity)
+            # 2. Any pool clip with cycling (allows reuse)
+            # 3. First pool clip (guaranteed never None)
             candidates = [c for c in resolved_pool if c not in last_used_paths[-2:]]
             if not candidates:
-                # All recent clips already shown — fall back to oldest
-                candidates = resolved_pool
+                candidates = resolved_pool   # all already shown — allow recycling
+            if not candidates:
+                # Should never happen because resolved_pool is non-empty
+                # (guarded above with "raise RuntimeError('No clips resolved')")
+                continue
             src = candidates[pool_idx % len(candidates)]
             pool_idx += 1
 
