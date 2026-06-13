@@ -231,7 +231,7 @@ def _write_via_cerebras(prompt: str, cerebras_key: str) -> dict:
             headers={"Authorization": f"Bearer {cerebras_key}",
                      "Content-Type": "application/json"},
             json={
-                "model": "llama-3.3-70b",
+                "model": "gpt-oss-120b",  # OpenAI's open-source GPT-4 class model
                 "messages": [{"role": "user", "content": prompt}],
                 "temperature": 0.85,
                 "max_tokens": 4000,
@@ -256,11 +256,12 @@ def _write_via_openrouter(prompt: str, openrouter_key: str) -> dict:
     """
     if not openrouter_key:
         return None
-    # Try free models in order of quality
+    # Try free models in order of quality (updated 2026)
     models_to_try = [
-        "deepseek/deepseek-chat-v3-0324:free",
-        "meta-llama/llama-3.3-70b-instruct:free",
-        "qwen/qwen-2.5-72b-instruct:free",
+        "nvidia/nemotron-3-super-120b-a12b:free",  # 120b Nvidia super model
+        "qwen/qwen3-next-80b-a3b-instruct:free",   # 80b Qwen3
+        "google/gemma-4-31b-it:free",              # 31b Google Gemma
+        "nvidia/nemotron-3-nano-30b-a3b:free",     # 30b Nvidia fallback
     ]
     for model in models_to_try:
         try:
