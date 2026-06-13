@@ -22,19 +22,39 @@ def _ffprobe_duration(path: str) -> float:
 
 def _build_broll_timeline(plans, work_dir: Path, audio_dur: float,
                           width: int = 1920, height: int = 1080, fps: int = 30) -> str:
-    """Normalize each segment's clip + concat into a single timeline video (no audio).
-    Uses gap-fill from last_resolved if a segment has no clip."""
+    """Normalize each segment's clip + concat into a single timeline video.
+
+    Anti-repetition gap-fill:
+    - Collect ALL resolved clips into a pool
+    - When a segment has no clip, pull from pool with cycling that avoids
+      reusing the SAME clip back-to-back or twice in a row
+    - As a last resort, use the closest-temporal clip
+    """
+    # Build pool of all resolved clip paths (preserves order = relevance order)
+    resolved_pool = [p.download_path for p in plans
+                    if p.clip and p.download_path and os.path.exists(p.download_path)]
+    if not resolved_pool:
+        raise RuntimeError("No clips resolved")
+
     timeline = []
-    last_resolved = None
+    # Cycle index for unresolved segments
+    pool_idx = 0
+    last_used_paths = []   # track what we've shown to enforce diversity
+
     for p in plans:
         if p.clip and p.download_path and os.path.exists(p.download_path):
-            last_resolved = p.download_path
-        src = (p.download_path
-               if (p.clip and p.download_path and os.path.exists(p.download_path))
-               else last_resolved)
-        if not src:
-            continue
+            src = p.download_path
+        else:
+            # GAP-FILL: pick a clip from the pool that wasn't used in last 2 segments
+            candidates = [c for c in resolved_pool if c not in last_used_paths[-2:]]
+            if not candidates:
+                # All recent clips already shown — fall back to oldest
+                candidates = resolved_pool
+            src = candidates[pool_idx % len(candidates)]
+            pool_idx += 1
+
         timeline.append((p.intent.start, p.intent.end, src))
+        last_used_paths.append(src)
 
     if not timeline:
         raise RuntimeError("No clips resolved")
@@ -48,12 +68,25 @@ def _build_broll_timeline(plans, work_dir: Path, audio_dur: float,
     for i, (start, end, src) in enumerate(timeline):
         seg_dur = max(0.5, end - start)
         norm = work_dir / f"seg_{i:03d}.mp4"
+
+        # Alternate zoom direction per segment for visual variety:
+        # even = slow zoom-in, odd = slow zoom-out → keeps eyes engaged
+        if i % 2 == 0:
+            zoom_filter = f"zoompan=z='min(zoom+0.0008,1.15)':d={int(seg_dur*fps)}:s={width}x{height}:fps={fps}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
+        else:
+            zoom_filter = f"zoompan=z='if(eq(on,0),1.15,max(1.0,zoom-0.0008))':d={int(seg_dur*fps)}:s={width}x{height}:fps={fps}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
+
+        # Scale up 2× before zoompan for higher quality result
         cmd = [
             "ffmpeg", "-y", "-i", src, "-t", f"{seg_dur:.2f}",
-            "-vf", (f"scale={width}:{height}:force_original_aspect_ratio=increase,"
-                    f"crop={width}:{height},setsar=1,fps={fps},format=yuv420p"),
+            "-vf", (
+                f"scale={width*2}:{height*2}:force_original_aspect_ratio=increase,"
+                f"crop={width*2}:{height*2},"
+                f"{zoom_filter},"
+                f"setsar=1,format=yuv420p"
+            ),
             "-an", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "22",
-            "-tune", "stillimage", str(norm),
+            str(norm),
         ]
         subprocess.run(cmd, capture_output=True, timeout=180)
         if norm.exists() and norm.stat().st_size > 10000:
@@ -96,18 +129,22 @@ def compose_tts_only(plans, audio_path: str, output_path: str,
 
 def compose_avatar_corner(plans, avatar_video: str, output_path: str,
                           corner: str = "top_right",
-                          avatar_scale: float = 0.22,
+                          avatar_scale: float = 0.25,
                           add_shadow: bool = True,
                           add_border: bool = True,
                           width: int = 1920, height: int = 1080, fps: int = 30) -> str:
-    """Mode 2: Avatar persona in corner overlay, B-roll fills the rest.
+    """Mode 2: Avatar persona ANCHORED in corner overlay (covers ~20-25% of screen).
+
+    Avatar is positioned flush against the corner edge (small ~12px gap) and is
+    sized to be clearly visible — not a tiny floating PIP. This is the
+    "broadcast" or "explainer" style: persona always present in fixed corner,
+    B-roll behind illustrates what they're saying.
 
     Args:
         avatar_video: path to MP4 with persona narrating (audio used as track).
         corner: 'top_right', 'top_left', 'bottom_right', 'bottom_left'.
-        avatar_scale: fraction of full width (default 0.22 = ~22% of screen width).
-        add_shadow: drop shadow behind avatar for separation.
-        add_border: thin white border + rounded corners.
+        avatar_scale: fraction of width (0.25 = avatar is 25% wide → covers
+                      ~14% of screen area). For mobile/vertical use 0.30.
     """
     work = Path(output_path).parent / "_compose_work"
     work.mkdir(exist_ok=True)
@@ -117,7 +154,6 @@ def compose_avatar_corner(plans, avatar_video: str, output_path: str,
 
     # Compute avatar size + position
     a_w = int(width * avatar_scale)
-    # Keep aspect ratio of original avatar — query it
     cmd = ["ffprobe", "-v", "error", "-select_streams", "v:0",
            "-show_entries", "stream=width,height", "-of", "csv=p=0", avatar_video]
     out = subprocess.run(cmd, capture_output=True, text=True).stdout.strip()
@@ -128,35 +164,35 @@ def compose_avatar_corner(plans, avatar_video: str, output_path: str,
         avatar_aspect = 16 / 9
     a_h = int(a_w / avatar_aspect)
 
-    margin = 40  # px from edge
+    # Position FLUSH against corner — small gap only (12px) for visual breathing.
+    # Margin from screen edge — tight against the corner so it reads as "anchored".
+    edge_gap = 12
     if corner == "top_right":
-        ax, ay = width - a_w - margin, margin
+        ax, ay = width - a_w - edge_gap, edge_gap
     elif corner == "top_left":
-        ax, ay = margin, margin
+        ax, ay = edge_gap, edge_gap
     elif corner == "bottom_right":
-        ax, ay = width - a_w - margin, height - a_h - margin
+        ax, ay = width - a_w - edge_gap, height - a_h - edge_gap
     else:  # bottom_left
-        ax, ay = margin, height - a_h - margin
+        ax, ay = edge_gap, height - a_h - edge_gap
 
-    # Build filter graph
-    # [0] = broll loop. [1] = avatar.
-    # Scale avatar to a_w x a_h. Optional: draw drop-shadow rectangle behind.
+    # Build filter graph — avatar gets thicker white border + drop shadow for
+    # clear visual separation from B-roll.
     avatar_chain = f"[1:v]scale={a_w}:{a_h}:flags=lanczos,format=yuva420p"
     if add_border:
-        # Pad with 4px black border then 2px white border for separation
-        avatar_chain += f",pad=w=iw+8:h=ih+8:x=4:y=4:color=black@0.5"
-        avatar_chain += f",pad=w=iw+4:h=ih+4:x=2:y=2:color=white@0.9"
-
+        # Thicker frame: 6px dark outer + 3px white inner = "broadcast" look
+        avatar_chain += f",pad=w=iw+12:h=ih+12:x=6:y=6:color=black@0.75"
+        avatar_chain += f",pad=w=iw+6:h=ih+6:x=3:y=3:color=white@0.95"
     avatar_chain += "[avatar]"
 
     if add_shadow:
-        # Shadow = darker tinted box slightly offset
-        shadow_w = a_w + 12
-        shadow_h = a_h + 12
+        # Larger, softer shadow for depth
+        shadow_w = a_w + 30
+        shadow_h = a_h + 30
         filtergraph = (
-            f"color=c=black@0.5:s={shadow_w}x{shadow_h}:d={avatar_dur}[shadow];"
+            f"color=c=black@0.6:s={shadow_w}x{shadow_h}:d={avatar_dur}[shadow];"
             f"{avatar_chain};"
-            f"[0:v][shadow]overlay={ax+6}:{ay+6}:enable='gte(t,0)'[bg];"
+            f"[0:v][shadow]overlay={ax+10}:{ay+10}:enable='gte(t,0)'[bg];"
             f"[bg][avatar]overlay={ax}:{ay}:enable='gte(t,0)'[v]"
         )
     else:

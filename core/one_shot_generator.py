@@ -32,37 +32,95 @@ _DEFAULT_VOICES = {
 }
 
 
-_SCRIPT_PROMPT = """You are a viral YouTube/TikTok scriptwriter. Write a captivating short-form
-narration script (60-120 seconds when read aloud, ~150-220 words) on this topic:
+_SCRIPT_PROMPT = """You are an ELITE viral scriptwriter for top documentary channels
+(MrBeast tier: Veritasium, History Channel, Real Stories). Write a narration script
+that DOMINATES retention for the first 2 minutes. Topic:
 
 TITLE: {title}
 THEME: {theme}
 LANGUAGE: {language}
+TARGET LENGTH: {target_sec} seconds (~{target_words} words)
 
-REQUIREMENTS:
-- Hook the viewer in the FIRST sentence (curiosity, surprise, mystery, or a striking fact).
-- Use CONCRETE visual nouns — things that can be filmed (objects, places, animals, actions).
-- Avoid abstract concepts when possible. Prefer "a stone pyramid" over "an idea".
-- Build tension: one fact → consequence → twist → revelation.
-- Strictly in the requested LANGUAGE.
-- NO bullet points, NO numbered lists, NO markdown. Just clean narration sentences.
-- End with a thought-provoking line.
+═══════════════════════════════════════════════════════════════════════════════
+RETENTION ENGINEERING RULES (apply ALL of them):
+═══════════════════════════════════════════════════════════════════════════════
 
-Output JSON only:
+1. HOOK (first 8 seconds — MAKE OR BREAK)
+   Open with ONE of these patterns:
+   - SHOCKING NUMBER ("In 1923, a single rope killed 167 people…")
+   - CONTROVERSIAL CLAIM ("Everything you learned about Cleopatra was a lie.")
+   - IMPOSSIBLE QUESTION ("How can a 200-ton block float on air?")
+   - VISUAL MYSTERY ("The men in this photo all vanished within 24 hours.")
+   - DIRECT CHALLENGE ("If you can name the largest empire in history, you're wrong.")
+   ❌ NEVER start with: "Today we'll talk about…" / "Hello everyone" / "Welcome".
+   ✅ Start IN MEDIA RES — drop the viewer mid-action.
+
+2. OPEN LOOPS (curiosity gaps)
+   Every 15-20 seconds, plant a PROMISE you'll deliver later:
+   - "But the real shock came when…"
+   - "What happened next no one expected."
+   - "And there's one detail historians refuse to discuss."
+   These keep viewers watching to "close the loop".
+
+3. PATTERN INTERRUPTS
+   Vary sentence rhythm: short. Then medium length. Then sudden long ones
+   that build tension carefully before cracking like a whip. Then short again.
+   Change pace every 8-15 seconds. Use one-word sentences for impact: "Gone."
+
+4. CONCRETE VISUAL ANCHORS
+   Every sentence should be FILMABLE. Replace abstractions with objects:
+   - ❌ "His power grew enormously"
+   - ✅ "His army of 50,000 swordsmen marched into 47 cities"
+   Use: numbers, names, dates, weights, distances, colors, body counts.
+
+5. EMOTIONAL TRIGGERS (rotate them)
+   Curiosity → Awe → Fear → Disgust → Empathy → Anger → Hope → Shock
+   Hit at least 4 different emotions in 60s.
+
+6. THE TWIST
+   Around 60-70% of the way through, deliver an UNEXPECTED REVELATION
+   that recontextualizes everything before it.
+
+7. CLIFFHANGER ENDING
+   End with a question or implication that makes viewers think for hours.
+   ❌ NO "thanks for watching" / "subscribe".
+   ✅ "And to this day, no one knows where the bodies went."
+
+═══════════════════════════════════════════════════════════════════════════════
+OUTPUT FORMAT (JSON only, no markdown):
+═══════════════════════════════════════════════════════════════════════════════
 {{
-  "script": "<the full narration, 150-220 words>",
+  "hook_strategy": "<which hook pattern you used>",
+  "script": "<the full narration, target ~{target_words} words, in {language}>",
+  "open_loops": ["<promise 1>", "<promise 2>", "..."],
   "estimated_duration_sec": <integer>,
-  "key_visuals": ["<concrete visual 1>", "<concrete visual 2>", "..."]
-}}"""
+  "key_visuals": ["<concrete visual 1>", "<concrete visual 2>", "..."],
+  "emotional_arc": ["<emotion 1>", "<emotion 2>", "..."]
+}}
+
+LANGUAGE LOCK: write the script EXCLUSIVELY in {language}. No code-mixing.
+TONE: serious, cinematic, documentary-grade. Like Ken Burns or BBC Earth.
+NO MARKDOWN. NO BULLETS. Clean sentences only."""
 
 
 def write_script_from_title(title: str, theme: str, language: str,
-                            groq_key: str) -> dict:
-    """Use Groq llama-3.3-70b to write the script."""
+                            groq_key: str, target_sec: int = 90) -> dict:
+    """Use Groq llama-3.3-70b to write a viral retention-optimized script.
+
+    Args:
+        target_sec: target narration duration in seconds (controls word count).
+            Use 60-90 for shorts, 120-180 for medium, 300+ for long-form.
+    """
     if not groq_key:
         return {"script": title, "estimated_duration_sec": 30, "key_visuals": [theme]}
 
-    prompt = _SCRIPT_PROMPT.format(title=title, theme=theme, language=language)
+    # Edge-TTS at -5% rate ≈ 2.4 words/sec → estimate word target
+    target_words = int(target_sec * 2.4)
+
+    prompt = _SCRIPT_PROMPT.format(
+        title=title, theme=theme, language=language,
+        target_sec=target_sec, target_words=target_words,
+    )
     try:
         r = requests.post(
             "https://api.groq.com/openai/v1/chat/completions",
@@ -71,19 +129,22 @@ def write_script_from_title(title: str, theme: str, language: str,
             json={
                 "model": "llama-3.3-70b-versatile",
                 "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.8,
-                "max_tokens": 800,
+                "temperature": 0.85,
+                "max_tokens": min(4000, int(target_words * 4)),
                 "response_format": {"type": "json_object"},
             },
-            timeout=30,
+            timeout=60,
         )
         r.raise_for_status()
         content = r.json()["choices"][0]["message"]["content"]
         data = json.loads(content)
         return {
-            "script": data.get("script", title)[:2500],
-            "estimated_duration_sec": int(data.get("estimated_duration_sec", 60)),
-            "key_visuals": data.get("key_visuals", [])[:10],
+            "script": data.get("script", title)[:8000],
+            "hook_strategy": data.get("hook_strategy", ""),
+            "open_loops": data.get("open_loops", []),
+            "estimated_duration_sec": int(data.get("estimated_duration_sec", target_sec)),
+            "key_visuals": data.get("key_visuals", [])[:15],
+            "emotional_arc": data.get("emotional_arc", []),
         }
     except Exception as e:
         print(f"  [script writer] err: {e}")
@@ -106,6 +167,7 @@ def generate_one_shot_video(
     avatar_corner: str = "top_right",
     output_dir: str = "test_output/one_shot",
     add_karaoke: bool = True,
+    target_sec: int = 90,           # target narration duration
     engine_kwargs: dict = None,
 ) -> dict:
     """Full one-shot generation: title → finished MP4.
@@ -136,12 +198,18 @@ def generate_one_shot_video(
     }
 
     # ── STEP 1: Script ───────────────────────────────────────────
-    print(f"\n[1/5] Writing script for '{title}' ({language})...")
-    script_data = write_script_from_title(title, theme, language, groq_key)
+    print(f"\n[1/5] Writing viral script for '{title}' ({language}, ~{target_sec}s)...")
+    script_data = write_script_from_title(title, theme, language, groq_key,
+                                          target_sec=target_sec)
     result["script"] = script_data["script"]
     result["key_visuals"] = script_data["key_visuals"]
+    result["hook_strategy"] = script_data.get("hook_strategy", "")
+    result["open_loops"] = script_data.get("open_loops", [])
+    result["emotional_arc"] = script_data.get("emotional_arc", [])
     print(f"  → {len(script_data['script'].split())} words, "
           f"~{script_data['estimated_duration_sec']}s estimated")
+    if script_data.get("hook_strategy"):
+        print(f"  → hook strategy: {script_data['hook_strategy']}")
 
     # ── STEP 2: TTS ──────────────────────────────────────────────
     print(f"\n[2/5] TTS with {voice}...")
