@@ -103,9 +103,68 @@ TONE: serious, cinematic, documentary-grade. Like Ken Burns or BBC Earth.
 NO MARKDOWN. NO BULLETS. Clean sentences only."""
 
 
+def _try_llm_chain(prompt: str, llm_keys: dict, max_groq_retries: int = 2) -> dict:
+    """Try LLM providers in order: Groq → Gemini → Cerebras → OpenRouter.
+
+    Returns parsed dict or None if all failed.
+    """
+    import time
+    # Groq with quick retry
+    if llm_keys.get("groq"):
+        for attempt in range(max_groq_retries):
+            try:
+                r = requests.post(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {llm_keys['groq']}",
+                             "Content-Type": "application/json"},
+                    json={
+                        "model": "llama-3.3-70b-versatile",
+                        "messages": [{"role": "user", "content": prompt}],
+                        "temperature": 0.85, "max_tokens": 4000,
+                        "response_format": {"type": "json_object"},
+                    },
+                    timeout=60,
+                )
+                if r.status_code == 429:
+                    print(f"  [LLM] Groq 429 attempt {attempt+1}, trying next provider...")
+                    break
+                r.raise_for_status()
+                data = json.loads(r.json()["choices"][0]["message"]["content"])
+                return _normalize_script_output(data)
+            except Exception as e:
+                print(f"  [LLM] Groq attempt {attempt+1} err: {str(e)[:80]}")
+                if attempt < max_groq_retries - 1:
+                    time.sleep(5)
+
+    # Gemini
+    if llm_keys.get("gemini"):
+        result = _write_via_gemini(prompt, llm_keys["gemini"])
+        if result and result.get("script"):
+            print(f"  [LLM] Via Gemini")
+            return result
+
+    # Cerebras (FREE, 60 req/min separate quota)
+    if llm_keys.get("cerebras"):
+        result = _write_via_cerebras(prompt, llm_keys["cerebras"])
+        if result and result.get("script"):
+            print(f"  [LLM] Via Cerebras")
+            return result
+
+    # OpenRouter (FREE tier models)
+    if llm_keys.get("openrouter"):
+        result = _write_via_openrouter(prompt, llm_keys["openrouter"])
+        if result and result.get("script"):
+            return result
+
+    print(f"  [LLM] ALL providers failed")
+    return None
+
+
 def write_script_from_title(title: str, theme: str, language: str,
                             groq_key: str, target_sec: int = 90,
                             gemini_key: str = "",
+                            cerebras_key: str = "",
+                            openrouter_key: str = "",
                             max_retries: int = 3) -> dict:
     """Use Groq llama-3.3-70b (with retry + Gemini fallback) to write viral script.
 
@@ -114,58 +173,25 @@ def write_script_from_title(title: str, theme: str, language: str,
     """
     target_words = int(target_sec * 2.4)
 
+    llm_keys = {
+        "groq": groq_key, "gemini": gemini_key,
+        "cerebras": cerebras_key, "openrouter": openrouter_key,
+    }
+
     # For long videos: chunk generation. Each chunk = ~3-4 min worth.
     if target_sec > 240:
-        return _write_script_chunked(title, theme, language, groq_key,
-                                     target_sec, gemini_key, max_retries)
+        return _write_script_chunked(title, theme, language, llm_keys, target_sec)
 
     prompt = _SCRIPT_PROMPT.format(
         title=title, theme=theme, language=language,
         target_sec=target_sec, target_words=target_words,
     )
 
-    # Try Groq with retry + backoff
-    for attempt in range(max_retries):
-        try:
-            r = requests.post(
-                "https://api.groq.com/openai/v1/chat/completions",
-                headers={"Authorization": f"Bearer {groq_key}",
-                         "Content-Type": "application/json"},
-                json={
-                    "model": "llama-3.3-70b-versatile",
-                    "messages": [{"role": "user", "content": prompt}],
-                    "temperature": 0.85,
-                    "max_tokens": min(4000, int(target_words * 4)),
-                    "response_format": {"type": "json_object"},
-                },
-                timeout=60,
-            )
-            if r.status_code == 429:
-                wait = (attempt + 1) * 30
-                print(f"  [script writer] Groq 429, waiting {wait}s...")
-                import time; time.sleep(wait)
-                continue
-            r.raise_for_status()
-            content = r.json()["choices"][0]["message"]["content"]
-            data = json.loads(content)
-            return {
-                "script": data.get("script", title)[:8000],
-                "hook_strategy": data.get("hook_strategy", ""),
-                "open_loops": data.get("open_loops", []),
-                "estimated_duration_sec": int(data.get("estimated_duration_sec", target_sec)),
-                "key_visuals": data.get("key_visuals", [])[:15],
-                "emotional_arc": data.get("emotional_arc", []),
-            }
-        except Exception as e:
-            print(f"  [script writer] Groq attempt {attempt+1} err: {str(e)[:120]}")
+    result = _try_llm_chain(prompt, llm_keys)
+    if result and result.get("script"):
+        return result
 
-    # Gemini fallback
-    if gemini_key:
-        result = _write_via_gemini(prompt, gemini_key)
-        if result:
-            return result
-
-    print(f"  [script writer] All attempts failed, returning title-only fallback")
+    print(f"  [script writer] All providers failed, returning title-only fallback")
     return {"script": title, "estimated_duration_sec": 30, "key_visuals": [theme]}
 
 
@@ -185,24 +211,106 @@ def _write_via_gemini(prompt: str, gemini_key: str) -> dict:
         )
         if response and response.text:
             data = json.loads(response.text.strip())
-            return {
-                "script": data.get("script", "")[:8000],
-                "hook_strategy": data.get("hook_strategy", ""),
-                "open_loops": data.get("open_loops", []),
-                "estimated_duration_sec": int(data.get("estimated_duration_sec", 90)),
-                "key_visuals": data.get("key_visuals", [])[:15],
-                "emotional_arc": data.get("emotional_arc", []),
-            }
+            return _normalize_script_output(data)
     except Exception as e:
         print(f"  [script writer] Gemini fallback err: {str(e)[:120]}")
     return None
 
 
-def _write_script_chunked(title: str, theme: str, language: str, groq_key: str,
-                          target_sec: int, gemini_key: str, max_retries: int) -> dict:
-    """For long videos: write in 3-4 chunks (intro, body parts, conclusion).
+def _write_via_cerebras(prompt: str, cerebras_key: str) -> dict:
+    """Cerebras Llama-3.3-70b fallback (FREE tier: 60 req/min, 1M tokens/day).
 
-    Total ~target_sec seconds with internal narrative continuity.
+    Same model as Groq but separate quota — perfect rate-limit failover.
+    Get key at https://cloud.cerebras.ai/
+    """
+    if not cerebras_key:
+        return None
+    try:
+        r = requests.post(
+            "https://api.cerebras.ai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {cerebras_key}",
+                     "Content-Type": "application/json"},
+            json={
+                "model": "llama-3.3-70b",
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.85,
+                "max_tokens": 4000,
+                "response_format": {"type": "json_object"},
+            },
+            timeout=60,
+        )
+        r.raise_for_status()
+        content = r.json()["choices"][0]["message"]["content"]
+        data = json.loads(content)
+        return _normalize_script_output(data)
+    except Exception as e:
+        print(f"  [script writer] Cerebras err: {str(e)[:120]}")
+    return None
+
+
+def _write_via_openrouter(prompt: str, openrouter_key: str) -> dict:
+    """OpenRouter fallback using DeepSeek-V3 FREE tier model.
+
+    Get key at https://openrouter.ai/
+    Free tier has ~50 req/day on free models.
+    """
+    if not openrouter_key:
+        return None
+    # Try free models in order of quality
+    models_to_try = [
+        "deepseek/deepseek-chat-v3-0324:free",
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "qwen/qwen-2.5-72b-instruct:free",
+    ]
+    for model in models_to_try:
+        try:
+            r = requests.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers={"Authorization": f"Bearer {openrouter_key}",
+                         "Content-Type": "application/json",
+                         "HTTP-Referer": "https://github.com/guichaves13-cmd/gcg-automation",
+                         "X-Title": "GCG VideosMAX"},
+                json={
+                    "model": model,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.85,
+                    "max_tokens": 4000,
+                    "response_format": {"type": "json_object"},
+                },
+                timeout=90,
+            )
+            r.raise_for_status()
+            content = r.json()["choices"][0]["message"]["content"]
+            # OpenRouter sometimes wraps in markdown
+            if content.startswith("```"):
+                content = content.split("```")[1]
+                if content.startswith("json"):
+                    content = content[4:]
+            data = json.loads(content.strip())
+            print(f"  [script writer] OpenRouter via {model}")
+            return _normalize_script_output(data)
+        except Exception as e:
+            print(f"  [script writer] OpenRouter ({model.split('/')[-1][:20]}) err: {str(e)[:80]}")
+    return None
+
+
+def _normalize_script_output(data: dict) -> dict:
+    """Normalize LLM JSON output to standard schema."""
+    return {
+        "script": str(data.get("script", ""))[:8000],
+        "hook_strategy": str(data.get("hook_strategy", "")),
+        "open_loops": list(data.get("open_loops", []))[:8],
+        "estimated_duration_sec": int(data.get("estimated_duration_sec", 90)),
+        "key_visuals": list(data.get("key_visuals", []))[:15],
+        "emotional_arc": list(data.get("emotional_arc", []))[:8],
+    }
+
+
+def _write_script_chunked(title: str, theme: str, language: str,
+                          llm_keys: dict, target_sec: int) -> dict:
+    """For long videos: write in 2-4 chunks via LLM chain (Groq→Gemini→Cerebras→OpenRouter).
+
+    Each chunk continues seamlessly from the previous one.
     """
     import time
     n_chunks = max(2, (target_sec + 179) // 180)  # ~3 min per chunk
@@ -233,37 +341,8 @@ def _write_script_chunked(title: str, theme: str, language: str, groq_key: str,
             target_sec=chunk_sec, target_words=chunk_words,
         ) + f"\n\nCHUNK ROLE: {role}{prev_summary}\nThis is chunk {i+1} of {n_chunks}."
 
-        # Try Groq with retry
-        chunk_data = None
-        for attempt in range(max_retries):
-            try:
-                r = requests.post(
-                    "https://api.groq.com/openai/v1/chat/completions",
-                    headers={"Authorization": f"Bearer {groq_key}",
-                             "Content-Type": "application/json"},
-                    json={
-                        "model": "llama-3.3-70b-versatile",
-                        "messages": [{"role": "user", "content": chunk_prompt}],
-                        "temperature": 0.85,
-                        "max_tokens": min(4000, chunk_words * 4),
-                        "response_format": {"type": "json_object"},
-                    },
-                    timeout=60,
-                )
-                if r.status_code == 429:
-                    wait = (attempt + 1) * 30
-                    print(f"    [chunk {i+1}] Groq 429, waiting {wait}s...")
-                    time.sleep(wait)
-                    continue
-                r.raise_for_status()
-                chunk_data = json.loads(r.json()["choices"][0]["message"]["content"])
-                break
-            except Exception as e:
-                print(f"    [chunk {i+1}] Groq attempt {attempt+1} err: {str(e)[:100]}")
-
-        # Gemini fallback per chunk
-        if not chunk_data and gemini_key:
-            chunk_data = _write_via_gemini(chunk_prompt, gemini_key)
+        # Use full LLM chain for each chunk
+        chunk_data = _try_llm_chain(chunk_prompt, llm_keys, max_groq_retries=1)
 
         if chunk_data and chunk_data.get("script"):
             chunks.append(chunk_data["script"])
@@ -273,9 +352,9 @@ def _write_script_chunked(title: str, theme: str, language: str, groq_key: str,
             all_emotions.extend(chunk_data.get("emotional_arc", []))
             all_visuals.extend(chunk_data.get("key_visuals", []))
             print(f"    [chunk {i+1}/{n_chunks}] {len(chunk_data['script'].split())} words")
-            time.sleep(5)  # brief pause between chunks
+            time.sleep(3)  # brief pause between chunks
         else:
-            print(f"    [chunk {i+1}/{n_chunks}] FAILED — skipping")
+            print(f"    [chunk {i+1}/{n_chunks}] FAILED — all LLMs unavailable")
 
     full_script = " ".join(chunks)
     return {
@@ -329,6 +408,8 @@ def generate_one_shot_video(
     engine_kwargs = engine_kwargs or {}
     groq_key = engine_kwargs.get("groq_api_key", "")
     gemini_key = engine_kwargs.get("gemini_api_key", "")
+    cerebras_key = engine_kwargs.get("cerebras_api_key", "")
+    openrouter_key = engine_kwargs.get("openrouter_api_key", "")
 
     result = {
         "title": title, "theme": theme, "language": language, "voice": voice,
@@ -337,8 +418,13 @@ def generate_one_shot_video(
 
     # ── STEP 1: Script ───────────────────────────────────────────
     print(f"\n[1/5] Writing viral script for '{title}' ({language}, ~{target_sec}s)...")
-    script_data = write_script_from_title(title, theme, language, groq_key,
-                                          target_sec=target_sec)
+    script_data = write_script_from_title(
+        title, theme, language, groq_key,
+        target_sec=target_sec,
+        gemini_key=gemini_key,
+        cerebras_key=cerebras_key,
+        openrouter_key=openrouter_key,
+    )
     result["script"] = script_data["script"]
     result["key_visuals"] = script_data["key_visuals"]
     result["hook_strategy"] = script_data.get("hook_strategy", "")
