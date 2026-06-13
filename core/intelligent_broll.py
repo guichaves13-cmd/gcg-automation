@@ -46,6 +46,55 @@ from typing import Optional
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+# Cultural/temporal negative-term presets per theme. Used to pre-filter
+# candidates BEFORE expensive Vision call (saves API quota + speeds up).
+_THEME_NEGATIVE_TERMS = {
+    "ancient_civilization": [
+        "gothic", "cathedral", "barcelona", "medieval", "modern", "skyscraper",
+        "smartphone", "laptop", "car", "automobile", "renaissance", "victorian",
+        "industrial", "factory", "subway", "highway", "office",
+    ],
+    "egypt": ["maya", "aztec", "incas", "rome", "roman", "greek", "asian",
+              "european", "gothic", "cathedral", "barcelona", "modern", "skyscraper"],
+    "maya": ["egypt", "pharaoh", "pyramid of giza", "gothic", "cathedral",
+             "european", "barcelona", "renaissance", "modern", "skyscraper"],
+    "aztec": ["egypt", "maya", "european", "gothic", "cathedral", "modern"],
+    "roman": ["egypt", "maya", "asian", "gothic", "cathedral", "barcelona",
+              "medieval", "modern", "skyscraper", "highway", "renaissance",
+              "victorian"],
+    "greek": ["egypt", "maya", "asian", "gothic", "cathedral", "modern"],
+    "modern_tech": ["ancient", "medieval", "ruins", "pyramid", "cathedral",
+                    "renaissance", "horse", "candle", "fire"],
+    "nature_animals": ["building", "car", "computer", "phone", "indoor", "office"],
+    "default": [],
+}
+
+
+def detect_theme_negatives(theme: str) -> list:
+    """Heuristically pick negative terms for a given theme description."""
+    theme_low = (theme or "").lower()
+    terms = list(_THEME_NEGATIVE_TERMS["default"])
+
+    if any(k in theme_low for k in ["maya", "maia"]):
+        terms += _THEME_NEGATIVE_TERMS["maya"]
+    elif any(k in theme_low for k in ["egypt", "egito", "pharaoh", "pirâmide", "piramide"]):
+        terms += _THEME_NEGATIVE_TERMS["egypt"]
+    elif any(k in theme_low for k in ["aztec", "azteca", "tenochtitlan"]):
+        terms += _THEME_NEGATIVE_TERMS["aztec"]
+    elif any(k in theme_low for k in ["roman", "roma", "caesar", "gladiator"]):
+        terms += _THEME_NEGATIVE_TERMS["roman"]
+    elif any(k in theme_low for k in ["greek", "grego", "atenas", "spartan"]):
+        terms += _THEME_NEGATIVE_TERMS["greek"]
+    elif any(k in theme_low for k in ["antig", "ancient", "civiliz", "histor"]):
+        terms += _THEME_NEGATIVE_TERMS["ancient_civilization"]
+    elif any(k in theme_low for k in ["tech", "ai", "software", "computer", "moderno"]):
+        terms += _THEME_NEGATIVE_TERMS["modern_tech"]
+    elif any(k in theme_low for k in ["nature", "animal", "wildlife", "savan", "selva"]):
+        terms += _THEME_NEGATIVE_TERMS["nature_animals"]
+
+    return list(set(terms))
+
+
 @dataclass
 class SegmentIntent:
     """O que precisa de B-roll para uma fatia (3-8s) do roteiro."""
@@ -834,6 +883,7 @@ class IntelligentBrollEngine:
         self._spare_pool = []                 # ClipCandidates approved but not winners
                                               # used to fill gaps with variety
         self._phash_dedup_threshold = 0.85    # >85% visually similar = reject
+        self._negative_terms = []             # Theme-based exclusion list (set in build())
 
     def build(self, audio_path: str = "", script: str = "",
               theme: str = "general", min_relevance: int = 60,
@@ -849,6 +899,11 @@ class IntelligentBrollEngine:
 
         Returns: list[BeatPlan] em ordem temporal.
         """
+        # Compute negative terms from theme for anti-anachronism filter
+        self._negative_terms = detect_theme_negatives(theme)
+        if self._negative_terms:
+            print(f"[IntelligentBroll] Negative terms for theme: {self._negative_terms[:6]}…")
+
         # ─── ETAPA 1: Segmentação com word-level timestamps ─────────────
         if audio_path and os.path.exists(audio_path):
             print(f"[IntelligentBroll] Transcrevendo {audio_path}…")
@@ -960,6 +1015,17 @@ class IntelligentBrollEngine:
                         cand.rejection_reason = "no thumbnail"
                         continue
 
+                    # Layer 1.5: cheap negative-term text filter
+                    # If title/tags contain any anachronistic term, skip without Vision call
+                    if self._negative_terms:
+                        title_lower = (cand.title or "").lower()
+                        if any(neg in title_lower for neg in self._negative_terms):
+                            cand.relevance_score = 0
+                            cand.rejection_reason = f"negative term in title"
+                            print(f"    [---] {cand.source}#{cand.source_id[:8]}: "
+                                  f"rejected (negative term in '{cand.title[:50]}')")
+                            continue
+
                     # Vision verify (with diversity hint based on what's been used)
                     score, desc, reason, phash = self.verifier.verify(
                         cand.thumbnail_url, intent, theme=theme,
@@ -1050,19 +1116,50 @@ class IntelligentBrollEngine:
 
         try:
             if clip.source == "youtube":
-                # Use python -m yt_dlp directly (avoids PATH issues)
+                # Two-step: download full clip, then trim middle 6-8s with audio off
                 import subprocess, sys as _sys
                 cmd_base = ["yt-dlp"]
                 try:
                     subprocess.run(["yt-dlp", "--version"], capture_output=True, timeout=5)
                 except (FileNotFoundError, OSError):
                     cmd_base = [_sys.executable, "-m", "yt_dlp"]
-                cmd = cmd_base + ["-f", "mp4[height<=1080]/best",
-                       "--no-playlist", "--quiet",
-                       "-o", str(out), clip.download_url]
-                r = subprocess.run(cmd, capture_output=True, timeout=180)
-                if out.exists() and out.stat().st_size > 50_000:
-                    return str(out)
+                raw = self.output_dir / f"yt_raw_{safe_id}.mp4"
+                cmd = cmd_base + [
+                    "-f", "mp4[height<=1080][height>=480]/best[height<=1080]",
+                    "--no-playlist", "--quiet",
+                    "--max-filesize", "200M",
+                    "--match-filter", "duration > 15 & duration < 1800",  # skip shorts and >30min
+                    "-o", str(raw), clip.download_url,
+                ]
+                r = subprocess.run(cmd, capture_output=True, timeout=240)
+                if not raw.exists() or raw.stat().st_size < 100_000:
+                    return ""
+                # Trim middle 7s with crop to remove letterboxing, mute audio
+                try:
+                    src_dur = float(subprocess.run([
+                        "ffprobe", "-v", "error", "-show_entries", "format=duration",
+                        "-of", "default=noprint_wrappers=1:nokey=1", str(raw),
+                    ], capture_output=True, text=True).stdout.strip() or 0)
+                    if src_dur < 10:
+                        return ""
+                    # Skip first 25% (intros), take from middle
+                    start = max(5.0, src_dur * 0.25)
+                    cut_dur = min(7.5, src_dur - start - 2)
+                    subprocess.run([
+                        "ffmpeg", "-y", "-ss", f"{start:.2f}", "-i", str(raw),
+                        "-t", f"{cut_dur:.2f}",
+                        "-vf", "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,setsar=1",
+                        "-an",  # mute YouTube audio (we use TTS or avatar audio)
+                        "-c:v", "libx264", "-preset", "fast", "-crf", "22",
+                        "-pix_fmt", "yuv420p",
+                        str(out),
+                    ], capture_output=True, timeout=180, check=True)
+                    try: raw.unlink()
+                    except: pass
+                    if out.exists() and out.stat().st_size > 50_000:
+                        return str(out)
+                except Exception as e:
+                    print(f"  [yt trim err] {e}")
                 return ""
             else:
                 # Direct HTTP download
