@@ -266,6 +266,17 @@ ANIMAIS EM CONTEÚDO NÃO-PET:
   - Esses clips são genéricos demais e quebram a coerência narrativa.
 - Exceção: se a narração MENCIONA o animal explicitamente, aceitar.
 
+REJEIÇÃO AUTOMÁTICA — clips claramente irrelevantes:
+- REJEITAR (score ≤20) qualquer imagem com texto sobreposto que diga
+  "Free Creative Stuff", "moments", logos de produtoras, marcas comerciais.
+- REJEITAR (score ≤20) homens/mulheres sorrindo genéricos sem contexto.
+- REJEITAR (score ≤20) "casal jovem com cupcakes" / "celebração com velas"
+  para narração histórica/técnica/dramática.
+- REJEITAR (score ≤20) "homem segurando câmera/celular" para narração
+  sobre civilizações antigas, ciência, mistérios.
+- PRINCÍPIO: se a única conexão é "tem um humano na imagem", REJEITAR.
+  Precisa de conexão TEMÁTICA real, não apenas presença humana.
+
 Responda APENAS em JSON estrito:
 {{
   "score": <inteiro 0-100>,
@@ -471,19 +482,21 @@ class IntentExtractor:
     """Extrai SegmentIntent estruturado de um pedaço de texto narrado."""
 
     def __init__(self, ai_ask_func=None, gemini_api_key: str = "",
-                 model: str = "gemini-2.0-flash", groq_api_key: str = ""):
+                 model: str = "gemini-2.0-flash", groq_api_key: str = "",
+                 cerebras_api_key: str = "", openrouter_api_key: str = ""):
         """
-        Args:
-            ai_ask_func: função opcional (prompt, json_response=True) → str
-                          (pra usar AI engine compartilhada do projeto).
-            gemini_api_key: fallback direto.
-            groq_api_key: fallback quando Gemini hit quota.
+        Full LLM-chain failover: Gemini → Groq → Cerebras → OpenRouter.
+        All providers tried in order on rate-limit failures.
         """
         self.ai_ask = ai_ask_func
         self.api_key = gemini_api_key or os.environ.get("GOOGLE_API_KEY", "")
         self.groq_key = groq_api_key or os.environ.get("GROQ_API_KEY", "")
+        self.cerebras_key = cerebras_api_key or os.environ.get("CEREBRAS_API_KEY", "")
+        self.openrouter_key = openrouter_api_key or os.environ.get("OPENROUTER_API_KEY", "")
         self.model = model
         self._client = None
+        # Once a provider rate-limits, stop trying it this session
+        self._dead_providers = set()
 
     @property
     def client(self):
@@ -532,29 +545,52 @@ class IntentExtractor:
                 else:
                     print(f"  [IntentExtractor] Gemini err: {err_str[:120]}")
 
-        # Groq fallback (llama-3.3-70b → fast, JSON mode, no quota)
-        if self.groq_key:
+        # LLM chain: Groq → Cerebras → OpenRouter
+        import requests
+        providers = [
+            ("groq", self.groq_key,
+             "https://api.groq.com/openai/v1/chat/completions",
+             "llama-3.3-70b-versatile", {}),
+            ("cerebras", self.cerebras_key,
+             "https://api.cerebras.ai/v1/chat/completions",
+             "gpt-oss-120b", {}),
+            ("openrouter", self.openrouter_key,
+             "https://openrouter.ai/api/v1/chat/completions",
+             "nvidia/nemotron-3-super-120b-a12b:free",
+             {"HTTP-Referer": "https://github.com/gcg",
+              "X-Title": "GCG VideosMAX"}),
+        ]
+        for prov_name, prov_key, url, model, extra_headers in providers:
+            if not prov_key or prov_name in self._dead_providers:
+                continue
             try:
-                import requests
+                headers = {"Authorization": f"Bearer {prov_key}",
+                          "Content-Type": "application/json", **extra_headers}
                 r = requests.post(
-                    "https://api.groq.com/openai/v1/chat/completions",
-                    headers={"Authorization": f"Bearer {self.groq_key}",
-                             "Content-Type": "application/json"},
+                    url, headers=headers, timeout=30,
                     json={
-                        "model": "llama-3.3-70b-versatile",
+                        "model": model,
                         "messages": [{"role": "user", "content": prompt}],
                         "temperature": 0.3,
-                        "max_tokens": 500,
+                        "max_tokens": 800,
                         "response_format": {"type": "json_object"},
                     },
-                    timeout=20,
                 )
+                if r.status_code == 429:
+                    self._dead_providers.add(prov_name)
+                    print(f"  [IntentExtractor] {prov_name} 429 → trying next")
+                    continue
                 r.raise_for_status()
                 content = r.json()["choices"][0]["message"]["content"]
+                # Strip markdown fences if present
+                if content.strip().startswith("```"):
+                    content = content.strip().split("```")[1]
+                    if content.startswith("json"):
+                        content = content[4:]
                 if content:
                     return self._parse(content, text)
             except Exception as e:
-                print(f"  [IntentExtractor] Groq err: {str(e)[:120]}")
+                print(f"  [IntentExtractor] {prov_name} err: {str(e)[:120]}")
 
         # Last resort: heuristic
         return self._heuristic(text, theme)
@@ -897,13 +933,17 @@ class IntelligentBrollEngine:
                  max_search_attempts: int = 3,
                  ai_ask_func=None,
                  groq_api_key: str = "",
-                 nvidia_api_key: str = ""):
+                 nvidia_api_key: str = "",
+                 cerebras_api_key: str = "",
+                 openrouter_api_key: str = ""):
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         self.intent_extractor = IntentExtractor(
             ai_ask_func=ai_ask_func, gemini_api_key=gemini_api_key,
             groq_api_key=groq_api_key,
+            cerebras_api_key=cerebras_api_key,
+            openrouter_api_key=openrouter_api_key,
         )
         self.searcher = MultiSourceSearcher(
             pexels_key=pexels_key, pixabay_key=pixabay_key,
@@ -1043,12 +1083,22 @@ class IntelligentBrollEngine:
 
         for attempt in range(self.max_attempts):
             for query in intent.search_queries:
-                candidates = self.searcher.search_all(query)
-                # ALWAYS also pull photos (Ken Burns) — Pexels photo library is
-                # ~50× bigger than video, much better coverage for abstract topics
-                photos = self.searcher.search_photos(query, count=4)
-                if photos:
-                    candidates = candidates + photos
+                # Search VIDEOS and PHOTOS in parallel — mixed media pool.
+                # Vision picks the best regardless of type. Photos get Ken Burns
+                # treatment automatically during download.
+                videos = self.searcher.search_all(query)
+                photos = self.searcher.search_photos(query, count=6)
+
+                # Interleave videos and photos so neither dominates the candidate
+                # cap. If videos=[v1,v2,v3,v4] photos=[p1,p2,p3,p4,p5,p6]:
+                # → [v1,p1,v2,p2,v3,p3,v4,p4,p5,p6]
+                candidates = []
+                vi, pi = 0, 0
+                while vi < len(videos) or pi < len(photos):
+                    if vi < len(videos):
+                        candidates.append(videos[vi]); vi += 1
+                    if pi < len(photos):
+                        candidates.append(photos[pi]); pi += 1
                 if not candidates:
                     continue
 
@@ -1252,30 +1302,45 @@ class IntelligentBrollEngine:
         # Use segment duration if known
         seg_dur = max(3.0, intent.end - intent.start) if intent.end > intent.start else target_dur
 
-        # 4 Ken Burns variants — randomize per segment for variety
+        # FAST Ken Burns via crop-pan (5-10× faster than zoompan filter).
+        # We pre-scale the image larger, then crop a moving window.
+        # This avoids ffmpeg's notoriously slow zoompan interpolation.
         rng = random.Random(hash(safe_id))
-        kb_modes = [
-            # (zoom_start, zoom_end, x_start, x_end, y_start, y_end)
-            "zoompan=z='min(zoom+0.0015,1.5)':d={frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={W}x{H}:fps=30",
-            "zoompan=z='if(eq(on,1),1.5,max(1.001,zoom-0.0015))':d={frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={W}x{H}:fps=30",
-            "zoompan=z='1.2+0.1*sin(on/30)':d={frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={W}x{H}:fps=30",
-        ]
-        kb = rng.choice(kb_modes)
+        # Pick one of 4 motion directions for variety
+        motion = rng.choice(["zoom_in", "zoom_out", "pan_left", "pan_right"])
         W, H = 1920, 1080
-        frames = int(seg_dur * 30)
-        filter_str = kb.format(W=W, H=H, frames=frames)
-        # Scale input first for higher quality zoom
-        full_filter = f"scale=3840:2160:force_original_aspect_ratio=increase,crop=3840:2160,{filter_str}"
+        # Pre-scale image to slightly larger than 1080p (allow pan headroom)
+        BIG_W, BIG_H = 2304, 1296  # 1.2× target — gentle zoom range
+        if motion == "zoom_in":
+            # Start at full image (crop centered), end zoomed in 1.2×
+            # crop window shrinks over time: from 1920×1080 inset → smaller window
+            # Easier: pan-and-crop equivalent
+            crop_filter = (f"crop=w='1920':h='1080':"
+                          f"x='(iw-1920)/2*(1-t/{seg_dur:.2f})':"
+                          f"y='(ih-1080)/2*(1-t/{seg_dur:.2f})'")
+        elif motion == "zoom_out":
+            crop_filter = (f"crop=w='1920':h='1080':"
+                          f"x='(iw-1920)/2*(t/{seg_dur:.2f})':"
+                          f"y='(ih-1080)/2*(t/{seg_dur:.2f})'")
+        elif motion == "pan_left":
+            crop_filter = (f"crop=w='1920':h='1080':"
+                          f"x='(iw-1920)*(1-t/{seg_dur:.2f})':y='(ih-1080)/2'")
+        else:  # pan_right
+            crop_filter = (f"crop=w='1920':h='1080':"
+                          f"x='(iw-1920)*(t/{seg_dur:.2f})':y='(ih-1080)/2'")
+
+        full_filter = (f"scale={BIG_W}:{BIG_H}:force_original_aspect_ratio=increase,"
+                       f"crop={BIG_W}:{BIG_H},{crop_filter},format=yuv420p")
 
         try:
             r = subprocess.run([
                 "ffmpeg", "-y",
                 "-loop", "1", "-t", f"{seg_dur:.2f}", "-i", str(img_path),
                 "-vf", full_filter,
-                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "22",
+                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
                 "-pix_fmt", "yuv420p", "-r", "30",
                 str(out),
-            ], capture_output=True, timeout=120)
+            ], capture_output=True, timeout=90)
             if out.exists() and out.stat().st_size > 50_000:
                 return str(out)
             print(f"  [kenburns err] ffmpeg failed: {r.stderr.decode(errors='replace')[-200:]}")

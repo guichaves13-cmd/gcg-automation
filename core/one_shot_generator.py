@@ -369,9 +369,19 @@ def _write_script_chunked(title: str, theme: str, language: str,
 
 
 async def _generate_tts(script: str, voice: str, output_path: str, rate: str = "-5%"):
+    """Generate TTS audio. For perfect subtitle timing prefer _generate_tts_with_timing."""
     import edge_tts
     c = edge_tts.Communicate(script, voice, rate=rate)
     await c.save(output_path)
+
+
+async def _generate_tts_with_timing(script: str, voice: str, output_path: str,
+                                     rate: str = "-5%"):
+    """Generate TTS + capture exact per-word WordBoundary timing.
+    Returns: list[dict] {start, end, text} suitable for karaoke ASS generation.
+    """
+    from core.karaoke_subtitles import generate_tts_with_word_timing
+    return await generate_tts_with_word_timing(script, voice, output_path, rate)
 
 
 def generate_one_shot_video(
@@ -436,11 +446,15 @@ def generate_one_shot_video(
     if script_data.get("hook_strategy"):
         print(f"  → hook strategy: {script_data['hook_strategy']}")
 
-    # ── STEP 2: TTS ──────────────────────────────────────────────
-    print(f"\n[2/5] TTS with {voice}...")
+    # ── STEP 2: TTS + capture word timings (for perfect subtitles) ──
+    print(f"\n[2/5] TTS with {voice} (capturing word-level timing)...")
     audio_path = str(output_dir / f"{job_id}_audio.mp3")
-    asyncio.run(_generate_tts(script_data["script"], voice, audio_path))
+    tts_word_timings = asyncio.run(
+        _generate_tts_with_timing(script_data["script"], voice, audio_path)
+    )
     result["files"]["audio"] = audio_path
+    result["tts_word_timings"] = tts_word_timings  # keep for karaoke step
+    print(f"  → {len(tts_word_timings)} word boundaries captured from TTS engine")
 
     # ── STEP 3: B-roll Intelligence ──────────────────────────────
     print(f"\n[3/5] Building B-roll with IntelligentBrollEngine...")
@@ -453,6 +467,7 @@ def generate_one_shot_video(
         youtube_enabled=engine_kwargs.get("youtube_enabled", False),
         **{k: v for k, v in engine_kwargs.items()
            if k in {"gemini_api_key", "groq_api_key", "nvidia_api_key",
+                    "cerebras_api_key", "openrouter_api_key",
                     "pexels_key", "pixabay_key"}},
     )
     t0 = time.time()
@@ -489,12 +504,25 @@ def generate_one_shot_video(
     if add_karaoke:
         print(f"\n[5/5] Burning karaoke subtitles...")
         try:
-            # For avatar modes, use original audio for word timestamps
-            audio_for_subs = audio_path if mode == "tts_only" else avatar_video
-            # Pass the SCRIPT TEXT so karaoke uses correct words (forced alignment)
-            add_karaoke_to_video(composed_path, audio_for_subs, final_path,
-                                language=language,
-                                script_text=script_data.get("script", ""))
+            # For TTS-only mode, use the EXACT word timings captured during TTS
+            # synthesis (perfect timing, no transcription errors possible).
+            # For avatar modes, fall back to Whisper forced alignment from the
+            # avatar's audio.
+            from core.karaoke_subtitles import build_karaoke_ass, burn_subtitles
+            work = Path(final_path).parent / "_karaoke_work"
+            work.mkdir(exist_ok=True)
+            ass_path = work / "karaoke.ass"
+
+            if mode == "tts_only" and tts_word_timings:
+                # PERFECT path — use Edge-TTS word boundaries
+                build_karaoke_ass(tts_word_timings, str(ass_path))
+                burn_subtitles(composed_path, str(ass_path), final_path)
+                print(f"  [karaoke] {len(tts_word_timings)} words (Edge-TTS exact timing) ✓")
+            else:
+                # Avatar mode — Whisper from avatar audio
+                add_karaoke_to_video(composed_path, avatar_video, final_path,
+                                    language=language,
+                                    script_text=script_data.get("script", ""))
             result["files"]["final"] = final_path
             result["karaoke"] = True
         except Exception as e:
