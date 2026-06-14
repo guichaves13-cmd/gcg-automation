@@ -1,4 +1,4 @@
-""" 
+﻿""" 
 TitlePilot Pro — Backend Server v2.1
 Viral title analysis powered by Groq AI + YouTube Data API.
 """
@@ -672,7 +672,7 @@ def api_analyze_batch():
 
 @app.route("/api/generate", methods=["POST"])
 def api_generate():
-    data = request.json
+    data = request.json or {}
     topic = data.get("topic", "")
     language = data.get("language", "English")
     niche = data.get("niche", "")
@@ -743,7 +743,7 @@ IMPORTANT: Return ONLY the 15 titles, one per line, numbered 1-15. No explanatio
 
 @app.route("/api/subniche", methods=["POST"])
 def api_subniche():
-    data = request.json
+    data = request.json or {}
     theme = data.get("theme", "")
     language = data.get("language", "English")
     
@@ -787,8 +787,19 @@ Return exactly 8 sub-niches as a valid JSON array. NO markdown, NO explanation."
     
     try:
         niches = safe_parse_json(result, "list")
+        # Defensive: if AI returned dict instead of list, try to extract
+        if isinstance(niches, dict):
+            for v in niches.values():
+                if isinstance(v, list) and len(v) > 0:
+                    niches = v
+                    break
+            else:
+                niches = [niches]
         
+        valid_niches = []
         for n in niches:
+            if not isinstance(n, dict):
+                continue
             n.setdefault("demand", 5)
             n.setdefault("supply", 5)
             n.setdefault("opportunity", n.get("demand", 5) - n.get("supply", 5))
@@ -801,16 +812,18 @@ Return exactly 8 sub-niches as a valid JSON array. NO markdown, NO explanation."
             n.setdefault("first_video_idea", "")
             n.setdefault("rpm_estimate", "")
             n.setdefault("estimated_views_per_video", "")
+            valid_niches.append(n)
         
-        niches.sort(key=lambda x: x.get("blue_ocean_score", x.get("opportunity", 0)), reverse=True)
-        return jsonify({"niches": niches, "theme": theme})
+        valid_niches.sort(key=lambda x: x.get("blue_ocean_score", x.get("opportunity", 0)), reverse=True)
+        return jsonify({"niches": valid_niches, "theme": theme})
     except Exception as e:
-        return jsonify({"niches": [], "raw": result, "theme": theme, "error": f"JSON parse error: {str(e)[:80]}"})
+        return jsonify({"niches": [], "raw": result[:200], "theme": theme,
+                        "error": f"Erro ao processar resposta da IA: {str(e)[:80]}"})
 
 @app.route("/api/micronicho", methods=["POST"])
 def api_micronicho():
     """Level 3: Find micro-niches within a sub-niche."""
-    data = request.json
+    data = request.json or {}
     subniche = data.get("subniche", data.get("name", ""))
     parent = data.get("parent_niche", data.get("theme", ""))
     language = data.get("language", "English")
@@ -872,7 +885,7 @@ Return a JSON array of 6 micro-niches. ONLY valid JSON, no markdown."""
 @app.route("/api/niche_strategy_complete", methods=["POST"])
 def api_niche_strategy_complete():
     """Complete 3-level niche strategy: Niche > Sub-niches > Micro-niches"""
-    data = request.json
+    data = request.json or {}
     niche = data.get("niche", "")
     language = data.get("language", "English")
 
@@ -990,7 +1003,7 @@ Return ONLY valid JSON. No markdown. No explanation."""
 @app.route("/api/deep_analysis", methods=["POST"])
 def api_deep_analysis():
     """Deep AI analysis of a title with full breakdown."""
-    data = request.json
+    data = request.json or {}
     title = data.get("title", "")
     
     basic = analyze_title(title)
@@ -1043,7 +1056,7 @@ Be brutally honest. No generic advice. Return ONLY valid JSON."""
 @app.route("/api/crossover_engine", methods=["POST"])
 def api_crossover_engine():
     """Generates viral crossover concepts linking two completely different niches."""
-    data = request.json
+    data = request.json or {}
     niche_a = data.get("niche_a", "")
     niche_b = data.get("niche_b", "")
     mechanic = data.get("mechanic", "No specific mechanic")
@@ -1104,7 +1117,7 @@ Make the connection logical but shocking. Return ONLY valid JSON. No markdown ou
 @app.route("/api/trend_hijacker", methods=["POST"])
 def api_trend_hijacker():
     """Converts a breaking news event into evergreen documentary-style video concepts."""
-    data = request.json
+    data = request.json or {}
     breaking_news = data.get("news_event", "")
     target_niche = data.get("target_niche", "Psychology")
     language = data.get("language", "English")
@@ -1141,7 +1154,7 @@ Return ONLY valid JSON."""
 @app.route("/api/hook_blueprint", methods=["POST"])
 def api_hook_blueprint():
     """Generates a highly-retentive 60-second hook pacing script."""
-    data = request.json
+    data = request.json or {}
     title = data.get("title", "")
     if not title: return jsonify({"error": "Title required."}), 400
 
@@ -1169,7 +1182,7 @@ Return ONLY valid JSON."""
 @app.route("/api/outlier_finder", methods=["POST"])
 def api_outlier_finder():
     """Finds viral outlier videos using Nexlev-style math and decodes their secret."""
-    data = request.json
+    data = request.json or {}
     niche = data.get("niche", "")
     language = data.get("language", "English")
 
@@ -1221,7 +1234,7 @@ Return ONLY valid JSON."""
 @app.route("/api/competitor_xray", methods=["POST"])
 def api_competitor_xray():
     """Nexlev-style Competitor Deep Dive: RPM, Velocity, and Secret Sauce."""
-    data = request.json
+    data = request.json or {}
     channel_handle = data.get("channel", "").strip()
     
     key = YOUTUBE_API_KEY
@@ -1326,7 +1339,7 @@ Return ONLY valid JSON."""
 @app.route("/api/niche_scorer", methods=["POST"])
 def api_niche_scorer():
     """NexLev-style AI Niche Profitability & Saturation Scorer."""
-    data = request.json
+    data = request.json or {}
     niche = data.get("niche", "").strip()
     
     if not niche:
@@ -1464,7 +1477,7 @@ Return ONLY valid JSON."""
 @app.route("/api/shorts_engine", methods=["POST"])
 def api_shorts_engine():
     """Generates viral loops and script pacing for YouTube Shorts / TikTok."""
-    data = request.json
+    data = request.json or {}
     topic = data.get("topic", "").strip()
     niche = data.get("niche", "").strip()
     language = data.get("language", "English")
@@ -1502,7 +1515,7 @@ Return ONLY valid JSON."""
 @app.route("/api/channel_strategy", methods=["POST"])
 def api_channel_strategy():
     """AI-powered channel strategy analysis."""
-    data = request.json
+    data = request.json or {}
     # Accept 'niche' OR 'channel_type' interchangeably
     channel_type = data.get("channel_type") or data.get("niche", "")
     current_titles = data.get("titles", [])
@@ -1569,7 +1582,7 @@ Return ONLY valid JSON. No markdown formatting outside the JSON."""
 @app.route("/api/scan_viral_structures", methods=["POST"])
 def api_scan_viral_structures():
     """Scan subniches for viral title structures — uses YouTube data if key set, AI-only otherwise."""
-    data = request.json
+    data = request.json or {}
     niche = data.get("niche", "")
     subniches = data.get("subniches", [])
     language = data.get("language", "English")
@@ -1703,7 +1716,7 @@ Return ONLY valid JSON array."""
 @app.route("/api/strategy_remix", methods=["POST"])
 def api_strategy_remix():
     """DUAL PATH strategy engine — works standalone (niche_a+niche_b) or with viral_structures."""
-    data = request.json
+    data = request.json or {}
     viral_structures = data.get("viral_structures", [])
     # Standalone mode: accept niche_a + niche_b directly
     niche_a = data.get("niche_a", "")
@@ -1835,7 +1848,7 @@ Return ONLY valid JSON. No markdown, no explanation."""
 @app.route("/api/trend_scanner", methods=["POST"])
 def api_trend_scanner():
     """Scan for trending topics and emerging niches."""
-    data = request.json
+    data = request.json or {}
     category = data.get("category", "all")
     language = data.get("language", "English")
     
@@ -1924,7 +1937,7 @@ YOUTUBE_API_KEY = _load_yt_key()
 @app.route("/api/youtube/save_key", methods=["POST"])
 def save_yt_key():
     global YOUTUBE_API_KEY
-    data = request.json
+    data = request.json or {}
     key = data.get("key", "").strip()
     if not key:
         return jsonify({"error": "No key"}), 400
@@ -1956,7 +1969,7 @@ def save_yt_key():
 def yt_channel():
     """Analyze a YouTube channel with real data."""
     from core.youtube_api import get_channel_info, get_channel_videos
-    data = request.json
+    data = request.json or {}
     channel_input = data.get("channel", "")
     key = YOUTUBE_API_KEY
     if not key:
@@ -2006,7 +2019,7 @@ def yt_channel():
 def yt_niche():
     """Deep niche analysis with real YouTube data."""
     from core.youtube_api import analyze_niche
-    data = request.json
+    data = request.json or {}
     query = data.get("query", "")
     region = data.get("region", "US")
     key = YOUTUBE_API_KEY
@@ -2022,7 +2035,7 @@ def yt_niche():
 def yt_trending():
     """Get trending/popular videos."""
     from core.youtube_api import get_most_popular, search_trending
-    data = request.json
+    data = request.json or {}
     query = data.get("query", "")
     region = data.get("region", "US")
     category = data.get("category_id", "")
@@ -2046,7 +2059,7 @@ def yt_trending():
 def yt_compare():
     """Compare multiple channels."""
     from core.youtube_api import compare_channels
-    data = request.json
+    data = request.json or {}
     channels = data.get("channels", [])
     key = YOUTUBE_API_KEY
     if not key:
@@ -2076,7 +2089,7 @@ def get_channels():
 
 @app.route("/api/channels/add", methods=["POST"])
 def add_channel():
-    data = request.json
+    data = request.json or {}
     channels = _load_channels()
     channel = {
         "id": len(channels) + 1,
@@ -2099,7 +2112,7 @@ def add_channel():
 
 @app.route("/api/channels/delete", methods=["POST"])
 def delete_channel():
-    data = request.json
+    data = request.json or {}
     cid = data.get("id")
     channels = [c for c in _load_channels() if c.get("id") != cid]
     _save_channels(channels)
@@ -2108,7 +2121,7 @@ def delete_channel():
 @app.route("/api/channels/analyze", methods=["POST"])
 def analyze_channel():
     """AI analysis — discovers NEW subniches by combining validated trends + validated structures."""
-    data = request.json
+    data = request.json or {}
     channel = data.get("channel", {})
     reference_structures = data.get("reference_structures", [])
     trending_themes = data.get("trending_themes", [])
@@ -2184,7 +2197,7 @@ Return ONLY valid JSON. No markdown outside the JSON."""
 @app.route("/api/channels/update_metrics", methods=["POST"])
 def update_channel_metrics():
     """Update channel with performance metrics for AI analysis."""
-    data = request.json
+    data = request.json or {}
     channel_id = data.get("id")
     metrics = data.get("metrics", {})  # {title, views, ctr, likes, comments}
     
@@ -2207,7 +2220,7 @@ def update_channel_metrics():
 @app.route("/api/channels/update", methods=["POST"])
 def update_channel():
     """Update channel data (add new structures, themes, titles, etc.)."""
-    data = request.json
+    data = request.json or {}
     channel_id = data.get("id")
     updates = data.get("updates", {})
     
@@ -2246,7 +2259,7 @@ def api_vph_radar():
     from core.youtube_api import search_trending
     from datetime import datetime, timezone, timedelta
     
-    data = request.json
+    data = request.json or {}
     niche = data.get("niche", "")
     language = data.get("language", "English")
     key = YOUTUBE_API_KEY
@@ -2382,16 +2395,32 @@ _SERVER_START_TIME = time.time()
 
 @app.route("/api/health", methods=["GET"])
 def api_health():
-    """Health check endpoint — returns system status."""
-    uptime = round(time.time() - _SERVER_START_TIME)
-    ai_ok = bool(_GROQ_KEY and _GROQ_KEY != "GROQ_KEY_PLACEHOLDER")
+    """Health check endpoint — always returns JSON, never crashes."""
+    try:
+        uptime = round(time.time() - _SERVER_START_TIME)
+    except Exception:
+        uptime = 0
+    try:
+        ai_ok = bool(_GROQ_KEY and _GROQ_KEY != "GROQ_KEY_PLACEHOLDER")
+    except Exception:
+        ai_ok = False
+    try:
+        yt_key = bool(globals().get("YOUTUBE_API_KEY", ""))
+    except Exception:
+        yt_key = False
+    try:
+        # Count channels from file directly — no function dependency
+        ch_file = os.path.join(BASE_DIR, "channels.json")
+        channels_n = len(json.load(open(ch_file)).get("channels", [])) if os.path.exists(ch_file) else 0
+    except Exception:
+        channels_n = 0
     return jsonify({
         "status": "ok",
         "uptime_seconds": uptime,
         "ai_status": "ok" if ai_ok else "no_key",
         "model": "llama-3.1-8b-instant",
-        "youtube_key": bool(YOUTUBE_API_KEY),
-        "channels_loaded": len(load_channels()),
+        "youtube_key": yt_key,
+        "channels_loaded": channels_n,
         "version": "2.1"
     })
 
