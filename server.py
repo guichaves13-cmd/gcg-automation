@@ -268,10 +268,18 @@ def safe_parse_json(text, expected_type="dict"):
         if expected_type == "dict" and isinstance(result, dict):
             return result
         if expected_type == "list" and isinstance(result, dict):
-            # Sometimes AI wraps list in a dict key
+            # AI wrapped list in a dict key
             for v in result.values():
                 if isinstance(v, list) and len(v) > 0:
                     return v
+        if expected_type == "dict" and isinstance(result, list):
+            # AI returned [{...}] — unwrap single item
+            if len(result) == 1 and isinstance(result[0], dict):
+                return result[0]
+            # Multiple items — return first dict found
+            for item in result:
+                if isinstance(item, dict):
+                    return item
         return result
 
     # PASS 3: Bracket-balanced extraction
@@ -911,10 +919,18 @@ Return ONLY valid JSON. No markdown. No explanation."""
     
     try:
         strategy = safe_parse_json(result, "dict")
+        # Defensive: AI sometimes returns [{...}] instead of {...}
+        if isinstance(strategy, list):
+            if len(strategy) == 1 and isinstance(strategy[0], dict):
+                strategy = strategy[0]  # unwrap single-item list
+            else:
+                strategy = {"subniches": strategy}  # bare list of subniches
         # Ensure structure
         strategy.setdefault("main_niche", {"name": niche})
         strategy.setdefault("subniches", [])
         for sub in strategy.get("subniches", []):
+            if not isinstance(sub, dict):
+                continue
             sub.setdefault("blue_ocean_score", 70)
             sub.setdefault("demand", 7)
             sub.setdefault("supply", 4)
@@ -925,6 +941,8 @@ Return ONLY valid JSON. No markdown. No explanation."""
             sub.setdefault("example_titles", [])
             sub.setdefault("micronichos", [])
             for mc in sub.get("micronichos", []):
+                if not isinstance(mc, dict):
+                    continue
                 mc.setdefault("blue_ocean_score", 75)
                 mc.setdefault("competition_level", "Low")
                 mc.setdefault("target_avatar", "")
@@ -935,6 +953,7 @@ Return ONLY valid JSON. No markdown. No explanation."""
         return jsonify({"strategy": strategy, "niche": niche})
     except Exception as e:
         return jsonify({"error": f"JSON parse error: {str(e)[:80]}", "strategy": None, "raw": result})
+
 
 
 @app.route("/api/deep_analysis", methods=["POST"])
