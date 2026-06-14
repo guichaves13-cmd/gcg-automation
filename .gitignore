@@ -21,3 +21,4 @@ build/
 build_tmp/
 build_exe.py
 *.spec
+_embedded_config.py

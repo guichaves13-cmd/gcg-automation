@@ -71,9 +71,12 @@ GOOGLE_API_KEY = _load_key()
 # GROQ AI ENGINE (Primary — embedded key, no user config needed)
 # =============================================
 # Embedded key — friends don't need to configure anything
-# Key is injected at build time via environment variable GROQ_API_KEY
-# For distribution: the compiled .exe has the key embedded via PyInstaller
-_GROQ_KEY = os.environ.get("GROQ_API_KEY", "")
+# Key loaded from embedded config (compiled into exe) or environment variable
+try:
+    from _embedded_config import GROQ_API_KEY as _GROQ_KEY
+except ImportError:
+    _GROQ_KEY = os.environ.get("GROQ_API_KEY", "")
+
 
 def ask_groq(prompt, timeout=90):
     """Call Groq API — Llama 3.3 70B (faster & better than Gemini Flash)."""
