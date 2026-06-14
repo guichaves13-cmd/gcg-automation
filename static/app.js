@@ -1,38 +1,81 @@
 const API = '';
+
 function showPage(id){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('page-'+id).classList.add('active');
   document.querySelector(`[data-page="${id}"]`).classList.add('active');
+  // Scroll to top of content on page switch
+  document.querySelector('.content')?.scrollTo({top:0, behavior:'smooth'});
 }
-function loading(show,text){
-  document.getElementById('loading').style.display=show?'flex':'none';
-  if(text) document.getElementById('loading-text').textContent=text;
+
+// Loading overlay with dynamic messages
+const _loadingMsgs = [
+  'Consultando IA Groq...', 'Analisando com llama-3.1...', 'Gerando resultados virais...',
+  'Processando com IA...', 'Quase pronto...'
+];
+let _loadingCycle;
+function loading(show, text){
+  const el = document.getElementById('loading');
+  const textEl = document.getElementById('loading-text');
+  if(!el) return;
+  el.style.display = show ? 'flex' : 'none';
+  clearInterval(_loadingCycle);
+  if(show){
+    if(textEl) textEl.textContent = text || 'Consultando IA...';
+    // Cycle messages every 6s so user knows it's working
+    let i = 0;
+    _loadingCycle = setInterval(() => {
+      if(textEl) textEl.textContent = _loadingMsgs[++i % _loadingMsgs.length];
+    }, 6000);
+  }
 }
-async function post(url,data){
-  loading(true,'Analyzing with Gemini AI...');
+
+// post() — delegates to TitlePilotAI (antibug.js) when ready, fallback for early calls
+async function post(url, data){
+  if(typeof TitlePilotAI !== 'undefined'){
+    return TitlePilotAI.call(url, data);
+  }
+  // Fallback (before antibug.js loads)
+  loading(true, 'Consultando...');
   try{
-    const r=await fetch(API+url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
-    const text = await r.text();
-    try {
-      const json = JSON.parse(text);
-      if(!r.ok && !json.error) json.error = `HTTP Error ${r.status}`;
-      if(json.error) {
-         alert("TitlePilot AI Error:\n" + json.error);
-      }
-      return json;
-    } catch(e) {
-      alert(`Invalid JSON Response (${r.status}): ${text.substring(0,100)}...`);
-      return {error: `Invalid JSON Response (${r.status}): ${text.substring(0,100)}...`};
-    }
-  }catch(err){
-    alert(`Network Request Failed: ${err.message}`);
-    return {error: `Network Request Failed: ${err.message}`};
-  }finally{loading(false)}
+    const r = await fetch(API+url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
+    const json = await r.json().catch(() => ({error: 'Resposta inválida do servidor'}));
+    if(json.error) console.warn('[TitlePilot]', json.error);
+    return json;
+  } catch(err){
+    console.error('[TitlePilot] Request failed:', err);
+    return {error: 'Falha na conexão: ' + err.message};
+  } finally { loading(false); }
 }
+
+function escHtml(s){
+  if(!s) return '';
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/\n/g,'<br>');
+}
+
 function gradeClass(g){return 'grade-'+(g||'F')}
 function gradeColor(g){return{S:'#FFD700',A:'#4ecca3',B:'#3b82f6',C:'#f59e0b',D:'#e94560',F:'#666'}[g]||'#666'}
 function barColor(score){return score>=80?'#FFD700':score>=60?'#4ecca3':score>=40?'#3b82f6':score>=20?'#f59e0b':'#e94560'}
+
+// Enter key support for main inputs
+document.addEventListener('DOMContentLoaded', () => {
+  const enterMap = {
+    'analyze-input': () => analyzeTitle(),
+    'gen-topic':     () => generateTitles(),
+    'sub-theme':     () => findSubniches(),
+    'scorer-niche':  () => generateNicheScore(),
+    'xray-handle':   () => generateXRay(),
+    'outlier-niche': () => generateOutliers(),
+    'shorts-topic':  () => generateShorts(),
+  };
+  Object.entries(enterMap).forEach(([id, fn]) => {
+    const el = document.getElementById(id);
+    if(el) el.addEventListener('keydown', e => { if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); fn(); } });
+  });
+});
 
 // TITLE ANALYZER
 async function analyzeTitle(){
@@ -1038,7 +1081,7 @@ async function generateRemix(){
   document.getElementById('remix-result').innerHTML=html;
 }
 
-function escHtml(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')}
+
 
 // MY CHANNELS
 async function loadChannels(){

@@ -1,6 +1,6 @@
-"""
-TitlePilot Pro — Backend Server
-Premium viral title analysis with Gemini AI + YouTube Data API.
+""" 
+TitlePilot Pro — Backend Server v2.1
+Viral title analysis powered by Groq AI + YouTube Data API.
 """
 import os, sys, json, re, time, math, webbrowser, threading
 from datetime import datetime
@@ -18,16 +18,44 @@ sys.path.insert(0, PARENT_DIR)
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 CORS(app)
+app.config['MAX_CONTENT_LENGTH'] = 1 * 1024 * 1024  # 1MB max request
+
+# =============================================
+# INPUT SANITIZATION & VALIDATION
+# =============================================
+MAX_INPUT_LEN = 500
+
+def san(val, maxlen=MAX_INPUT_LEN, default=""):
+    """Sanitize a single value: coerce to str, strip tags, truncate."""
+    if val is None:
+        return default
+    s = str(val).strip()
+    # Remove HTML/script tags
+    s = re.sub(r'<[^>]+>', '', s)
+    return s[:maxlen]
+
+def san_list(lst, maxlen=MAX_INPUT_LEN, max_items=50):
+    """Sanitize a list of strings."""
+    if not isinstance(lst, list):
+        return []
+    return [san(x, maxlen) for x in lst[:max_items]]
+
+def require(data, *fields):
+    """Return (ok, error_response) — check required fields are non-empty."""
+    for f in fields:
+        if not san(data.get(f, '')):
+            return False, jsonify({"error": f"Campo obrigatório ausente: '{f}'"}), 400
+    return True, None, None
 
 @app.errorhandler(Exception)
 def handle_exception(e):
-    # Pass through HTTP errors
     if isinstance(e, werkzeug.exceptions.HTTPException):
-        return e
-    # Return JSON instead of HTML for internal server errors
+        # Return JSON for HTTP errors too
+        return jsonify({"error": f"{e.name}: {e.description}"}), e.code
     import traceback
-    err_str = traceback.format_exc()
-    return jsonify({"error": f"Internal Server Error: {str(e)}", "trace": err_str}), 200
+    err_str = str(e)[:200]
+    return jsonify({"error": f"Erro interno: {err_str}"}), 500
+
 
 # Load API key — suporta modo standalone e integrado
 def _load_key():
@@ -602,20 +630,23 @@ def index():
 
 @app.route("/api/analyze", methods=["POST"])
 def api_analyze():
-    data = request.json
-    title = data.get("title", "")
+    data = request.json or {}
+    title = san(data.get("title", ""), maxlen=500)
     if not title:
-        return jsonify({"error": "No title provided"}), 400
+        return jsonify({"score": 0, "grade": "F", "structures": [],
+                        "title_length": 0, "word_count": 0, "language_detected": "unknown",
+                        "warnings": ["Título vazio — insira um título para analisar"]})
     return jsonify(analyze_title(title))
 
 @app.route("/api/analyze_batch", methods=["POST"])
 def api_analyze_batch():
-    data = request.json
-    titles = data.get("titles", [])
+    data = request.json or {}
+    raw = data.get("titles", [])
+    titles = san_list(raw, maxlen=300, max_items=100)
     results = [analyze_title(t) for t in titles if t.strip()]
     
     if not results:
-        return jsonify({"error": "No titles"}), 400
+        return jsonify({"error": "Nenhum título fornecido para análise"}), 400
     
     scores = [r["score"] for r in results]
     struct_count = Counter()
@@ -2293,14 +2324,16 @@ Return ONLY valid JSON. No markdown outside the JSON."""
 @app.route("/api/ab_simulate", methods=["POST"])
 def api_ab_simulate():
     """Simulate an A/B test between two titles and generate a thumbnail concept."""
-    data = request.json
-    title_a = data.get("title_a", "")
-    title_b = data.get("title_b", "")
-    niche = data.get("niche", "")
-    language = data.get("language", "English")
+    data = request.json or {}
+    title_a = san(data.get("title_a", ""))
+    title_b = san(data.get("title_b", ""))
+    niche    = san(data.get("niche", ""))
+    language = san(data.get("language", "English"))
     
-    if not title_a or not title_b:
-        return jsonify({"error": "Both titles must be provided"}), 400
+    if not title_a:
+        return jsonify({"error": "Título A é obrigatório"}), 400
+    if not title_b:
+        return jsonify({"error": "Título B é obrigatório"}), 400
         
     prompt = f"""You are the ultimate YouTube A/B testing algorithm. 
 I am going to give you two titles for the exact same video.
