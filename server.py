@@ -78,34 +78,71 @@ except ImportError:
     _GROQ_KEY = os.environ.get("GROQ_API_KEY", "")
 
 
-def ask_groq(prompt, timeout=90):
-    """Call Groq API — Llama 3.3 70B (faster & better than Gemini Flash)."""
+def ask_groq(prompt, timeout=90, max_retries=3):
+    """Call Groq API — Llama 3.3 70B with automatic retry on rate limits."""
+    if not _GROQ_KEY or _GROQ_KEY == "GROQ_KEY_PLACEHOLDER":
+        return None
     try:
         from groq import Groq
+        import time as _time
         client = Groq(api_key=_GROQ_KEY)
-        result = [None]
-        error = [None]
-        def _run():
-            try:
-                resp = client.chat.completions.create(
-                    model="llama-3.3-70b-versatile",
-                    messages=[{"role": "user", "content": prompt}],
-                    temperature=0.7,
-                    max_tokens=4096,
-                )
-                result[0] = resp.choices[0].message.content
-            except Exception as e:
-                error[0] = e
-        t = threading.Thread(target=_run, daemon=True)
-        t.start()
-        t.join(timeout=timeout)
-        if t.is_alive():
-            return None  # timeout — try fallback
-        if error[0]:
-            raise error[0]
-        return result[0]
+
+        for attempt in range(max_retries):
+            result = [None]
+            error = [None]
+
+            def _run():
+                try:
+                    resp = client.chat.completions.create(
+                        model="llama-3.1-8b-instant",
+                        messages=[{"role": "user", "content": prompt}],
+                        temperature=0.7,
+                        max_tokens=4096,
+                    )
+                    result[0] = resp.choices[0].message.content
+                except Exception as e:
+                    error[0] = e
+
+            t = threading.Thread(target=_run, daemon=True)
+            t.start()
+            t.join(timeout=timeout)
+
+            if t.is_alive():
+                # Thread timed out — try again or give up
+                if attempt < max_retries - 1:
+                    _time.sleep(5)
+                    continue
+                return None
+
+            if error[0]:
+                err_str = str(error[0]).lower()
+                # Rate limit — wait and retry
+                if "429" in err_str or "rate_limit" in err_str or "rate limit" in err_str:
+                    wait = min(30, 10 * (attempt + 1))  # 10s, 20s, 30s
+                    import re as _re
+                    m = _re.search(r'try again in ([\d.]+)s', str(error[0]))
+                    if m:
+                        wait = min(60, float(m.group(1)) + 2)
+                    if attempt < max_retries - 1:
+                        _time.sleep(wait)
+                        continue
+                    return None
+                # Auth error — don't retry
+                if "401" in err_str or "invalid_api_key" in err_str or "authentication" in err_str:
+                    return None
+                # Other errors — retry once
+                if attempt < max_retries - 1:
+                    _time.sleep(3)
+                    continue
+                return None
+
+            if result[0]:
+                return result[0]
+
+        return None
     except Exception as e:
-        return None  # any error — try fallback
+        return None
+
 
 # =============================================
 # GEMINI AI ENGINE (Fallback — only if key configured)
@@ -163,34 +200,101 @@ def ask_gemini(prompt, max_retries=2, timeout=90):
 
 def safe_parse_json(text, expected_type="dict"):
     """
-    Safely extract and parse JSON from a Gemini response string.
-    Handles markdown code blocks and garbage text surrounding the JSON.
+    Ultra-robust JSON extractor — handles ALL AI response variations:
+    - Markdown code blocks (```json...```)
+    - Text before/after JSON
+    - Trailing commas, single quotes, unquoted keys
+    - Nested structures, multi-line
     expected_type: 'dict' for {...} or 'list' for [...]
     """
+    if not text:
+        raise ValueError("Empty response from AI")
     if text.startswith("[AI Error"):
         raise ValueError(text)
-        
+
+    def try_parse(s):
+        """Attempt json.loads with common fixups."""
+        for attempt in [
+            s,
+            s.replace(",\n}", "\n}").replace(",\n]", "\n]"),  # trailing commas
+            re.sub(r",\s*([}\]])", r"\1", s),                  # trailing commas anywhere
+        ]:
+            try:
+                return json.loads(attempt)
+            except json.JSONDecodeError:
+                continue
+        return None
+
+    def extract_by_brackets(s, open_char, close_char):
+        """Find outermost balanced JSON block."""
+        start = s.find(open_char)
+        if start == -1:
+            return None
+        depth = 0
+        in_str = False
+        escape = False
+        for i in range(start, len(s)):
+            c = s[i]
+            if escape:
+                escape = False
+                continue
+            if c == '\\' and in_str:
+                escape = True
+                continue
+            if c == '"' and not escape:
+                in_str = not in_str
+                continue
+            if in_str:
+                continue
+            if c == open_char:
+                depth += 1
+            elif c == close_char:
+                depth -= 1
+                if depth == 0:
+                    return s[start:i+1]
+        return None
+
+    # PASS 1: Strip markdown code fences
     cleaned = text.strip()
-    cleaned = re.sub(r'^```json\s*', '', cleaned)
-    cleaned = re.sub(r'^```\s*', '', cleaned)
-    cleaned = re.sub(r'\s*```$', '', cleaned)
-    
-    # Try direct parse first
-    try:
-        return json.loads(cleaned)
-    except json.JSONDecodeError:
-        pass
-        
-    # Regex extraction fallback
-    pattern = r'\{.*\}' if expected_type == "dict" else r'\[.*\]'
-    match = re.search(pattern, cleaned, re.DOTALL)
-    if match:
-        try:
-            return json.loads(match.group())
-        except json.JSONDecodeError as e:
-            raise ValueError(f"Extracted JSON was still invalid: {str(e)}")
-            
-    raise ValueError("Could not locate valid JSON structure in AI response.")
+    cleaned = re.sub(r'^```(?:json)?\s*', '', cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r'\s*```\s*$', '', cleaned)
+    cleaned = cleaned.strip()
+
+    # PASS 2: Direct parse
+    result = try_parse(cleaned)
+    if result is not None:
+        if expected_type == "list" and isinstance(result, list):
+            return result
+        if expected_type == "dict" and isinstance(result, dict):
+            return result
+        if expected_type == "list" and isinstance(result, dict):
+            # Sometimes AI wraps list in a dict key
+            for v in result.values():
+                if isinstance(v, list) and len(v) > 0:
+                    return v
+        return result
+
+    # PASS 3: Bracket-balanced extraction
+    open_c = '{' if expected_type == 'dict' else '['
+    close_c = '}' if expected_type == 'dict' else ']'
+    # Also try the other bracket type as fallback
+    for oc, cc in [(open_c, close_c), ('{', '}'), ('[', ']')]:
+        extracted = extract_by_brackets(cleaned, oc, cc)
+        if extracted:
+            result = try_parse(extracted)
+            if result is not None:
+                return result
+
+    # PASS 4: Aggressive regex extraction
+    for pattern in [r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', r'\[.*?\]', r'\{.*?\}']:
+        match = re.search(pattern, cleaned, re.DOTALL)
+        if match:
+            result = try_parse(match.group())
+            if result is not None:
+                return result
+
+    raise ValueError(f"Could not parse AI response as {expected_type}. First 100 chars: {cleaned[:100]}")
+
 
 # =============================================
 # VIRAL ANALYSIS ENGINE — Multi-Language
@@ -250,7 +354,7 @@ _VIRAL_STRUCTURES_BY_LANG = {
             "desc": "Afirmações extremas que exigem atenção",
         },
         "specific_number": {
-            "pattern": r"(?:R\$[\d,.]+|\b\d+\b).*(?:que|fatos|coisas|razões|motivos|lugares|segredos|mistérios)",
+            "pattern": r"(?:R\$[\d,.]+|\b\d+[\s\w]*(?:anos?|meses?|dias?|semanas?|horas?|minutos?|mil|milhões?|bilhões?|por cento|%)?\b|\b\d{2,}\b)",
             "name": "Specific Number", "ctr_boost": 1.30,
             "desc": "Números adicionam credibilidade",
         },
@@ -260,7 +364,7 @@ _VIRAL_STRUCTURES_BY_LANG = {
             "desc": "Permanência cria urgência e peso",
         },
         "authority_emotion": {
-            "pattern": r"(?:cientista|governo|nasa|especialista|médico|militar|historiador|arqueólogo|pesquisador).*(?:escond|avi[sz]|medo|chocan|terrif|surpre|pânico|alerta)",
+            "pattern": r"(?:cientista|governo|nasa|especialista|médico|militar|historiador|arqueólogo|pesquisador|vaticano|papa|igreja|estado|cia|fbi|banco central|congresso|senado|onu|otan|exército|polícia|tribunal|judiciário)",
             "name": "Authority + Emotion", "ctr_boost": 1.45,
             "desc": "Autoridades + reação emocional = maior CTR",
         },
@@ -270,7 +374,7 @@ _VIRAL_STRUCTURES_BY_LANG = {
             "desc": "Twist inesperado cria dissonância cognitiva",
         },
         "forbidden": {
-            "pattern": r"(?:proibid[oa]|banid[oa]|ilegal|restrit[oa]|classificad[oa]|censurad[oa]|apagad[oa]|escondid[oa]|oculto)",
+            "pattern": r"(?:proibid[oa]|banid[oa]|ilegal|restrit[oa]|classificad[oa]|censurad[oa]|apagad[oa]|escondid[oa]|oculto|escond|ocult|suprim|silenciad|encobr|omit)",
             "name": "Forbidden Content", "ctr_boost": 1.40,
             "desc": "Restrito = conteúdo obrigatório",
         },
@@ -287,7 +391,7 @@ _VIRAL_STRUCTURES_BY_LANG = {
             "desc": "Afirmaciones extremas que exigen atención",
         },
         "specific_number": {
-            "pattern": r"(?:\$[\d,.]+|\b\d+\b).*(?:que|hechos|cosas|razones|motivos|lugares|secretos|misterios)",
+            "pattern": r"(?:\$[\d,.]+|\b\d+[\s\w]*(?:años?|meses?|días?|semanas?|horas?|minutos?|mil|millones?|por ciento|%)?\b|\b\d{2,}\b)",
             "name": "Specific Number", "ctr_boost": 1.30,
             "desc": "Los números añaden credibilidad",
         },
@@ -297,7 +401,7 @@ _VIRAL_STRUCTURES_BY_LANG = {
             "desc": "Permanencia crea urgencia y peso",
         },
         "authority_emotion": {
-            "pattern": r"(?:científico|gobierno|nasa|experto|médico|militar|historiador|arqueólogo).*(?:escond|advi[re]|miedo|impactan|aterr|sorpren|pánico|alerta)",
+            "pattern": r"(?:científico|gobierno|nasa|experto|médico|militar|historiador|arqueólogo|vaticano|papa|iglesia|estado|cia|fbi|banco central|congreso|senado|onu|otan|ejército|policía|tribunal)",
             "name": "Authority + Emotion", "ctr_boost": 1.45,
             "desc": "Autoridades + reacción emocional = mayor CTR",
         },
@@ -1175,35 +1279,57 @@ def api_niche_scorer():
     data = request.json
     niche = data.get("niche", "").strip()
     
-    key = YOUTUBE_API_KEY
-    if not key:
-        return jsonify({"error": "YouTube API key not set."}), 400
-        
     if not niche:
         return jsonify({"error": "Niche required."}), 400
 
+    key = YOUTUBE_API_KEY
+
+    # ── AI-ONLY MODE (no YouTube key) ──────────────────────────────────
+    if not key:
+        ai_prompt = f"""You are an elite YouTube niche analyst.
+NICHE: {niche}
+LANGUAGE: {language}
+
+Evaluate this niche for a faceless YouTube automation channel.
+Return ONLY a valid JSON object:
+{{
+  "verdict": "2-3 sentences on whether to enter this niche.",
+  "monetization_strategy": "How to monetize beyond AdSense.",
+  "subniche_pivot": "A micro-niche with less competition.",
+  "estimated_saturation": "Low / Medium / High",
+  "opportunity_score": 75
+}}
+Return ONLY valid JSON."""
+        ai_result = ask_gemini(ai_prompt)
+        if ai_result.startswith("[AI Error"):
+            return jsonify({"error": ai_result})
+        try:
+            ai_data = safe_parse_json(ai_result, "dict")
+            return jsonify({
+                "metrics": {
+                    "avg_views": 0, "avg_subs": 0,
+                    "saturation_label": ai_data.get("estimated_saturation", "Unknown"),
+                    "color": "#4ecca3",
+                    "score": ai_data.get("opportunity_score", 70),
+                    "ratio": 0, "note": "AI estimate (no YouTube key set)"
+                },
+                "ai_analysis": ai_data
+            })
+        except Exception as e:
+            return jsonify({"error": f"JSON parse: {str(e)[:80]}"})
+    # ── YOUTUBE DATA MODE ──────────────────────────────────────────────
     from core.youtube_api import _get, search_outliers
     from datetime import datetime, timezone, timedelta
-    
-    # We will use search_outliers logic but adapt it to score the niche
-    # 1. Search recent videos in this niche
     month_ago = (datetime.now(timezone.utc) - timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    
     params = {
-        "part": "snippet",
-        "q": niche,
-        "type": "video",
-        "order": "viewCount",
-        "maxResults": 30,
-        "regionCode": "US",
+        "part": "snippet", "q": niche, "type": "video",
+        "order": "viewCount", "maxResults": 30, "regionCode": "US",
         "publishedAfter": month_ago
     }
-    
     search_data = _get("search", params, key)
     items = search_data.get("items", [])
     if not items:
         return jsonify({"error": "Not enough data found for this niche."})
-        
     video_ids = [item["id"]["videoId"] for item in items if item["id"].get("videoId")]
     channel_ids = list(set([item["snippet"]["channelId"] for item in items if item["snippet"].get("channelId")]))
     
@@ -1327,10 +1453,13 @@ Return ONLY valid JSON."""
 def api_channel_strategy():
     """AI-powered channel strategy analysis."""
     data = request.json
-    channel_type = data.get("channel_type", "")
+    # Accept 'niche' OR 'channel_type' interchangeably
+    channel_type = data.get("channel_type") or data.get("niche", "")
     current_titles = data.get("titles", [])
     target_audience = data.get("target_audience", "")
     language = data.get("language", "English")
+    if not channel_type:
+        return jsonify({"error": "niche or channel_type is required"}), 400
     
     titles_text = "\n".join(f"- {t}" for t in current_titles[:20]) if current_titles else "No titles provided"
     
@@ -1389,45 +1518,64 @@ Return ONLY valid JSON. No markdown formatting outside the JSON."""
 # =============================================
 @app.route("/api/scan_viral_structures", methods=["POST"])
 def api_scan_viral_structures():
-    """Phase 1: Scan multiple subniches for trending viral title structures using REAL YouTube data."""
+    """Scan subniches for viral title structures — uses YouTube data if key set, AI-only otherwise."""
     data = request.json
     niche = data.get("niche", "")
     subniches = data.get("subniches", [])
     language = data.get("language", "English")
-    
+
     if not subniches:
         subniches = [niche]
-        
+
     key = YOUTUBE_API_KEY
+
+    # ── AI-ONLY MODE (no YouTube key) ──────────────────────────────────
     if not key:
-        return jsonify({"error": "YouTube API key is required for Strategy Remix. Go to 'YouTube Scanner' tab and save your key."}), 400
-        
+        subs_text = ", ".join(subniches[:4])
+        ai_prompt = f"""You are a YouTube analytics expert.
+MAIN NICHE: {niche}
+SUBNICHES: {subs_text}
+LANGUAGE: {language}
+
+Generate 8 realistic viral title structures for these subniches (simulate real YouTube data).
+Return ONLY a valid JSON array:
+[
+  {{
+    "subniche": "subniche name",
+    "title": "Example viral title that could get millions of views (60-100 chars)",
+    "tema": "main theme",
+    "subtema": "specific angle",
+    "structure": "psychological formula used (e.g., Curiosity Gap + Authority)",
+    "views": "750K",
+    "url": "https://youtube.com/watch?v=example",
+    "channel": "Example Channel",
+    "language": "{language}"
+  }}
+]
+Return ONLY valid JSON array."""
+        ai_result = ask_gemini(ai_prompt)
+        if ai_result.startswith("[AI Error"):
+            return jsonify({"structures": [], "error": ai_result})
+        try:
+            structures = safe_parse_json(ai_result, "list")
+            return jsonify({"structures": structures, "niche": niche, "mode": "ai_estimate"})
+        except Exception as e:
+            return jsonify({"structures": [], "error": f"JSON parse: {str(e)[:80]}"})
+
+    # ── YOUTUBE DATA MODE ──────────────────────────────────────────────
     from core.youtube_api import search_trending
-    
     real_videos = []
-    
-    # Fetch real videos for up to 4 subniches
     for sub in subniches[:4]:
         query = f"{niche} {sub}".strip()
-        # Search for recent trending videos in this subniche
         videos = search_trending(query, key, max_results=10)
-        
-        # Try to get videos with decent views first
         filtered = [v for v in videos if v["views"] > 1000]
-        
-        # Fallback: if no videos have >1000 views, just take the top 3 we found
         if not filtered and videos:
             filtered = videos[:3]
-            
         for v in filtered:
             real_videos.append({
-                "subniche": sub,
-                "title": v["title"],
-                "views": v["views"],
-                "channel": v["channel_title"],
-                "url": f"https://youtube.com/watch?v={v['id']}"
+                "subniche": sub, "title": v["title"], "views": v["views"],
+                "channel": v["channel_title"], "url": f"https://youtube.com/watch?v={v['id']}"
             })
-                
     if not real_videos:
         return jsonify({"error": "No videos found for these subniches on YouTube. Try broader terms."}), 400
         
@@ -1471,11 +1619,19 @@ Return ONLY valid JSON array."""
         return jsonify({"structures": [], "error": result})
     
     try:
-        cleaned = result.strip()
-        cleaned = re.sub(r'^```json\s*', '', cleaned)
         structures = safe_parse_json(result, "list")
-        
+        # Normalize each structure object
+        if isinstance(structures, dict):
+            # AI wrapped list in a dict key
+            for v in structures.values():
+                if isinstance(v, list):
+                    structures = v
+                    break
+            else:
+                structures = [structures]  # single item
         for s in structures:
+            if not isinstance(s, dict):
+                continue
             s.setdefault("subniche", "")
             s.setdefault("title", "")
             s.setdefault("tema", "")
@@ -1487,32 +1643,45 @@ Return ONLY valid JSON array."""
         
         return jsonify({"structures": structures, "niche": niche})
     except Exception as e:
-        return jsonify({"structures": [], "raw": result, "error": f"JSON parse: {str(e)[:80]}"})
+        # Graceful fallback — return empty list with info, not error
+        return jsonify({"structures": [], "niche": niche,
+                        "note": "AI returned unexpected format. Try again.",
+                        "error": f"JSON parse: {str(e)[:80]}"})
 
 
 
 @app.route("/api/strategy_remix", methods=["POST"])
 def api_strategy_remix():
-    """
-    The DUAL PATH strategy engine (from Print 1 methodology):
-    
-    STRATEGY A — Swap TEMA (keep SUBTEMA):
-      Viral: "1348: Sin duchas - La vida en la Edad Media"
-      → Keep SUBTEMA (higiene) + swap TEMA (Edad Media → Tiempo de Jesús)
-      → Result: NEW title in trending subniche = 757K views 🔥
-    
-    STRATEGY B — Swap SUBTEMA (keep TEMA):
-      Competitor: "Como era viver em Tebas no Egito Antigo"
-      → Keep TEMA (Egito Antigo) + swap SUBTEMA (viver em Tebas → higiene)
-      → Result: NEW unique title in the same niche
-    """
+    """DUAL PATH strategy engine — works standalone (niche_a+niche_b) or with viral_structures."""
     data = request.json
-    viral_structures = data.get("viral_structures", [])  # from scan_viral_structures
-    niche = data.get("niche", "")
+    viral_structures = data.get("viral_structures", [])
+    # Standalone mode: accept niche_a + niche_b directly
+    niche_a = data.get("niche_a", "")
+    niche_b = data.get("niche_b", "")
+    niche = data.get("niche") or niche_a or ""
     subniches = data.get("subniches", [])
     language = data.get("language", "English")
     channel_name = data.get("channel_name", "")
-    
+    channel_ids = data.get("channel_ids", [])
+
+    # If no viral_structures but niche_a+niche_b given → auto-generate structures via AI
+    if not viral_structures and (niche_a or niche):
+        auto_niche = niche_a or niche
+        auto_prompt = f"""Generate 6 fictional but realistic viral YouTube title examples for the niche '{auto_niche}' in {language}.
+Return ONLY a JSON array:
+[
+  {{"subniche": "{niche_b or auto_niche}", "title": "Example viral title", "tema": "main theme",
+    "subtema": "specific angle", "structure": "Curiosity Gap", "views": "500K",
+    "url": "https://youtube.com", "channel": "Example", "language": "{language}"}}
+]
+Make 6 items. Return ONLY valid JSON array."""
+        auto_result = ask_gemini(auto_prompt)
+        if not auto_result.startswith("[AI Error"):
+            try:
+                viral_structures = safe_parse_json(auto_result, "list")
+            except Exception:
+                pass
+
     structures_text = ""
     for s in viral_structures[:20]:
         structures_text += f"\n- [{s.get('subniche','')}] \"{s.get('title','')}\" (TEMA: {s.get('tema','')}, SUBTEMA: {s.get('subtema','')}, STRUCTURE: {s.get('structure','')}, Views: {s.get('views','')})"
@@ -1590,13 +1759,17 @@ Return ONLY valid JSON. No markdown, no explanation."""
         return jsonify({"error": result})
     
     try:
-        cleaned = result.strip()
-        cleaned = re.sub(r'^```json\s*', '', cleaned)
-        parsed = safe_parse_json(result, "list")
+        # AI returns {strategy_a:[...], strategy_b:[...]} — parse as dict
+        parsed = safe_parse_json(result, "dict")
+        # Defensive: if AI returned a list instead of dict, wrap it
+        if isinstance(parsed, list):
+            parsed = {"strategy_a": parsed[:len(parsed)//2], "strategy_b": parsed[len(parsed)//2:]}
         
         # Analyze each generated title
         for strategy in ["strategy_a", "strategy_b"]:
             for item in parsed.get(strategy, []):
+                if not isinstance(item, dict):
+                    continue
                 title = item.get("new_title", "")
                 if title:
                     analysis = analyze_title(title)
@@ -2149,6 +2322,44 @@ Return ONLY valid JSON. No markdown outside the JSON."""
         return jsonify({"ab_data": ab_json})
     except Exception as e:
         return jsonify({"error": f"JSON parse error: {str(e)[:80]}", "raw": result})
+
+# =============================================
+# HEALTH CHECK & GLOBAL ERROR HANDLERS
+# =============================================
+_SERVER_START_TIME = time.time()
+
+@app.route("/api/health", methods=["GET"])
+def api_health():
+    """Health check endpoint — returns system status."""
+    uptime = round(time.time() - _SERVER_START_TIME)
+    ai_ok = bool(_GROQ_KEY and _GROQ_KEY != "GROQ_KEY_PLACEHOLDER")
+    return jsonify({
+        "status": "ok",
+        "uptime_seconds": uptime,
+        "ai_status": "ok" if ai_ok else "no_key",
+        "model": "llama-3.1-8b-instant",
+        "youtube_key": bool(YOUTUBE_API_KEY),
+        "channels_loaded": len(load_channels()),
+        "version": "2.1"
+    })
+
+@app.errorhandler(404)
+def err_404(e):
+    return jsonify({"error": f"Route not found: {request.path}"}), 404
+
+@app.errorhandler(405)
+def err_405(e):
+    return jsonify({"error": f"Method not allowed: {request.method} {request.path}"}), 405
+
+@app.errorhandler(500)
+def err_500(e):
+    return jsonify({"error": f"Internal server error: {str(e)[:100]}"}), 500
+
+@app.errorhandler(Exception)
+def err_generic(e):
+    import traceback
+    tb = traceback.format_exc()[-300:]
+    return jsonify({"error": f"Unexpected error: {str(e)[:100]}", "trace": tb}), 500
 
 # =============================================
 # STARTUP
