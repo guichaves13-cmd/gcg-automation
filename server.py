@@ -1,4 +1,4 @@
-﻿""" 
+""" 
 TitlePilot Pro — Backend Server v2.1
 Viral title analysis powered by Groq AI + YouTube Data API.
 """
@@ -1600,30 +1600,45 @@ MAIN NICHE: {niche}
 SUBNICHES: {subs_text}
 LANGUAGE: {language}
 
-Generate 8 realistic viral title structures for these subniches (simulate real YouTube data).
-Return ONLY a valid JSON array:
+Generate exactly 8 realistic viral title structures for these subniches.
+IMPORTANT: Return ONLY a raw JSON array, starting with [ and ending with ].
+No markdown, no explanation, no code blocks.
+
 [
   {{
     "subniche": "subniche name",
-    "title": "Example viral title that could get millions of views (60-100 chars)",
+    "title": "Example viral title that could get millions of views",
     "tema": "main theme",
     "subtema": "specific angle",
     "structure": "psychological formula used (e.g., Curiosity Gap + Authority)",
     "views": "750K",
     "url": "https://youtube.com/watch?v=example",
-    "channel": "Example Channel",
+    "channel": "Example Channel Name",
     "language": "{language}"
   }}
 ]
-Return ONLY valid JSON array."""
+Generate 8 items. Start your response with [ immediately."""
         ai_result = ask_gemini(ai_prompt)
-        if ai_result.startswith("[AI Error"):
-            return jsonify({"structures": [], "error": ai_result})
-        try:
-            structures = safe_parse_json(ai_result, "list")
-            return jsonify({"structures": structures, "niche": niche, "mode": "ai_estimate"})
-        except Exception as e:
-            return jsonify({"structures": [], "error": f"JSON parse: {str(e)[:80]}"})
+        if ai_result and not ai_result.startswith("[AI Error"):
+            try:
+                structures = safe_parse_json(ai_result, "list")
+                # Unwrap dict if AI wrapped list
+                if isinstance(structures, dict):
+                    for v in structures.values():
+                        if isinstance(v, list) and len(v) > 0:
+                            structures = v
+                            break
+                    else:
+                        structures = [structures]
+                # Filter valid items
+                structures = [s for s in structures if isinstance(s, dict) and s.get("title")]
+                if structures:
+                    return jsonify({"structures": structures, "niche": niche, "mode": "ai_estimate"})
+            except Exception:
+                pass
+        # Last resort fallback
+        return jsonify({"structures": [], "niche": niche, "mode": "ai_estimate",
+                        "error": "IA não retornou estruturas. Tente novamente."})
 
     # ── YOUTUBE DATA MODE ──────────────────────────────────────────────
     from core.youtube_api import search_trending
@@ -1692,6 +1707,8 @@ Return ONLY valid JSON array."""
                     break
             else:
                 structures = [structures]  # single item
+        
+        valid = []
         for s in structures:
             if not isinstance(s, dict):
                 continue
@@ -1703,11 +1720,15 @@ Return ONLY valid JSON array."""
             s.setdefault("views", "")
             s.setdefault("url", "")
             s.setdefault("channel", "")
+            valid.append(s)
         
-        return jsonify({"structures": structures, "niche": niche})
+        if valid:
+            return jsonify({"structures": valid, "niche": niche, "mode": "yt"})
+        # Fall through to error if empty
+        raise ValueError("AI returned empty structures list")
     except Exception as e:
         # Graceful fallback — return empty list with info, not error
-        return jsonify({"structures": [], "niche": niche,
+        return jsonify({"structures": [], "niche": niche, "mode": "yt",
                         "note": "AI returned unexpected format. Try again.",
                         "error": f"JSON parse: {str(e)[:80]}"})
 
