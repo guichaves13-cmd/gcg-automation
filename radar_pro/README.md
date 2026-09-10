@@ -66,6 +66,16 @@ Música · Guerra · História · True Crime · Mistério & Terror · Religião 
 Finanças & Riqueza · Motivação & Estoicismo · Ciência & Espaço · Outros
 (classificação automática por palavras-chave EN/ES/PT + topicDetails da API).
 
-## Filtros
-Ordenação (recente / score / multiplicador / VPH / hit / novos / tamanho) ·
-Vídeos longos · Idioma · Categoria (com contagem) · Score mínimo · Busca por nome/ID.
+## Filtros (paridade total com o Radar Club + extras)
+- **Ordenação:** mais views · vídeo recente · views/inscrito · score dark · menos inscritos · recém-descobertos · **VPH** · **potencial** (os 2 últimos são só nossos)
+- **Formato 3-vias:** 🎬 Longos (horizontal) · 📱 Shorts (vertical) · 🌐 Todos
+- **9 idiomas:** EN, PT, ES, FR, DE, IT, RU, HI, AR
+- **Categoria** (14, com contagem) · **Score mínimo** · **Busca** por nome/ID
+- **Filtros adicionais** (3 chips): 💎 Menos inscritos, muitas views · 🆕 Novos (≤3 meses) · ⚡ Postando agora
+
+## Banco de Referências (coleções)
+Crie coleções nomeadas ("uma pra cada tipo de canal") e salve canais nelas pelo 🔖 do card.
+Persistido no banco (`collections` + `collection_items`). Endpoints `/api/collections*`.
+
+## Extras que o Radar Club NÃO tem
+⚡ **VPH** (por vídeo/hit/médio) · 🔗 **Canais similares** · 📊 **Raio-X do nicho**.
