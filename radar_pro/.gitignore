@@ -1,0 +1,7 @@
+# runtime / cache (não versionar)
+__pycache__/
+*.pyc
+radar.db-wal
+radar.db-shm
+*.tmp
+# radar.db É versionado (snapshot pronto com os canais mapeados)

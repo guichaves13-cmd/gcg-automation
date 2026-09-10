@@ -1,0 +1,475 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Radar Pro — Mapa de Canais do YouTube</title>
+<style>
+:root{--bg:#0d0f13;--panel:#14171d;--card:#181b22;--card2:#1f2430;--line:#282e39;--txt:#e8eaed;
+--mut:#8b94a3;--accent:#ff4d2e;--accent2:#ff8a3d;--green:#30d158;--amber:#ffb020;--blue:#5ac8fa;
+--gold:#ffd23f;--brand:#7c5cff;--brand2:#22d3ee}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 -apple-system,Segoe UI,Roboto,Arial,sans-serif}
+a{color:inherit;text-decoration:none}
+.wrap{max-width:1400px;margin:0 auto;padding:18px 20px 80px}
+/* header */
+.top{display:flex;align-items:center;gap:14px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:16px}
+.logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:20px}
+.logo .dot{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--brand),var(--brand2));
+display:grid;place-items:center;font-size:16px}
+.logo b{background:linear-gradient(135deg,var(--brand),var(--brand2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.subtitle{color:var(--mut);font-size:13px;margin:4px 0 0}
+.stats{display:flex;gap:26px;margin-left:auto;flex-wrap:wrap}
+.stat b{font-size:24px;font-weight:800;display:block;line-height:1}
+.stat span{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
+.stat.g b{color:var(--green)} .stat.a b{color:var(--amber)}
+.btn{background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:9px;
+padding:8px 14px;font-size:13px;cursor:pointer;font-weight:600}
+.btn:hover{border-color:var(--brand)} .btn.pri{background:linear-gradient(135deg,var(--brand),var(--brand2));border-color:transparent;color:#fff}
+/* tabs */
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0 6px}
+.tab{background:var(--card);border:1px solid var(--line);color:var(--mut);border-radius:11px;
+padding:9px 15px;font-size:13px;cursor:pointer;font-weight:700;display:flex;gap:8px;align-items:center}
+.tab:hover{color:var(--txt)}
+.tab.on{background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;border-color:transparent}
+.tab .cnt{background:rgba(255,255,255,.14);border-radius:20px;padding:1px 8px;font-size:11px}
+.tab.on .cnt{background:rgba(0,0,0,.22)}
+/* filtros */
+.filters{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:10px}
+.filters .lbl{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
+.frow{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+select,input{background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:9px;
+padding:9px 12px;font-size:13px;outline:none}
+select:focus,input:focus{border-color:var(--accent)}
+.search{flex:1;min-width:240px}
+.chk{display:flex;align-items:center;gap:6px;background:var(--card2);border:1px solid var(--line);
+border-radius:9px;padding:8px 12px;font-size:13px;cursor:pointer;user-select:none}
+.chk input{width:16px;height:16px}
+.chip{background:var(--card2);border:1px solid var(--line);color:var(--mut);border-radius:20px;
+padding:7px 13px;font-size:12.5px;cursor:pointer;font-weight:600}
+.chip:hover{color:var(--txt)}
+.chip.on{background:rgba(124,92,255,.18);border-color:var(--brand);color:#c9bcff}
+.viewtoggle{display:flex;gap:4px;margin-left:auto}
+.viewtoggle .btn.on{background:var(--accent);border-color:var(--accent);color:#fff}
+/* grid */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px;margin-top:16px}
+.grid.list{grid-template-columns:1fr}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;cursor:pointer;
+transition:border-color .15s,transform .1s}
+.card:hover{border-color:var(--accent);transform:translateY(-2px)}
+.chd{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.av{width:44px;height:44px;border-radius:50%;object-fit:cover;background:var(--card2);flex-shrink:0}
+.cnm{font-weight:700;font-size:15px;line-height:1.2}
+.cmeta{font-size:11.5px;color:var(--mut);margin-top:2px}
+.badges{margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:5px}
+.fire{display:flex;align-items:center;gap:4px;font-weight:800;font-size:15px;color:var(--accent)}
+.mult{background:rgba(255,210,63,.14);color:var(--gold);border-radius:20px;padding:2px 9px;font-size:11px;font-weight:700;white-space:nowrap}
+.mon{color:var(--green);font-weight:800;margin-left:5px;border:1px solid var(--green);border-radius:5px;padding:0 5px;font-size:12px}
+.cresc{font-size:11px;color:var(--green);margin-top:5px}
+.catbadge{display:inline-block;background:var(--card2);border:1px solid var(--line);border-radius:20px;
+padding:2px 9px;font-size:10.5px;color:var(--mut);margin-top:4px}
+.langbadge{display:inline-block;background:rgba(90,200,250,.12);color:var(--blue);border-radius:20px;
+padding:2px 8px;font-size:10.5px;margin:4px 0 0 4px}
+.thumbs{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.thumb{position:relative;border-radius:9px;overflow:hidden;background:var(--card2);aspect-ratio:16/9}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.thumb .ov{position:absolute;bottom:5px;right:5px;background:rgba(0,0,0,.82);border-radius:5px;
+padding:1px 6px;font-size:11px;font-weight:700}
+.thumb .vph{position:absolute;bottom:5px;left:5px;background:rgba(255,77,46,.9);border-radius:5px;
+padding:1px 6px;font-size:10.5px;font-weight:700}
+.vtitle{font-size:11.5px;color:var(--mut);margin-top:6px;display:-webkit-box;-webkit-line-clamp:1;
+-webkit-box-orient:vertical;overflow:hidden}
+.heart{cursor:pointer;font-size:15px;opacity:.4}.heart.on{opacity:1}
+.empty{text-align:center;color:var(--mut);padding:60px 20px}
+.empty code{background:var(--card2);border:1px solid var(--line);border-radius:6px;padding:2px 8px}
+/* modal */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.72);display:none;z-index:50;padding:30px;overflow:auto}
+.modal.on{display:block}
+.sheet{max-width:900px;margin:0 auto;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px}
+.sheet h2{margin:0}
+.mtop{display:flex;gap:14px;align-items:center}
+.mstats{display:flex;gap:20px;flex-wrap:wrap;margin:14px 0;padding:14px;background:var(--card);border-radius:12px}
+.mstats .s b{font-size:18px;display:block} .mstats .s span{font-size:11px;color:var(--mut)}
+.vrow{display:flex;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
+.vrow img{width:110px;border-radius:7px;aspect-ratio:16/9;object-fit:cover}
+.vrow .vt{font-size:13px;flex:1}
+.vrow .vm{font-size:11.5px;color:var(--mut)}
+.vph-pill{background:rgba(255,77,46,.15);color:var(--accent);border-radius:20px;padding:2px 9px;font-weight:700;font-size:12px}
+.simgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-top:8px}
+.simcard{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px;cursor:pointer;font-size:12.5px}
+.simcard:hover{border-color:var(--accent)}
+.x{margin-left:auto;cursor:pointer;font-size:22px;color:var(--mut)}
+h3.sec{font-size:14px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em;margin:20px 0 8px}
+/* log console */
+.console{position:fixed;bottom:0;left:0;right:0;max-height:38vh;overflow:auto;background:#05070a;
+border-top:2px solid var(--accent);padding:12px 18px;font:12px/1.5 ui-monospace,Consolas,monospace;
+color:#9fe6b0;display:none;z-index:60}
+.console.on{display:block}
+.console .close{position:sticky;top:0;float:right;cursor:pointer;color:var(--mut)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div>
+      <div class="logo"><span class="dot">📡</span> <b>Radar Pro</b></div>
+      <div class="subtitle">Canais dark em ascensão — mapa do YouTube · VPH · similares · raio-X de nicho.</div>
+    </div>
+    <div class="stats">
+      <div class="stat"><b id="st-total">—</b><span>canais no radar</span></div>
+      <div class="stat g"><b id="st-today">—</b><span>novos hoje</span></div>
+      <div class="stat a"><b id="st-7d">—</b><span>novos 7 dias</span></div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn" onclick="openCollections()">📁 Banco de Referências</button>
+      <button class="btn" onclick="openCrawl('refresh')">↻ Atualizar</button>
+      <button class="btn pri" onclick="openCrawl('discover')">🔍 Mapear YouTube</button>
+    </div>
+  </div>
+
+  <div class="tabs" id="tabs"></div>
+
+  <div class="filters">
+    <div class="lbl">Filtros</div>
+    <div class="frow">
+      <select id="sort" onchange="load()">
+        <option value="views">👁 Mais views (vídeo top)</option>
+        <option value="score">Maior viral score 🔥</option>
+        <option value="vph">Maior VPH ⚡ (só aqui)</option>
+        <option value="multiplier">Maior multiplicador (×inscritos)</option>
+        <option value="potencial">Maior potencial no nicho</option>
+        <option value="recent">Vídeo mais recente</option>
+        <option value="new">Recém adicionados ao radar</option>
+        <option value="subs_asc">Menos inscritos (canal pequeno)</option>
+        <option value="subs_desc">Mais inscritos</option>
+      </select>
+      <select id="format" onchange="load()">
+        <option value="">🌐 Todos os formatos</option>
+        <option value="long">🎬 Vídeos longos (horizontal)</option>
+        <option value="short">📱 Shorts (vertical)</option>
+      </select>
+      <select id="lang" onchange="load()"><option value="">Todos os idiomas</option></select>
+      <select id="category" onchange="load()"><option value="">Todas as categorias</option></select>
+      <select id="minscore" onchange="load()">
+        <option value="0">Qualquer score</option>
+        <option value="80">🔥 80+ (extremos)</option>
+        <option value="60">🚀 60+ (virais)</option>
+        <option value="40">✅ 40+ (bons)</option>
+      </select>
+      <button class="btn" id="nicheBtn" style="display:none" onclick="openNiche()">📊 Raio-X do nicho</button>
+      <input class="search" id="q" placeholder="Buscar canal por nome ou ID do YouTube..." oninput="debounced()">
+      <div class="viewtoggle">
+        <button class="btn on" id="vg" onclick="setView('grid')">▦</button>
+        <button class="btn" id="vl" onclick="setView('list')">☰</button>
+      </div>
+    </div>
+    <div class="frow" style="margin-top:10px">
+      <span class="lbl" style="margin:0 4px 0 0">Filtros adicionais</span>
+      <button class="chip" id="fopp" onclick="toggleAdd('opp',this)">💎 Menos inscritos, muitas views</button>
+      <button class="chip" id="fnovos" onclick="toggleAdd('novos3m',this)">🆕 Novos (≤3 meses)</button>
+      <button class="chip" id="fpost" onclick="toggleAdd('postando',this)">⚡ Postando agora</button>
+    </div>
+  </div>
+
+  <div class="grid" id="grid"></div>
+  <div id="more" style="text-align:center;margin-top:20px"></div>
+</div>
+
+<!-- modal detalhe -->
+<div class="modal" id="modal" onclick="if(event.target===this)closeModal()">
+  <div class="sheet" id="sheet"></div>
+</div>
+
+<!-- console de crawl -->
+<div class="console" id="console">
+  <span class="close" onclick="document.getElementById('console').classList.remove('on')">✕ fechar</span>
+  <div id="conlog"></div>
+</div>
+
+<script>
+let STATE={tier:"todos",page:1,view:"grid",labels:[],accum:[],add:{opp:false,novos3m:false,postando:false}};
+const $=id=>document.getElementById(id);
+const fmt=n=>{n=+n||0;if(n>=1e6)return(n/1e6).toFixed(1)+"M";if(n>=1e3)return(n/1e3).toFixed(1)+"K";return""+n};
+
+function _commonParams(p){
+  if($("format").value)p.set("format",$("format").value);
+  if($("lang").value)p.set("lang",$("lang").value);
+  if($("category").value)p.set("category",$("category").value);
+  if(+$("minscore").value)p.set("min_score",$("minscore").value);
+  if($("q").value.trim())p.set("q",$("q").value.trim());
+  if(STATE.add.opp)p.set("opp","1");
+  if(STATE.add.novos3m)p.set("novos3m","1");
+  if(STATE.add.postando)p.set("postando","1");
+  return p;
+}
+function qs(){
+  const p=new URLSearchParams();
+  p.set("tier",STATE.tier);p.set("sort",$("sort").value);p.set("page",STATE.page);
+  return _commonParams(p).toString();
+}
+function toggleAdd(key,el){STATE.add[key]=!STATE.add[key];el.classList.toggle('on',STATE.add[key]);load();}
+
+async function refreshStats(){
+  const p=_commonParams(new URLSearchParams());
+  const s=await(await fetch("/api/stats?"+p)).json();
+  // idiomas (uma vez)
+  if($("lang").options.length<=1 && s.languages){
+    $("lang").innerHTML='<option value="">Todos os idiomas</option>'+
+      s.languages.map(([c,l])=>`<option value="${c}">${l}</option>`).join("");
+  }
+  $("st-total").textContent=(+s.total).toLocaleString("pt-BR");
+  $("st-today").textContent="+"+(+s.new_today).toLocaleString("pt-BR");
+  $("st-7d").textContent="+"+(+s.new_7d).toLocaleString("pt-BR");
+  STATE.labels=s.tier_labels;
+  // mapa categoria: key -> {label, emoji}
+  STATE.catmap={};(s.categories||[]).forEach(([k,lbl,emo])=>STATE.catmap[k]={label:lbl,emoji:emo});
+  // tabs
+  $("tabs").innerHTML=s.tier_labels.map(([k,lbl])=>
+    `<div class="tab ${k===STATE.tier?'on':''}" onclick="setTier('${k}')">${lbl}
+     <span class="cnt">${s.tier_counts[k]||0}</span></div>`).join("");
+  // categorias
+  const cur=$("category").value;
+  if($("category").options.length<=1){
+    let html='<option value="">Todas as categorias</option>';
+    (s.categories||[]).forEach(([k,lbl,emo])=>{const n=s.category_counts[k]||0;
+      html+=`<option value="${k}">${emo} ${lbl} (${n})</option>`;});
+    $("category").innerHTML=html;$("category").value=cur;
+  }else{
+    [...$("category").options].forEach(o=>{if(o.value){const c=STATE.catmap[o.value]||{};
+      o.textContent=(c.emoji||'')+' '+(c.label||o.value)+" ("+(s.category_counts[o.value]||0)+")";}});
+  }
+  // botão raio-x do nicho quando uma categoria está selecionada
+  $("nicheBtn").style.display=$("category").value?'inline-block':'none';
+}
+
+async function load(reset=true){
+  if(reset){STATE.page=1;STATE.accum=[];}
+  await refreshStats();
+  const d=await(await fetch("/api/channels?"+qs())).json();
+  STATE.accum=STATE.accum.concat(d.channels);
+  render(d);
+}
+
+function render(d){
+  const g=$("grid");g.className="grid"+(STATE.view==="list"?" list":"");
+  if(!STATE.accum.length){
+    g.innerHTML=`<div class="empty">Nenhum canal ainda nesta aba.<br><br>
+      Rode o crawler para mapear o YouTube:<br><br>
+      <code>python crawler.py seed</code> (semeia dos seus canais salvos)<br>
+      <code>python crawler.py discover</code> (varre todas as categorias)<br><br>
+      ou clique em <b>🔍 Mapear YouTube</b> acima.</div>`;
+    $("more").innerHTML="";return;
+  }
+  g.innerHTML=STATE.accum.map(cardHTML).join("");
+  const shown=STATE.accum.length;
+  $("more").innerHTML=shown<d.total?
+    `<button class="btn" onclick="loadMore()">Carregar mais (${shown}/${d.total})</button>`:
+    `<span style="color:var(--mut)">${d.total} canais</span>`;
+}
+
+function cardHTML(c){
+  const vids=(c.videos||[]).slice(0,2);
+  const thumbs=vids.map(v=>`<div class="thumb"><img loading="lazy" src="${v.thumb}">
+    <span class="vph">${(+v.vph).toFixed(0)} VPH</span>
+    <span class="ov">${fmt(v.views)}</span></div>`).join("")
+    || `<div class="thumb"><img loading="lazy" src="https://i.ytimg.com/vi/${c.best_video_id}/mqdefault.jpg">
+        <span class="vph">${(+c.best_vph).toFixed(0)} VPH</span>
+        <span class="ov">${fmt(c.best_views)}</span></div>`;
+  return `<div class="card" onclick="openCh('${c.channel_id}')">
+    <div class="chd">
+      <img class="av" loading="lazy" src="${c.avatar||''}" onerror="this.style.visibility='hidden'">
+      <div>
+        <div class="cnm">${esc(c.name)}
+          ${c.monetized?'<span class="mon" title="Monetizado (estimativa)">$</span>':''}</div>
+        <div class="cmeta">${fmt(c.subs)} inscritos · ${c.video_count} vídeos
+          <span class="catbadge">${cat(c.category)}</span>
+          <span class="langbadge">${c.language}</span>
+          ${c.faceless>=60?'<span class="langbadge" style="color:var(--gold);background:rgba(255,210,63,.1)" title="Estimativa faceless">🎭 '+c.faceless+'%</span>':''}</div>
+      </div>
+      <div class="badges">
+        <span class="fire">🔥 ${(+c.viral_score).toFixed(0)}</span>
+        <span class="mult">💎 ${(+c.subs_multiplier).toFixed(1)}× inscritos</span>
+        <span style="display:flex;gap:8px">
+          <span class="heart" title="Salvar em coleção" style="opacity:.5"
+            onclick="event.stopPropagation();openCollections('${c.channel_id}')">🔖</span>
+          <span class="heart ${c.favorite?'on':''}" title="Favorito"
+            onclick="event.stopPropagation();fav('${c.channel_id}',this)">♥</span>
+        </span>
+      </div>
+    </div>
+    <div class="thumbs">${thumbs}</div>
+    <div class="vtitle">${esc(c.best_title||'')}</div>
+    <div class="cresc">${esc(c.crescimento||'')} ${c.badge?'· <b>'+esc(c.badge)+'</b>':''}</div>
+  </div>`;
+}
+
+function esc(s){const d=document.createElement("div");d.textContent=s||"";return d.innerHTML;}
+function cat(key){const c=(STATE.catmap||{})[key];return c?(c.emoji+' '+c.label):(key||'Outros');}
+function setTier(t){STATE.tier=t;load();}
+function setView(v){STATE.view=v;$("vg").classList.toggle("on",v==="grid");$("vl").classList.toggle("on",v==="list");render({total:STATE.accum.length});}
+function loadMore(){STATE.page++;fetch("/api/channels?"+qs()).then(r=>r.json()).then(d=>{STATE.accum=STATE.accum.concat(d.channels);render(d);});}
+let _t;function debounced(){clearTimeout(_t);_t=setTimeout(()=>load(),350);}
+
+async function fav(id,el){
+  const r=await(await fetch("/api/favorite",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({channel_id:id})})).json();
+  el.classList.toggle("on",!!r.favorite);
+}
+
+async function openCh(id){
+  const c=await(await fetch("/api/channel/"+id)).json();
+  const url="https://www.youtube.com/channel/"+c.channel_id;
+  const vids=(c.videos||[]).map(v=>`<div class="vrow">
+    <img loading="lazy" src="${v.thumb}">
+    <div class="vt">${esc(v.title)}
+      <div class="vm">${fmt(v.views)} views · ${(+v.days_since).toFixed(1)}d · ${(+v.duration_min).toFixed(0)}min
+      ${v.is_long?'· longo':''}</div></div>
+    <span class="vph-pill">${(+v.vph).toFixed(0)} VPH</span></div>`).join("");
+  const sim=(c.similar||[]).map(s=>`<div class="simcard" onclick="openCh('${s.channel_id}')">
+    <b>${esc(s.name)}</b><br><span style="color:var(--mut)">🔥 ${(+s.viral_score).toFixed(0)} ·
+    ${fmt(s.subs)} subs · ${(+s.subs_multiplier).toFixed(1)}x</span></div>`).join("")
+    ||`<span style="color:var(--mut)">Sem similares no banco ainda.</span>`;
+  $("sheet").innerHTML=`
+    <div class="mtop">
+      <img class="av" style="width:60px;height:60px" src="${c.avatar||''}">
+      <div><h2>${esc(c.name)}</h2>
+        <div class="cmeta">${c.category} · ${c.language} · criado em ${c.created_at||'?'} ·
+        <a href="${url}" target="_blank" style="color:var(--blue)">abrir no YouTube ↗</a></div></div>
+      <span class="x" onclick="closeModal()">✕</span>
+    </div>
+    <div class="mstats">
+      <div class="s"><b>🔥 ${(+c.viral_score).toFixed(0)}</b><span>viral score</span></div>
+      <div class="s"><b style="color:var(--gold)">${(+c.subs_multiplier).toFixed(1)}x</b><span>multiplicador</span></div>
+      <div class="s"><b>${fmt(c.subs)}</b><span>inscritos</span></div>
+      <div class="s"><b>${fmt(c.best_views)}</b><span>melhor hit</span></div>
+      <div class="s"><b style="color:var(--accent)">${(+c.best_vph).toFixed(0)}</b><span>VPH do hit</span></div>
+      <div class="s"><b>${(+c.avg_vph).toFixed(0)}</b><span>VPH médio</span></div>
+    </div>
+    <div class="cresc" style="font-size:13px">${esc(c.crescimento||'')} ${c.badge?'· <b>'+esc(c.badge)+'</b>':''}
+      ${c.monetized?'· <span style="color:var(--green)">$ monetizado</span>':''}
+      · 🎭 faceless ~${c.faceless}% · fonte: ${c.fonte||'acervo'}</div>
+    <h3 class="sec">Vídeos recentes (por VPH)</h3>${vids}
+    <h3 class="sec">Canais similares
+      <button class="btn" style="padding:3px 10px;font-size:11px" onclick="liveSim('${c.channel_id}')">🔎 buscar ao vivo</button>
+    </h3>
+    <div class="simgrid" id="simgrid">${sim}</div>`;
+  $("modal").classList.add("on");
+}
+function closeModal(){$("modal").classList.remove("on");}
+
+async function liveSim(id){
+  $("simgrid").innerHTML="<span style='color:var(--mut)'>buscando ao vivo (co-ocorrência)...</span>";
+  const r=await(await fetch("/api/similar/"+id+"?live=1")).json();
+  $("simgrid").innerHTML=(r.similar||[]).map(s=>s.in_db===false?
+    `<div class="simcard" style="opacity:.6"><b>${esc(s.name)}</b><br>
+     <span style="color:var(--mut)">${s.channel_id}</span></div>`:
+    `<div class="simcard" onclick="openCh('${s.channel_id}')"><b>${esc(s.name)}</b><br>
+     <span style="color:var(--mut)">🔥 ${(+s.viral_score).toFixed(0)} · ${fmt(s.subs)} subs</span></div>`
+  ).join("")||"<span style='color:var(--mut)'>nada encontrado</span>";
+}
+
+async function openNiche(){
+  const c=$("category").value; if(!c)return;
+  const d=await(await fetch("/api/niche/"+c)).json();
+  if(d.error){alert("Nicho vazio");return;}
+  const langs=Object.entries(d.langs||{}).map(([k,v])=>k+": "+v).join(" · ");
+  const top=(d.top_channels||[]).map(r=>`<div class="vrow">
+    <div class="vt"><a class="tt" onclick="openCh('${r.channel_id}')" style="cursor:pointer">${esc(r.name)}</a>
+      <div class="vm">${fmt(r.subs)} subs · ${(+r.subs_multiplier).toFixed(1)}× · ⚡${(+r.best_vph).toFixed(0)} VPH<br>${esc(r.best_title||'')}</div></div>
+    <span class="vph-pill">🔥 ${(+r.viral_score).toFixed(0)}</span></div>`).join("");
+  const opps=(d.opportunities||[]).map(r=>`<div class="simcard" onclick="openCh('${r.channel_id}')">
+    <b>${esc(r.name)}</b><br><span style="color:var(--gold)">${(+r.subs_multiplier).toFixed(1)}× · ${fmt(r.subs)} subs · 🔥${(+r.viral_score).toFixed(0)}</span></div>`).join("")
+    ||"<span style='color:var(--mut)'>—</span>";
+  const structs=(d.top_structures||[]).map(([s,n])=>`<span class="pill">${esc(s)} <b>${n}×</b></span>`).join(" ");
+  $("sheet").innerHTML=`
+    <div class="mtop"><div><h2>📊 Raio-X do nicho: ${cat(c)}</h2>
+      <div class="cmeta">${d.total} canais · idiomas: ${langs}</div></div>
+      <span class="x" onclick="closeModal()">✕</span></div>
+    <div class="mstats">
+      <div class="s"><b>${d.total}</b><span>canais</span></div>
+      <div class="s"><b>🔥 ${d.avg_score}</b><span>score médio</span></div>
+      <div class="s"><b>${d.monetized_pct}%</b><span>monetizados</span></div>
+      <div class="s"><b>🎭 ${d.faceless_avg}%</b><span>faceless médio</span></div>
+    </div>
+    <h3 class="sec">🏆 Top canais do nicho</h3>${top}
+    <h3 class="sec">💎 Oportunidades (pequenos batendo acima do peso)</h3><div class="simgrid">${opps}</div>
+    <h3 class="sec">🧩 Estruturas de título mais recorrentes</h3><div style="line-height:2.2">${structs}</div>`;
+  $("modal").classList.add("on");
+}
+
+// ===== BANCO DE REFERÊNCIAS (coleções nomeadas) =====
+async function openCollections(channelId){
+  const cols=await(await fetch("/api/collections")).json();
+  let member=[];
+  if(channelId) member=await(await fetch("/api/channel_collections/"+channelId)).json();
+  const title=channelId?"🔖 Salvar canal em uma coleção":"📁 Banco de Referências";
+  const rows=cols.length?cols.map(c=>{
+    const inC=member.includes(c.id);
+    const act=channelId
+      ? `<button class="btn ${inC?'pri':''}" onclick="toggleInCol(${c.id},'${channelId}',this)">${inC?'✓ salvo':'+ salvar'}</button>`
+      : `<button class="btn" onclick="viewCol(${c.id},'${esc(c.name)}')">abrir</button>
+         <button class="btn" onclick="delCol(${c.id})">🗑</button>`;
+    return `<div class="vrow"><div class="vt"><b>${esc(c.name)}</b>
+      <div class="vm">${c.count} canais</div></div><span style="display:flex;gap:6px">${act}</span></div>`;
+  }).join(""):"<div class='note'>Nenhuma coleção ainda. Crie uma pra cada tipo de canal que você vai fazer.</div>";
+  $("sheet").innerHTML=`
+    <div class="mtop"><div><h2>${title}</h2>
+      <div class="cmeta">Uma coleção pra cada tipo de canal que você vai criar.</div></div>
+      <span class="x" onclick="closeModal()">✕</span></div>
+    <div class="frow" style="margin:14px 0">
+      <input class="search" id="newColName" placeholder="Nome da nova coleção (ex: Avatar de comida)">
+      <button class="btn pri" onclick="createCol('${channelId||''}')">+ Criar coleção</button>
+    </div>
+    <div id="colList">${rows}</div>`;
+  $("modal").classList.add("on");
+}
+async function createCol(channelId){
+  const name=$("newColName").value.trim(); if(!name)return;
+  await fetch("/api/collections",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name})});
+  openCollections(channelId||undefined);
+}
+async function toggleInCol(cid,channelId,el){
+  const r=await(await fetch("/api/collections/"+cid+"/toggle",{method:"POST",
+    headers:{"Content-Type":"application/json"},body:JSON.stringify({channel_id:channelId})})).json();
+  el.classList.toggle('pri',r.in_collection);el.textContent=r.in_collection?'✓ salvo':'+ salvar';
+}
+async function delCol(cid){ if(!confirm("Apagar esta coleção?"))return;
+  await fetch("/api/collections/"+cid,{method:"DELETE"}); openCollections();}
+async function viewCol(cid,name){
+  const d=await(await fetch("/api/collections/"+cid)).json();
+  const chans=(d.channels||[]).map(c=>`<div class="vrow">
+    <div class="vt"><a class="tt" style="cursor:pointer" onclick="openCh('${c.channel_id}')">${esc(c.name)}</a>
+      <div class="vm">🔥${(+c.viral_score).toFixed(0)} · ${fmt(c.subs)} subs · ${(+c.subs_multiplier).toFixed(1)}×</div></div>
+    <button class="btn" onclick="toggleInCol(${cid},'${c.channel_id}',this);this.closest('.vrow').remove()">remover</button></div>`).join("")
+    ||"<div class='note'>Coleção vazia. Clique no 🔖 nos cards pra salvar canais aqui.</div>";
+  $("sheet").innerHTML=`<div class="mtop"><div><h2>📁 ${esc(name)}</h2>
+      <div class="cmeta">${(d.channels||[]).length} canais</div></div>
+      <span class="x" onclick="closeModal()">✕</span></div>
+    <button class="btn" style="margin:10px 0" onclick="openCollections()">← todas as coleções</button>
+    ${chans}`;
+}
+
+function openCrawl(mode){
+  let body={mode};
+  if(mode==="discover"){if(!confirm("Varrer TODAS as categorias do YouTube? (gasta quota da API)"))return;body.budget=4000;}
+  if(mode==="refresh")body.n=80;
+  $("console").classList.add("on");$("conlog").innerHTML="";
+  fetch("/api/crawl",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
+    .then(res=>{const rd=res.body.getReader();const dec=new TextDecoder();
+      function pump(){return rd.read().then(({done,value})=>{
+        if(done){load();return;}
+        dec.decode(value).split("\n\n").forEach(chunk=>{
+          const m=chunk.match(/^data: (.*)$/s);if(!m)return;
+          try{const t=JSON.parse(m[1]).text;
+            if(t==="__DONE__"){$("conlog").innerHTML+="<div style='color:var(--green)'>✔ concluído — recarregando…</div>";load();}
+            else $("conlog").innerHTML+="<div>"+esc(t)+"</div>";
+            $("console").scrollTop=$("console").scrollHeight;
+          }catch(e){}
+        });return pump();});}
+      return pump();});
+}
+
+load();
+</script>
+</body>
+</html>
