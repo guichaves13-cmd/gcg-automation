@@ -1,0 +1,113 @@
+It's a little after two in the morning on a cattle ranch in South Texas, and the only sound across a hundred and fifty thousand acres of mesquite and brush is the wind dragging over the grass. The cows are bedded down near a water tank. A windmill creaks. And somewhere out in the dark, a lean, gray-brown animal is trotting in a perfectly straight line, nose low, ears forward, covering ground at a pace that would wear out a horse by sunrise. Around its neck is a narrow collar. Every so often, without the animal ever knowing, that collar wakes up, talks to a satellite, records exactly where it is, and goes back to sleep.
+
+That animal is a coyote. And for years now, collars just like that one have been quietly writing down the private life of an animal that ranchers in Texas thought they already understood completely.
+
+Ask almost anyone who has worked cattle or sheep in this state what they know about coyotes, and you'll get an answer fast. They're everywhere. They're clever. They take calves, kids, lambs, and anything else they can catch. You shoot them on sight, you trap them, you call them in, and they still come back. That has been the working knowledge of Texas ranch country for more than a century. And most of it is true.
+
+But what the GPS collars started showing was something else. Not that the old knowledge was wrong. That it was incomplete. The ranchers knew what coyotes did when they were seen. The collars were recording what coyotes did when nobody was looking.
+
+Let's start with where this information comes from, because it matters.
+
+Since 2017, researchers with the Carnivore Ecology Lab at Texas A&M University have been fitting coyotes with GPS collars on a large working cattle ranch in South Texas, a property of roughly a hundred and fifty thousand acres. This isn't a park. It isn't a preserve fenced off from the real world. It's a place where cattle are raised, sold, and moved, where predators and livestock share the same pastures every single night. That's exactly why it's valuable. Whatever the coyotes do there, they do in the conditions ranchers actually live with.
+
+A GPS collar is a simple idea with a complicated job. It carries a receiver, a battery, a small computer, and usually a release mechanism so the collar can drop off the animal when the study is over. At programmed intervals it calculates a position and stores it, or transmits it. String those positions together, and a coyote stops being a shadow at the edge of the headlights. It becomes a line on a map. Then hundreds of lines. Then a pattern.
+
+And the first thing that pattern shows is that there are really two kinds of coyotes out there.
+
+Biologists call them residents and transients. A resident coyote holds a territory. It usually lives as part of a pair, often with that year's pups and sometimes with older offspring that haven't left yet. Its GPS track looks like a ball of yarn, dense, tangled, and bounded. It moves a lot, but it moves inside a space it knows and defends.
+
+A transient coyote is different. It has no territory. It's often a young animal that has left the family group, or an adult that lost its place. Its track doesn't look like a ball of yarn at all. It looks like a road map. Long, straight runs. Wide loops. Edges of other territories. Ranch roads, fence lines, drainages. A transient can cross enormous distances in a matter of days, slipping between the territories of resident packs, looking for a vacancy.
+
+This is one of the most consistent findings in coyote research across North America, and it shows up in Texas, too. And it changes how you think about every coyote you see.
+
+Because here's the uncomfortable part for anyone who has ever thought, I'll just kill the coyotes on this place and the problem will go away.
+
+When a resident coyote is removed from a territory, that territory doesn't stay empty. Transients are already moving through the landscape, testing the boundaries. A vacancy is an opportunity. Studies of coyote removal going back decades have documented the same thing again and again. Remove coyotes from an area, and new ones often fill it, sometimes quickly. In some populations, heavy pressure is associated with larger litters and higher pup survival, as the remaining animals respond to less competition for food.
+
+That doesn't mean predator control never works. It means it works differently than most people assume. Removal timed to specific problems, like a coyote that has actually learned to kill calves, can make a real difference. But a blanket war on every coyote across a big property can turn a stable set of resident families into a revolving door of strangers. And strangers don't know the rules.
+
+That's one of the quiet surprises in the collar data. A resident coyote that has lived for years next to a herd of cattle is, in a sense, a known quantity. Its movements are predictable. Its diet is mostly what's easy: rodents, rabbits, insects, fruit, carrion, and deer fawns in season. Many residents never become serious livestock killers at all. The collars don't tell you a coyote is harmless. But they show you that a coyote's risk depends heavily on who it is, where it lives, and what time of year it is.
+
+Now let's talk about time, because that's where the collars get really interesting.
+
+Coyotes are not strictly nocturnal. Where they're left alone, they move a lot during the day. But where they're hunted, shot at, and harassed, they shift their activity into darkness. Across many study sites, coyote movement peaks around dawn and dusk, and through the night. On a working ranch in Texas, where coyotes have been hunted for generations, the pattern is sharp. The collars show animals that rest during the hottest and brightest hours, tucked into thick brush, and then start moving as the light goes.
+
+Think about what that means for a rancher. Most of the time, the people working the land are out during the day. The coyotes are out at night. The two worlds overlap at dawn and dusk, and that's exactly when people tend to see them. A rancher's mental map of coyotes is built from glimpses at the edge of those hours. The collar's map is built from every hour.
+
+And when you lay those hours over the landscape, you start to see how coyotes actually use a ranch.
+
+They use roads. Ranch roads, caliche roads, two-track trails. It's easier to travel on an open path than to push through thorny brush, and coyotes, like most animals, will take the easy route when they can. GPS tracks often follow roads and fence lines for long stretches. That's one reason trail cameras on ranch roads catch so many coyotes. It's not that coyotes love roads. It's that roads are where the walking is easy.
+
+They use water. In South Texas, where summer heat is brutal and surface water can be scarce, windmills and stock tanks are magnets for everything alive. Coyotes return to them, check them, drink at them, and hunt the animals that come in. A water tank is a restaurant, and the collars show coyotes coming back to the same ones again and again.
+
+They use edges. The place where brush meets open pasture is where rodents and rabbits are often thickest, and where a coyote can move under cover and then step out to hunt. Coyote tracks pile up along those transitions.
+
+And they use calving season.
+
+This is the part every cattleman wants to know about, and it's also the part the data helps put in perspective. Calf losses to coyotes are real. In some places and some years, they're serious. But they're concentrated. Newborn calves, especially in their first days of life, are the vulnerable ones. Calves born in heavy brush, away from their mothers, or from first-calf heifers that aren't as protective are at higher risk. Once a calf is a few weeks old and has a mother that's paying attention, it's a much harder target for an animal that usually weighs somewhere around twenty-five to forty pounds.
+
+That's why some ranchers have learned to fight coyotes not just with rifles, but with timing. A tighter calving season. Calving in pastures closer to headquarters, with less brush cover. Watching first-calf heifers more closely. Removing dead calves and afterbirth that draw scavengers in. Those decisions don't make headlines, but they line up with what the movement data keeps saying. Coyotes are opportunists. Reduce the opportunity, and you reduce the losses.
+
+There's another layer to this story that the collars have helped reveal, and it involves deer.
+
+White-tailed deer are not a side note in Texas. They're a central part of the economy of private land. Hunting leases bring in serious money for ranch owners. And fawns are, for a few weeks each year, one of the easiest meals on the landscape. Research in South Texas and elsewhere has documented coyotes as a major cause of fawn mortality in some populations, especially in the first weeks after birth, when the fawn's main defense is to lie still and hope it isn't found.
+
+So the coyote sits at an intersection of interests. For the cattle side of a ranch, it's a threat to newborn calves. For the hunting side, it's a predator of fawns. And for the land itself, it's a rodent and rabbit control service that works for free every night of the year.
+
+That last piece is easy to forget, and it's one of the reasons wildlife biologists keep studying coyotes instead of just writing them off. A single coyote eats a large number of small mammals in a year. Rodents compete with livestock for forage and can damage land. Rabbits do too. Coyotes also scavenge carcasses that would otherwise sit in a pasture. None of that makes up for a dead calf. But it's part of the real ledger.
+
+Now, here's where the story turns, and it's the part most people never hear.
+
+When biologists began laying GPS data over ranch maps, one thing became obvious. Coyotes don't experience a ranch the way the ranch is drawn. Property lines mean nothing to them. Pastures mean nothing to them. What matters is food, water, cover, and other coyotes. A resident territory might sprawl across parts of three pastures and a neighbor's lease. A transient might cross five properties in a night.
+
+This is why coyote management is, in a sense, a neighborhood problem. What one rancher does affects the coyotes his neighbor sees. Remove the residents on one side of a fence, and transients from across the county may drift in. Leave a dead cow in an open pasture, and coyotes from several territories may find it.
+
+And it's why the old image of a coyote as a lone outlaw is misleading. The collared animals show social structure. Pairs travel together or overlap closely. Family groups share space. Territorial boundaries are real enough that GPS tracks bunch up against them and turn back. A coyote is not a random predator scattered at random across the land. It's a member of a society with borders, neighbors, and rules most humans never see.
+
+Then there's the matter of how far these animals can go.
+
+Coyotes are among the most successful large mammals in North America. Historically, they lived mostly in the open country of the West and the Great Plains. Over the last hundred and fifty years or so, they expanded across almost the entire continent, from Alaska to Panama, from California to the Atlantic coast. Today they live in cities like Los Angeles, Chicago, and New York. That expansion happened even as people killed enormous numbers of them.
+
+How does an animal do that? The collars show part of the answer. Young coyotes disperse, sometimes over long distances. Dispersal distances of dozens of miles are common, and much longer movements have been recorded. A coyote born on one ranch may end up living two or three counties away. That ability to move, combined with flexible diets and the ability to breed quickly when conditions allow, makes coyotes almost impossible to eliminate from a region. They're built to fill gaps.
+
+So what did Texas ranchers not know before the collars? Not that coyotes exist. Not that they kill calves. They knew all that. What the data exposed was the hidden structure underneath. The fact that most coyote activity happens in the dark. The fact that residents and transients behave like two different animals. The fact that removing coyotes can sometimes invite more of them. The fact that a ranch, to a coyote, is a mosaic of roads, water, edges, and borders that have nothing to do with fences.
+
+And that hidden structure is now changing how some ranchers think about the problem.
+
+Instead of trying to kill every coyote, some focus on the problem animal, the individual that has learned to kill livestock. Instead of treating coyotes as a constant, some look at calving season as the window that matters most. Instead of thinking about their own property alone, some coordinate with neighbors. Some use guardian animals, like livestock guardian dogs, donkeys, or llamas, especially with sheep and goats. Each method has limits, and none of them is perfect. But each one is a response to the kind of knowledge that collars and cameras have made visible.
+
+There's also something here about trail cameras, which have quietly changed ranch life almost as much as the collars have changed science.
+
+Twenty years ago, a camera that could take a clear picture of an animal at night, by itself, in the middle of a pasture, was an expensive piece of research equipment. Today, almost every ranch and hunting lease in Texas has them. They're strapped to mesquites over feeders, bolted to fence posts at water troughs, hung at gates and crossings. Many of them send images directly to a phone.
+
+And what those cameras show, night after night, is the same thing the collars show. Coyotes. A lot of them. Moving through at hours when the house is asleep. Checking the feeder. Drinking at the trough. Trotting down the road. A rancher who once thought there might be a handful of coyotes on his place opens his phone and finds dozens of pictures in a single week.
+
+That moment, the moment a landowner scrolls through a night's worth of images and realizes how much life is moving through his land in the dark, is one of the most common experiences in rural Texas right now. And it's often the first step toward seeing coyotes differently. Not as a pest that shows up now and then, but as a permanent, structured, intelligent part of the place.
+
+There's one more reason this matters right now, in 2026, and it has nothing to do with calves.
+
+Texas is fighting the return of the New World screwworm, a parasitic fly whose larvae feed on the living flesh of warm-blooded animals. Confirmed infestations have been reported in the state this year, and wildlife specialists at Texas A&M have warned that animals like feral hogs, white-tailed deer, and coyotes can all serve as hosts. A host that moves is a host that spreads. And few animals in Texas move like a transient coyote.
+
+That's where decades of movement data suddenly become more than an academic curiosity. If you want to understand how a parasite might travel through wildlife, you need to know how wildlife travels. How far a young coyote goes when it leaves home. Which roads and drainages it follows. Which water tanks become crossroads where many animals meet. The same tracks that once answered the question, where do my coyotes go at night, may now help answer a far more serious question about how a disease or a parasite could move across ranch country.
+
+It's a reminder of something that happens over and over in wildlife science. Research that seems narrow at the time, a few collared coyotes on one ranch, ends up being exactly the knowledge people need years later, when a new problem arrives.
+
+It's also worth saying what the collars cannot do. They can't tell you what a coyote is thinking. They can't, on their own, tell you what it ate last night. A cluster of GPS points might be a coyote resting, or feeding on a carcass, or digging out a rodent den. Researchers often have to walk to those clusters, find what's there, and match the data with what they see on the ground. Collars fail. Batteries die. Some animals are never recaptured. A study that begins with dozens of collars can end with far fewer usable tracks. The picture is real, but it's built slowly, with a lot of sweat, a lot of driving, and a lot of patience from the landowners who allow it.
+
+That partnership is easy to overlook. Most land in Texas is private. Nearly every serious wildlife study in this state depends on a ranch family deciding to open their gates to researchers, to let them trap and collar animals, and to share what they see. The coyote data from South Texas exists because ranchers were curious enough to want the truth about the animal they'd been fighting for generations.
+
+Let's go back to that coyote trotting in the dark at two in the morning.
+
+When it reaches the water tank, it doesn't rush in. The GPS points slow and cluster. It circles. It drinks. It may check the edge of the brush for rabbits or rats. Then it moves on, along the fence line, toward the boundary of its territory, where another family holds the land. It doesn't cross. The points bunch up along the invisible line and turn back. Before dawn, it will be bedded deep in the brush, and when the ranch wakes up, there will be no sign it was ever there except a few tracks in the dust by the trough.
+
+That's the life the collars are recording. Thousands upon thousands of those points, from animal after animal, year after year, slowly building a picture of what a coyote actually is when no one's watching.
+
+And here's what's striking. The animal that emerges from that data is not the cartoon villain of ranch country. It's also not the misunderstood saint some people want it to be. It's something more interesting. An animal shaped by a century and a half of human pressure into one of the most adaptable predators on Earth. An animal that has learned to live in the dark, to move along our roads, to drink from our tanks, and to slip through the spaces between our fences.
+
+The ranchers who have run cattle in South Texas for generations didn't need a collar to tell them coyotes are smart. They've been outsmarted plenty of times. What they didn't have, until recently, was a way to see the whole picture. The roads at midnight. The borders in the brush. The young drifters crossing the county looking for a home.
+
+Now they do.
+
+And the strangest part is this. For more than a hundred years, people have been trying to remove the coyote from the Texas landscape. In that time, the coyote didn't disappear. It spread across a continent. The collars aren't just showing us what coyotes do at night. They're showing us why every war against them has ended the same way.
+
+The coyote isn't winning by fighting back. It's winning by knowing the land better than we do. And for the first time, thanks to a narrow band around its neck and a satellite far overhead, we're finally starting to learn the land the way the coyote already knows it.
