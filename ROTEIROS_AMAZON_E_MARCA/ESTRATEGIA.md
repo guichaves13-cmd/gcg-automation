@@ -40,6 +40,8 @@ Costco (taxa, Executive, Kirkland, horário sênior, scanners), Walmart (Walmart
 ### Escolha da marca 2: **COSTCO**
 Justificativa: (1) público idêntico (55+, renda fixa, clube pago = mesma lógica do Prime); (2) notícia corrente — novos benefícios e scan obrigatório em 2026, receita de taxa +14% a/a, incentivo de fim de ano para novos sócios; (3) a estrutura B "Who Really Makes" (prova: *Who Really Makes Godin Guitars*) encaixa 1:1 em Kirkland, o tema mais buscado da marca; (4) a estrutura C ("alternativa que técnicos recomendam") encaixa em aparelhos auditivos, óculos e remédios Kirkland — produtos sênior de ticket alto; (5) ponte com o nicho Amazon (COSTCO_03). Temu foi descartada (público mais jovem e risco de inexatidão); Walmart fica como 3ª estratégia.
 
+**Regra de palavra-chave (validada pelo dono):** Estratégia 1 é **Amazon solo** — todo título traz "Amazon" e nenhuma outra marca, igual ao canal de referência. Estratégia 2 é **Costco como protagonista** — todo título traz "Costco" e pode ter UMA segunda marca em alta junto (Sam's Club, Amazon Prime), nunca no lugar dela. A Costco é a única varejista com o mesmo tipo de pauta da Amazon: taxa de sócio, renovação, novidades com data, escândalos de política e um público 55+ que paga um clube anual.
+
 **Subnicho coerente:** E1 = "o bolso do membro Prime 55+"; E2 = "membro Costco aposentado: taxa, Kirkland e saúde".
 
 ## 2. Matriz de ângulos (transplante das estruturas do dono)
@@ -75,8 +77,8 @@ Credits: Stock footage/images via Pexels, Pixabay and Storyblocks (licensed); pu
   2. Multidão de seniores na frente da loja Amazon, repórter com microfone em primeiro plano; texto "EXCLUSIVE:" + palavra-choque (QUIETLY / REALLY / OVER) em amarelo; círculo vermelho no detalhe-prova.
   3. Split-screen: item caro x alternativa (ou cartão/caixa Amazon), seta vermelha grossa, número grande (ex.: $139, $65, $6,000) em branco, faixa "EXCLUSIVE:" e ticker LIVE na base.
 
-### AMZ_02 — Thousands of Prime Members Are Quietly Switching How They Pay — Here's Why
-- Caracteres: 74 | Estrutura A
+### AMZ_02 — Thousands of Amazon Prime Members Are Quietly Switching How They Pay — Here's Why
+- Caracteres: 81 | Estrutura A
 - 🧬 De onde foi modelado: Estrutura validada A | Prova: ref. 'Warning… Before Renewing in 2027' (710 VPH) | Caminho A | Inovação: Troca o 'Warning' por estratégia de pagamento mensal x anual
 - Ocupação: 🟢 (ninguém cobre billing strategy)
 - **Descrição YouTube:**
@@ -96,8 +98,8 @@ Credits: Stock footage/images via Pexels, Pixabay and Storyblocks (licensed); pu
   2. Multidão de seniores na frente da loja Amazon, repórter com microfone em primeiro plano; texto "EXCLUSIVE:" + palavra-choque (QUIETLY / REALLY / OVER) em amarelo; círculo vermelho no detalhe-prova.
   3. Split-screen: item caro x alternativa (ou cartão/caixa Amazon), seta vermelha grossa, número grande (ex.: $139, $65, $6,000) em branco, faixa "EXCLUSIVE:" e ticker LIVE na base.
 
-### AMZ_03 — Thousands of Seniors Are Quietly Paying Half for Prime — Here's Why
-- Caracteres: 67 | Estrutura A
+### AMZ_03 — Thousands of Seniors Are Quietly Paying Half for Amazon Prime — Here's Why
+- Caracteres: 74 | Estrutura A
 - 🧬 De onde foi modelado: Estrutura validada A | Prova: ref. '18 Prime Members Discounts They Won't Mention' | Caminho A | Inovação: Desconto real e verificável (Prime Access $6.99) em vez de lista genérica
 - Ocupação: 🟡 (listas de desconto ocupadas; Prime Access pouco explicado)
 - **Descrição YouTube:**
@@ -222,8 +224,8 @@ Credits: Stock footage/images via Pexels, Pixabay and Storyblocks (licensed); pu
   2. Multidão de seniores na frente da loja Amazon, repórter com microfone em primeiro plano; texto "EXCLUSIVE:" + palavra-choque (QUIETLY / REALLY / OVER) em amarelo; círculo vermelho no detalhe-prova.
   3. Split-screen: item caro x alternativa (ou cartão/caixa Amazon), seta vermelha grossa, número grande (ex.: $139, $65, $6,000) em branco, faixa "EXCLUSIVE:" e ticker LIVE na base.
 
-### AMZ_09 — The Streaming Setup Cord-Cutters Keep Recommending Over Prime Video With Ads
-- Caracteres: 76 | Estrutura C
+### AMZ_09 — The Streaming Setup Cord-Cutters Keep Recommending Over Amazon Prime Video Ads
+- Caracteres: 78 | Estrutura C
 - 🧬 De onde foi modelado: Estrutura validada C | Prova: Chinese Amps C + '13 BIG CHANGES' (322K, 22,6x — ads no Prime Video) | Caminho C | Inovação: Mudança (ads) vira alternativa
 - Ocupação: 🟡 (ads no Prime Video já coberto em listas)
 - **Descrição YouTube:**
@@ -306,8 +308,8 @@ Credits: Stock footage/images via Pexels, Pixabay and Storyblocks (licensed); pu
   2. Multidão de seniores na frente da loja Costco, repórter com microfone em primeiro plano; texto "EXCLUSIVE:" + palavra-choque (QUIETLY / REALLY / OVER) em amarelo; círculo vermelho no detalhe-prova.
   3. Split-screen: item caro x alternativa (ou cartão/caixa Costco), seta vermelha grossa, número grande (ex.: $139, $65, $6,000) em branco, faixa "EXCLUSIVE:" e ticker LIVE na base.
 
-### COSTCO_04 — Who Really Makes Kirkland Signature — The Answer May Surprise You
-- Caracteres: 65 | Estrutura B
+### COSTCO_04 — Who Really Makes Costco's Kirkland Signature — The Answer May Surprise You
+- Caracteres: 74 | Estrutura B
 - 🧬 De onde foi modelado: Estrutura validada B | Prova: 'Who Really Makes Godin Guitars' (transplante direto) | Caminho B | Inovação: Fabricantes confirmados x mitos
 - Ocupação: 🔴 (tema muito coberto — diferencial: separar confirmado de mito)
 - **Descrição YouTube:**
@@ -369,8 +371,8 @@ Credits: Stock footage/images via Pexels, Pixabay and Storyblocks (licensed); pu
   2. Multidão de seniores na frente da loja Costco, repórter com microfone em primeiro plano; texto "EXCLUSIVE:" + palavra-choque (QUIETLY / REALLY / OVER) em amarelo; círculo vermelho no detalhe-prova.
   3. Split-screen: item caro x alternativa (ou cartão/caixa Costco), seta vermelha grossa, número grande (ex.: $139, $65, $6,000) em branco, faixa "EXCLUSIVE:" e ticker LIVE na base.
 
-### COSTCO_07 — The Kirkland Medicines Pharmacists Keep Recommending Over Name Brands
-- Caracteres: 69 | Estrutura C
+### COSTCO_07 — The Costco Kirkland Medicines Pharmacists Keep Recommending Over Name Brands
+- Caracteres: 76 | Estrutura C
 - 🧬 De onde foi modelado: Estrutura validada C | Prova: 'Chinese Amps… Over a $2,500 Fender Twin' | Caminho C | Inovação: Princípio ativo igual, preço menor
 - Ocupação: 🟢 (livre)
 - **Descrição YouTube:**
