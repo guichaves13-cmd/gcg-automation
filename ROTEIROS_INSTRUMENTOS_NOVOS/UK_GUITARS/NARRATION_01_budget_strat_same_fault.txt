@@ -1,0 +1,117 @@
+It's a wet Tuesday morning in a small repair shop just off a high street in Manchester. On the bench, under a lamp, there's a sunburst Squier Stratocaster. Indonesian made, bought new for around two hundred and fifty pounds, barely eighteen months old. The owner dropped it off with a note taped to the case. It says: "Feels scratchy, won't stay in tune, sounds thin. Is it worth fixing or should I just buy a better one?"
+
+The tech doesn't even plug it in. He runs his hand down the edge of the neck, from the headstock to the body, and he stops. He's found it. The same thing he found on the Mexican Strat yesterday, and the Chinese-made one the week before, and on a twenty-year-old Korean model last month.
+
+Here's the thing. That note on the case describes three different complaints. Scratchy. Out of tune. Thin. And most players would assume that's three different problems, maybe three different reasons to upgrade. But on the bench, the people who fix these guitars for a living keep tracing those complaints back to one root cause, and it's something that almost nobody checks in the shop before they buy.
+
+In this video I'm going to show you exactly what that one fault is, why it shows up on budget Strats far more than anyone talks about, and why it has less to do with the price tag than you'd think. And stay with me right to the end, because there's a two minute check you can do at home tonight, with nothing more than your hands and a business card, that will tell you whether your guitar has it.
+
+Let's start with where these guitars actually come from, because that's the first clue.
+
+The Stratocaster was introduced by Fender in 1954, designed by Leo Fender and his team in Fullerton, California. Fender itself had been founded in the mid nineteen-forties, and the Strat was built to be manufactured efficiently. Bolt-on neck. Flat-sawn body. Parts that could be swapped with a screwdriver. That design is the reason a Strat can be built at almost any price point today, and it's also the reason this particular fault is so common.
+
+Squier, the name on that Manchester guitar, started life as a string company. Victor Carroll Squier was making violin strings in Battle Creek, Michigan, long before electric guitars existed. Fender bought the company in 1965, and in the early nineteen-eighties the Squier name went onto guitars built in Japan, to compete with the Japanese copies that were undercutting American prices. Since then, Squier and budget Fender models have been built in Japan, Korea, China, Indonesia, India and Mexico, depending on the era and the series.
+
+So when you pick up a budget Strat in a UK shop today, there's a good chance the neck was made in a factory in Indonesia or China, the guitar was shipped in a container across several climates, sat in a distribution warehouse, and then landed on a wall in Britain. Keep that journey in your head. It matters.
+
+Now, here's where it gets interesting. Because the tech in Manchester isn't looking at the brand. He's looking at the wood. And what he found is the same thing techs in Glasgow, Bristol, Leeds and London keep finding on budget Strats every single winter.
+
+Before I tell you what it is, let me ask you something. Comment below which Strat you play right now. Squier Sonic, Affinity, Classic Vibe, Mexican Player, Japanese, American, or something completely different. I want to see how many of you are about to go and check your own guitar after this.
+
+Right. Let's go back to the bench.
+
+When a tech runs a hand down the edge of a neck, what they're feeling for is the fret ends. Every fret on a guitar is a strip of metal wire, usually nickel silver on most budget and mid-priced Strats, with a tang underneath that's pressed into a slot in the fingerboard. At the factory, the ends of those frets are cut and filed so they sit flush with the edge of the fingerboard. When the guitar leaves the factory, the edge feels smooth.
+
+But wood is not a static material. It takes on moisture and gives it back, depending on the air around it. A fingerboard made of rosewood, laurel, maple or one of the other common board woods will expand slightly when the air is humid and shrink slightly when the air is dry. And it shrinks mostly across its width. The metal frets do not shrink. So when the board narrows, the fret ends are suddenly sticking out past the edge of the wood.
+
+Techs call this fret sprout. And on that Squier in Manchester, every single fret end was standing proud of the edge, sharp enough to catch on your palm as you slid up the neck.
+
+That's the scratchy feeling the owner described. He thought the guitar was cheaply finished. In reality, it probably felt perfectly smooth when he bought it. It changed in his house.
+
+And this is where the British winter comes in, and it's the part most people never connect. Indonesia, where a lot of budget Strats are built, has a tropical climate with high humidity much of the year. A neck that was finished and fretted in that environment has wood that's settled at a fairly high moisture content. Factories do control their environment and dry their timber, and the good ones do it well, but the neck still has to survive a long journey and then live in whatever climate it ends up in. Now picture that neck in a centrally heated British semi in January. Radiators on all day. Windows shut. The indoor air can get surprisingly dry.
+
+So sprouting fret ends are the first symptom. But I promised you one problem behind all three complaints, and fret sprout alone doesn't explain why the guitar won't stay in tune, or why it sounds thin. To get there, we need to look at the other end of the neck. And this is the bit that surprises people the most.
+
+Hold on to this question, because we'll come back to it: why would a guitar that went out of tune be fixed by a tech who never touched the tuners?
+
+Let's go to the headstock.
+
+At the top of every Strat neck, there's a small white piece with six grooves in it. That's the nut. On an American Fender you'll often find a bone nut, or a quality synthetic. On many budget Strats, it's a moulded plastic or synthetic bone nut. And plastic itself isn't a disaster. Plenty of guitars play beautifully with a decent synthetic nut. The problem is how the slots are cut.
+
+Every string sits in a slot in that nut. The depth and shape of that slot decide three things at once. How high the string sits over the first fret. Whether the string can slide freely when you bend or use the tremolo. And whether it stays in tune when you tune it up.
+
+On a production line, nuts are often cut on the conservative side. Slightly high. That's deliberate, and it's actually sensible from a factory's point of view, because a slot cut too high can be lowered later by a tech, but a slot cut too low causes buzzing and needs a whole new nut. So many budget guitars leave the factory with nut slots that are a little high and a little rough.
+
+What does that do to a player? A high nut means you have to press harder on the first few frets. Pressing harder pushes the note sharp. So your open chords near the nut sound slightly out of tune, even when the tuner says the open strings are perfect. And a rough, tight slot grabs the string. You bend a note, or you use the trem, the string drags through the slot, and it gets stuck slightly out of position. Then it suddenly lets go with a little ping, and you're out of tune again.
+
+That's complaint number two. The owner thought his tuners were cheap. He'd already looked at locking tuners online. But on the bench, the tuners were fine. The string was hanging up in the nut.
+
+And that's the thread that ties all of this together. But we've still got one complaint left. Thin tone. And this is the one where most players spend money they don't need to spend.
+
+If you've ever looked at upgrading a budget Strat, you've seen the advice. New pickups. Maybe a set from a well-known British maker, or an American one, for anywhere from eighty to two hundred pounds. Swap the pots. Change the bridge block. It all sounds very convincing, and some of those upgrades are genuinely good. But here's what techs see again and again. Someone has spent a couple of hundred pounds on pickups, and the guitar still sounds thin, because the reason it sounded thin was never the pickups.
+
+Let me explain what's actually going on. When the fingerboard has shrunk and the frets have sprouted, the wood has usually moved in other ways too. A neck responds to changes in humidity and to the pull of the strings. Six strings on a Strat, in a standard gauge, are pulling on that neck with a substantial amount of tension. When the climate changes, the amount of relief in the neck, that very slight forward bow, changes too. Sometimes the neck flattens out or even back-bows in the dry months. Sometimes it pulls forward.
+
+Then, because the guitar now buzzes, what does the owner do? They raise the action at the bridge saddles. Perfectly sensible. But the action is now high, the nut is still high, the relief is wrong, and the strings are sitting a long way from the pickups and from the frets. The player compensates by digging in harder, and the guitar starts to sound choked and thin, with less sustain. Meanwhile, the pickup heights were never set properly in the first place, because nobody adjusted them since the factory.
+
+I want you to hear that clearly, because it's the bit that matters. The scratchy feel, the tuning problems and the thin sound weren't three faults. They were three symptoms of a single condition. The guitar was never properly set up for the place it actually lives.
+
+That's the one problem techs keep seeing. Not a cheap part. Not a bad factory. A missing setup, made worse by moving a wooden instrument from one climate into another.
+
+Now, I can hear some of you already. "That can't be the whole story. A Squier isn't the same as an American Professional." And you're right, it isn't. There are real differences. Let's be honest about them, because that's where this gets even more interesting.
+
+So, what does more money actually buy you on a Strat?
+
+Let's walk up the price ladder the way you'd see it in a UK shop. At the very bottom, the Squier Sonic Stratocaster, usually somewhere around a hundred and fifty to two hundred pounds. Above that, the Squier Affinity series, typically around two hundred to two hundred and fifty pounds. Then the Squier Classic Vibe models, built with vintage-inspired specs, often found at roughly four hundred to four hundred and fifty pounds. Then the Fender Player series, made at Fender's factory in Ensenada, Mexico, usually somewhere in the region of seven hundred pounds. Then the Fender American series, built in Corona, California, where Fender has had its main US factory since the mid eighties, going well over a thousand pounds. And above that, the Custom Shop, also in Corona, where prices can climb into the thousands.
+
+What changes as you climb? Generally speaking, you get better timber selection, more consistent fret work, more attention to fret ends, better finishing of the fingerboard edges, better nut material and cutting, and more time spent on quality control before the guitar ships. On higher-end models, many guitars get rolled fingerboard edges, which feel smoother and also tend to hide fret sprout better. Some models use stainless steel frets, which wear far more slowly than nickel silver.
+
+But here's what doesn't change. A Fender American Professional neck is still made of wood. It still has a fingerboard that can shrink in a dry room. It still has a truss rod that needs adjusting when the seasons change. And it still has a nut that might need a tweak to suit your string gauge.
+
+Techs will tell you they see sprouted fret ends on expensive guitars too. They see high action on expensive guitars too. The difference is often that the expensive guitar started from a better baseline, and the owner is more likely to have had it set up, because they've spent more and they expect it to be perfect.
+
+So the honest truth is this. The price ladder buys you a better starting point and fewer corners cut. But it does not buy you immunity from the one problem. And that's why a well set up Squier can genuinely play better than a badly set up guitar costing four times as much. Techs say this so often it's almost a cliché on the bench.
+
+So let's go back to Manchester, and to that note on the case. Is it worth fixing, or should the owner just buy a better one? Let me walk you through what actually happens on the bench, step by step, because once you see it you'll never look at your guitar the same way again.
+
+First, with the strings off, the fret ends. With the guitar on the bench and the neck supported, the tech uses a fret end file, angled carefully, to take the sprouted ends back flush with the edge of the board, and then bevels and rounds them so they're smooth under the hand. Many techs will also lightly roll the edge of the board, softening that sharp corner where the board meets the side of the neck. This is fiddly, patient work. Done badly, it chews up the edge of the fingerboard. Done well, a budget neck can start to feel like it came from a much more expensive guitar.
+
+Then the nut. The tech checks each slot. Too high, and it gets carefully lowered with nut files, matched to the gauge of each string, and the slot is shaped so the string breaks cleanly at the front edge. The slot gets a little lubricant, often graphite or a dedicated nut lubricant. If the nut is badly cut, cracked or very poor quality, it might be replaced with bone or a quality synthetic. That's not usually expensive, but it takes skill.
+
+New strings go on. Now the neck relief is set using the truss rod. On most modern Squier and Fender Strats, the truss rod is adjusted either at the headstock or at the heel of the neck, depending on the model. Small adjustments, a fraction of a turn at a time, then checking again.
+
+Then the action at the bridge, using the little saddle height screws. Then the intonation, moving each saddle forward or back so the twelfth fret note matches the open string harmonic. Then the tremolo. Many players either set it floating slightly or deck it against the body, and the springs in the back cavity are adjusted to suit. And finally, the pickup heights, so each pickup sits at a sensible distance from the strings, with a balanced output from the neck, middle and bridge.
+
+And here's where we answer that question I asked you earlier. Why would a guitar that kept going out of tune be fixed by a tech who never touched the tuners? Because the tuning problem was at the nut and in the tremolo setup, not at the machine heads. Cut the nut properly, lubricate it, stretch in fresh strings, set the trem, and in a lot of cases the tuning stability transforms. No new tuners required.
+
+How much does all of this cost? It varies by shop and by city, so treat this as a ballpark. A standard setup in a UK shop is often somewhere in the region of fifty to seventy pounds, sometimes a bit more in central London. Add some extra for fret end dressing and nut work. A full fret level and crown is a bigger job and can cost noticeably more. Ask for a quote first, every good tech will happily give you one.
+
+Now compare that to the alternative the owner was considering. Selling the Squier for maybe half what he paid, and spending several hundred pounds on a Mexican Player Strat that might well arrive with the same problems the moment it spends a winter next to his radiator.
+
+So what happened to the guitar in Manchester? After the setup, the fret ends were smooth. The action was low and even. The nut slots were cut and lubricated. The tuning held through bends. And with the pickups set at sensible heights and the strings closer to the frets, the owner said the guitar sounded fuller. Same pickups. Same pots. Same bridge. Same guitar. He kept it.
+
+But I said there'd be a bonus at the end, and I haven't forgotten. Because there's one more thing techs see over and over again on budget Strats, and it's the one that genuinely does need replacing. Stay with me, because after this I'll give you the home check.
+
+The bonus is this. Once the setup is done and the guitar finally plays well, the next thing that commonly shows its age on budget Strats is the electronics. Not the pickups. The small parts around them.
+
+On many budget guitars, the potentiometers, the volume and tone controls, are small, inexpensive pots. Over time, they can get crackly, especially if the guitar has been stored in a damp shed or garage, or carried between cold and warm rooms. The five-way pickup selector switch is another common culprit. You flick between positions and get a crackle or a dropout.
+
+So, if you're going to spend money on a budget Strat, the order that techs tend to recommend goes like this. A proper setup first, including fret ends and nut. Then electronics, meaning pots and switch, if they're crackly. And only then, if you still want a different sound, pickups. Most people do it in exactly the opposite order. They buy pickups first, and wonder why nothing changed.
+
+Right. Here's what you came for. The two minute check you can do tonight. Grab your guitar. Grab a business card.
+
+Step one. The fret end test. Hold the neck in your fretting hand the way you normally would, and slowly slide your hand from the first fret up towards the body, paying attention to the bass side and the treble side of the neck. If you feel little sharp points catching on your skin, like the edge of a comb, you have fret sprout. If you look closely along the edge of the neck under good light, you may even see the fret ends sticking out past the wood.
+
+Step two. The nut test. Press each string down at the third fret, and look at the gap between the string and the top of the first fret. There should be a tiny gap, barely the thickness of a sheet of paper on the lighter strings. If you can see a big gap, the nut is probably cut high. Then tune a string to pitch, bend it hard a couple of times, and check the tuner again. If it comes back noticeably sharp or flat, or you hear a little ping from the headstock, the string is binding in the nut.
+
+Step three. The relief test. Put a capo on the first fret, or press the low E string down there with one hand. With your other hand, press the same string down at the fret where the neck joins the body, usually around the seventeenth fret on a Strat. Now look at the gap between the bottom of the string and the top of the frets around the seventh and eighth fret. There should be a small gap, roughly the thickness of a business card. If the string is touching the frets there, the neck may be too straight or back-bowed. If the gap looks huge, there's probably too much relief.
+
+Step four. The electronics test. Plug in, turn your amp down low, and slowly roll each knob from zero to ten, then flick through all five switch positions. Listen for crackles, scratches or dropouts.
+
+If your guitar fails two or more of those checks, the problem is almost certainly not the brand, not the factory, and not the country it was made in. It's the one problem every tech keeps seeing. Your guitar has never been properly set up for the place it actually lives.
+
+And one more thing for anyone in the UK. When the heating comes on in autumn, and again when it goes off in spring, your guitar is going to feel it. A simple room hygrometer costs very little. Keeping the guitar in its case or away from radiators in the driest months, and having a quick check of the relief when the seasons change, will prevent a lot of what ends up on a tech's bench.
+
+So next time someone tells you a budget Strat is junk, remember that Manchester bench. Same guitar. Same pickups. One hour of skilled work. And a player who nearly sold a perfectly good instrument.
+
+Now I want to hear from you. Comment which Strat you play, where it was made, and whether it passed the four checks. Squier, Mexican, Japanese, American, Indonesian, Chinese, I want to know. And if you're a tech yourself, tell us what you see most on your bench. If this saved you from selling a guitar or buying pickups you didn't need, subscribe, because next time we're looking at which budget guitars techs actually rate as the best starting points for a proper setup. I'll see you there.
