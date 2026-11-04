@@ -1,0 +1,127 @@
+It's the second week of February in Winnipeg. Outside it's minus thirty-one. Inside a small repair shop, a Taylor 314ce sits face up on the bench under a work lamp, strings slack. The owner swears nothing happened to it. No drop, no bump, no road trip. It just lived on a stand in his living room, next to a forced-air vent, all winter. And there it is. A thin, dark line running with the grain of the spruce top, starting right beside the end of the fingerboard and creeping toward the soundhole. The tech doesn't even look surprised. He's seen this exact crack, in this exact spot, on guitar after guitar, every single winter.
+
+And here's the thing. That crack is not really the problem. It's the last symptom of a problem that started weeks earlier, a problem you can check for on your own guitar tonight, in about two minutes, with nothing but your fingertips. By the end of this video you'll know exactly what that one problem is, where to look for it, and what to do before your guitar gets to the crack stage. And stay to the very end, because I'm going to give you the cheapest fix I know of, one that costs less than a set of strings in most Canadian music stores, and that a lot of players still skip.
+
+I've spent a lot of time around repair benches, talking with luthiers and techs from Halifax to Vancouver. And every one of them has some version of the same winter story. So let's talk about why Canada is one of the hardest places on Earth to own an acoustic guitar, and why it doesn't matter whether you paid three hundred dollars or five thousand.
+
+Let's start with the physics, because once you understand this, everything else in this video clicks into place.
+
+An acoustic guitar is basically a box made of thin slices of wood. The top on a typical steel-string is somewhere around two and a half to three millimetres thick. Wood is hygroscopic. That's a fancy way of saying it trades moisture with the air around it. When the air is humid, the wood takes on water and swells. When the air is dry, the wood gives up water and shrinks. And critically, wood moves much more across the grain than along it. A spruce top shrinks side to side, across its width, far more than it shrinks from neck to tail.
+
+Now picture that top glued to a set of braces that run across it, and glued all the way around its edges to the sides. When it tries to shrink and it can't, the stress has to go somewhere. Eventually, the wood lets go along the grain. That's your crack.
+
+Guitar factories control this carefully. Most major acoustic makers build in climate-controlled rooms, typically somewhere in the range of forty-five to fifty-five percent relative humidity. That's the zone you'll hear almost every luthier recommend for storing an acoustic. Your guitar was born in that zone. It was glued, fitted and set up in that zone.
+
+So now think about a Canadian winter. The outside air at minus twenty or minus thirty holds almost no moisture at all. When your furnace pulls that air in and heats it up to twenty-one degrees, the relative humidity inside your home can crash. It's very common to see indoor readings in the teens or low twenties in January and February across the prairies, Ontario and Quebec. Even people on the coast are often surprised by how dry their heated homes get. That's drier than a lot of deserts.
+
+Your guitar, born at around fifty percent, is now sitting at twenty percent. For weeks. Sometimes months. That's the setup. Now let me show you how it plays out, step by step, because the crack is actually stage four, and most people never notice stages one through three.
+
+Stage one shows up first in your left hand. You pick up your guitar one evening in early December, slide your hand up the neck, and something feels sharp. The ends of the frets are poking out past the edge of the fingerboard. Techs call this fret sprout, and it's one of the most common winter complaints there is.
+
+Here's why it happens. The fingerboard, usually rosewood, ebony, or on some newer guitars richlite or other alternatives, is a strip of wood with the grain running lengthwise. As it dries, it shrinks across its width. But the metal fret wire doesn't shrink. So the fingerboard gets narrower, and the frets stay exactly the same length. Suddenly they're sticking out a fraction of a millimetre on each side, and your hand feels every single one.
+
+You'll see this on a Yamaha FG800 bought for a couple hundred dollars. You'll see it on a Martin D-28 from Nazareth, Pennsylvania, that costs well over four thousand dollars Canadian. Wood doesn't care about the price tag.
+
+Stage two is the action. Players start to notice their strings feel lower, sometimes a lot lower, and they start getting buzz on certain frets. Wait, isn't low action a good thing? Not when it comes from your guitar shrinking. As the top dries out, it can sink a little in front of the bridge. The geometry of the whole instrument shifts. The neck relief can change too. Something that played perfectly in September now buzzes on the open G string in January.
+
+Stage three, the bridge and the top. Look closely at the back edge of the bridge on a guitar that has been very dry for a long time. Sometimes you'll see the top developing a slight dip in front of the bridge, while the area behind it bellies up. You'll sometimes see the finish lines around the edges of the bridge, and in worse cases, a hairline gap starting under the back edge.
+
+Then stage four. The crack.
+
+Before I tell you exactly where it happens and why it's almost always the same spot, I want to ask you something. Comment below with the acoustic you play and the city you live in. I'm genuinely curious to see how many of you are in the prairies, how many are on the coast, and whether your guitar has ever shown any of these first three stages. Somebody in Edmonton with a Seagull, somebody in Moncton with a Larrivée, I want to hear it.
+
+Alright. The crack. And this is where the story gets interesting, because the location tells you everything.
+
+On a steel-string acoustic, the most common winter crack that techs see is on the top, running along the grain. A very typical spot is right beside the fingerboard extension, that part of the fingerboard that sits on the top of the guitar above the body joint, running down toward the soundhole. Another common spot is along the centre seam, or running from the bottom of the bridge down toward the tail of the guitar. And on the back, cracks along the grain or along the centre seam show up too.
+
+Why beside the fingerboard extension? Think about what's there. You've got the top, which wants to shrink across its width. Right next to it you've got a thick, stiff fingerboard glued down hard on top, and underneath there's usually a cross-brace and a reinforcement under the fingerboard area. That's a spot where the thin top is locked down by stiffer pieces on several sides. The wood around it is trying to move, and it can't. Stress concentrates at that boundary. And when the top finally gives, it splits right there, along the grain, in a straight line.
+
+So when that tech in Winnipeg looked at the Taylor on his bench and saw a crack next to the fingerboard extension, he wasn't surprised, because that crack basically has an address. Winter after winter, it shows up at the same address.
+
+Now, I promised you the one problem, and it's not the crack. Hang on to that, because I'm going to pay it off. First, let's talk about which guitars take this hardest, because there's a big misconception here, and it has to do with the words "solid" and "laminate".
+
+Let's talk about construction, because this is where the price tags finally matter, just not in the way most people expect.
+
+When you shop for an acoustic in Canada, you'll see three broad types. All laminate, which you'll find on a lot of entry-level guitars. Solid top with laminate back and sides, which is the sweet spot for a huge number of players. And all solid wood, which is where most higher-end guitars live.
+
+Solid wood is a single piece of wood through its thickness, usually two book-matched halves. It tends to vibrate more freely, and a lot of players feel it opens up and sounds better with age. But it also moves more with humidity, and it's the one that cracks.
+
+So here's the irony. The player who saves up and finally buys an all-solid guitar, maybe a Larrivée, maybe a Martin, maybe a Taylor from El Cajon, California, is often the one who brings it in with a crack in February. Because they bought the more responsive, more beautiful, more vulnerable instrument, and nobody told them about the Canadian winter.
+
+And let's talk about Canadian guitars specifically, because we've got a proud history here.
+
+In La Patrie, Quebec, a small town in the Eastern Townships, there's the Godin family of guitar operations. Robert Godin founded the company in the early seventies, and the group is known for brands like Seagull, Norman, Art and Lutherie, Simon and Patrick, and of course Godin itself. The Seagull S6 has been a first serious guitar for an enormous number of Canadian players, often found for well under a thousand dollars, and it's known for having a solid cedar or spruce top, depending on the model. A Seagull with a solid top can absolutely crack in a dry winter. So can an Art and Lutherie, though their laminate back and sides give them some extra resilience.
+
+Then there's Larrivée. Jean Larrivée started building guitars in Toronto in the late nineteen sixties. The company later moved to British Columbia and eventually shifted its production to California. Larrivée guitars are famous for their bright, articulate sound and for their bracing, and a lot of older Canadian-made Larrivées are still out there being played every night. They're solid wood guitars. They need humidity.
+
+Here's the takeaway from this block: if your guitar has the word "solid" anywhere on its spec sheet, you're in the club. Which brings us to the next question. If this is so predictable, why are so many guitars still cracking every winter? The answer is going to surprise you, because it's not about guitars at all. It's about houses.
+
+Canadian homes are built to keep heat in. That's great for your heating bill. And most homes, especially in places like Calgary, Edmonton, Saskatoon, Winnipeg, Ottawa and Montreal, rely on forced-air furnaces or electric baseboard heating to keep the cold out through a long winter.
+
+Now picture where most people keep their guitar. On a wall hanger, because it looks great. On a stand, because it's easy to grab. And very often, close to a heat source. Next to a baseboard heater. Below a window. Across from a fireplace. Right in the path of a forced-air vent.
+
+Techs see guitars come in with damage on just one side, and when they ask where the guitar was kept, the owner remembers the vent. That's how localized this can be. Warm, dry air blowing on one part of the top dries that area faster than the rest. Uneven drying is even worse than even drying, because now one area is shrinking while the area next to it isn't.
+
+So the danger is a combination: a very dry house, a guitar kept out in the open, a heat source nearby, and nowhere for moisture to come back from. The more of those boxes you check, the more likely that crack shows up by February.
+
+Now, if you're enjoying this, take a second and tell me in the comments where you keep your guitar right now. Wall hanger, stand, or case? Be honest. I have a feeling most of us are going to answer wall hanger.
+
+Let's talk about what techs actually do when one of these guitars hits the bench, because the repair tells you a lot about why prevention is the real fix.
+
+When a crack comes in, the first thing most experienced techs do is not glue. It's humidify. If you glue a crack closed while the wood is dried out, you're locking it in a shrunken state. When spring comes and the wood wants to swell back, that stress has nowhere to go. So a lot of repair people will first slowly bring the guitar back up to normal humidity, often over several days or more, sometimes in a controlled room or a humidified case. Very often, a crack will close up partially or almost completely on its own once the wood takes back its moisture.
+
+Then comes the actual repair. A common approach is to glue the crack, often with hot hide glue or a suitable wood glue, while gently clamping it. If the edges of the crack don't line up, the tech may use a clamping jig to bring them level. Inside the guitar, they'll often add small cleats, tiny diamond-shaped or round pieces of spruce glued across the crack on the underside of the top, with the grain running perpendicular to the crack. Those cleats help keep the crack from spreading further. If a crack has opened wide enough, it might need a thin splint of matching wood glued in. Then there's finish work, which on a high-gloss guitar can be a whole job in itself.
+
+What does that cost in Canada? It varies a lot from shop to shop and from crack to crack, so call around and get a quote. But here's the point: for a lot of entry-level guitars, a proper crack repair can cost a meaningful chunk of what the guitar is worth. On a high-end guitar, it's money well spent, but it will never be quite the same as an uncracked top in the eyes of a future buyer.
+
+So now let's pay off the big promise. What's the one problem? You've probably guessed it by now, but stay with me, because there's a nuance most people miss.
+
+The one problem is not the crack. It's not the fret sprout. It's not the low action. The one problem is that most players don't measure the humidity their guitar actually lives in. They have a thermostat on the wall that tells them the temperature down to half a degree, but they have no idea whether their guitar is sitting at fifty percent humidity or fifteen.
+
+Every symptom we talked about, the sharp fret ends, the buzzing, the sinking top, the bridge lifting, the crack beside the fingerboard extension, every one of them is downstream of that one blind spot. Techs will tell you the same story over and over. The guitar came in cracked, and when they asked the owner what the humidity in their house was, the owner had no idea.
+
+And the nuance is this. Humidifying blindly can also be a problem. If you overdo it, especially in a case with too much moisture, you can push the guitar too far the other way. Swollen tops, high action, mushy tone, and in extreme cases, problems with glue joints. So the answer isn't "add water." The answer is "measure, then add the right amount." That's why the hero of this story is not a humidifier. It's a hygrometer.
+
+And here's the cheap fix I promised you. A basic digital hygrometer, the kind that shows humidity and temperature on a small screen, is commonly found in Canadian stores and online for somewhere around fifteen to twenty-five dollars. Some are small enough to slip into the accessory compartment of your case. Others sit on a shelf in your music room. Either way, it costs about what you'd pay for a set of strings.
+
+Once you have that number, everything else gets easy.
+
+So let's walk through what to actually do this winter, step by step, in a way that works whether you play a Seagull from Quebec, a Larrivée built in British Columbia, a Martin from Pennsylvania, a Taylor from California, or a Yamaha from overseas.
+
+First, measure the room. Put a hygrometer in the room where your guitar lives and check it every day for a week in early winter. If you're seeing anything in the thirties or lower, your guitar is drying out. If you're in the teens or low twenties, which is common in a lot of Canadian homes in January, your guitar is in the danger zone.
+
+Second, decide on a strategy: room or case. If you want to keep your guitars on display on wall hangers, you'll need a room humidifier, and you'll need to keep that room's door closed so you're not trying to humidify the whole house. Some players set up a dedicated guitar room this way. If you keep just one or two guitars, the simpler approach is to keep them in their cases during the driest months and humidify the case.
+
+Third, choose a case humidifier. There are a few common types. Two-way humidity control packs, like the D'Addario Humidipak system, use packets designed to hold the humidity around a set level, often around the mid-forties to fifty percent range. Sound hole humidifiers sit between the strings in the sound hole. Some are a sponge-in-a-tube style, some are gel-based. Most of these are commonly available in Canadian music stores for roughly the price of a couple of sets of strings, and refill packets are cheaper than that.
+
+Fourth, put the hygrometer in the case. This is the part a lot of people skip. Don't guess. Put a small hygrometer right in the case with the guitar, and check it every few days. If you're seeing forty-five to fifty-five percent, you're in the zone. If you're under forty, add moisture. If you're climbing over sixty, back off.
+
+Fifth, keep the guitar away from heat sources. No hanging above baseboard heaters. No stands right in front of a forced-air vent. No leaning against the wall beside the wood stove at the cottage.
+
+Sixth, watch for the early warning signs. Remember the stages. Sharp fret ends in December are your guitar telling you it's too dry. Strings suddenly feeling lower and buzzing, that's another clue. Any sinking in front of the bridge or a gap starting under it, take it in right away.
+
+And seventh, if you travel in winter, let the guitar warm up in its case before you open it. Give it time. Your finish will thank you.
+
+And there's one more professional trick worth knowing. A lot of techs recommend a seasonal setup. That's a quick visit in late fall, after the heat has been on for a few weeks, and another in late spring once the humidity is back. They check neck relief, action, and the condition of the frets and the bridge. On a guitar you love, two small adjustments a year are a lot cheaper than one crack repair.
+
+So let's bring it all the way back to that bench in Winnipeg. The Taylor with the crack beside the fingerboard extension. The owner who swore nothing happened. He was right. Nothing happened to it in one moment. It happened slowly, every day, all winter, while the guitar sat next to a vent in a house that was drier than a desert. The crack was the last chapter of a story that started back when the frets first felt sharp.
+
+And that's the one problem. Not the guitar. Not the brand. Not the price. It's the number you never measured.
+
+So here's the practical check you can do at home tonight. It takes two minutes.
+
+Pick up your acoustic. Slide your fretting hand slowly along the edge of the neck, from the nut all the way up to where the neck meets the body. If you feel sharp little points at the fret ends, your fingerboard has dried out and shrunk.
+
+Next, look across the top of the guitar from the side, with your eye level to the top, behind the bridge and in front of it. Is the area in front of the bridge sinking? Is the top flat, or is it caving in a little?
+
+Then, look carefully at the top beside the end of the fingerboard extension, between the fingerboard and the soundhole, and on either side. Use a flashlight. Look for any thin dark line running with the grain. Look at the back edge of the bridge too, for any gap where you could slip a piece of paper under it.
+
+And finally, check your number. If you don't have a hygrometer, add one to your shopping list this week. Fifteen to twenty-five dollars. Then put it right where your guitar lives.
+
+If your guitar passes all of those checks, great. Get a hygrometer and a humidifier anyway, because the coldest part of the winter is still ahead. If it fails any of them, start rehydrating slowly, and get it to a tech before it reaches stage four.
+
+So now I want to hear from you. Comment below which acoustic you play, what city you're in, and what your hygrometer reads right now if you have one. If you've ever had a guitar crack in a Canadian winter, tell me where the crack was. I'd bet a set of strings a lot of you are going to say right next to the fingerboard.
+
+And if you know someone who just got a new acoustic for the holidays, send this to them before February. It could save them a lot more than the price of a hygrometer.
+
+Stay warm, keep your guitars humid, and I'll see you in the next one.
