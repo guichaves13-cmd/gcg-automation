@@ -1,0 +1,97 @@
+The price you see on Amazon right now may not be the price you'd see this afternoon, tomorrow morning, or next week. Prices on Amazon can change many times a day, and in most cases no human being is sitting at a desk deciding them. Computer programs are. And according to a federal antitrust lawsuit, one of Amazon's own pricing programs had a secret code name. In the next few minutes, you'll learn who really sets the price you pay, what the government alleges, and the free tools that can show you whether a "deal" is really a deal.
+
+Let's begin with something most shoppers never think about. When you walk into a grocery store, the price on the shelf tag usually stays the same for days or weeks. Somebody prints it, somebody puts it up, and it stays there until somebody changes it. Online, things are completely different. A price is just a number in a database. It can be changed instantly, automatically, and as often as the seller wants. On a marketplace as large as Amazon, with hundreds of millions of products and millions of sellers, that's exactly what happens.
+
+This practice is called dynamic pricing. It means prices move up and down based on things like demand, competition, time of day, inventory levels, and what other stores are charging. Airlines and hotels have done this for decades. If you've ever noticed that a plane ticket costs more on a Friday than on a Tuesday, you've experienced dynamic pricing. Amazon and its sellers have brought the same idea to everyday products: paper towels, coffee makers, vitamins, phone cases, and almost everything else.
+
+How often do Amazon prices change? Nobody outside Amazon knows exactly, and estimates vary. Industry analysts and price-tracking companies have reported for years that prices on many popular items shift frequently, sometimes several times in a single day. The broad point isn't controversial: on Amazon, prices are fluid.
+
+So who's behind those changes? There are really three groups setting prices on Amazon, and understanding them is the key to understanding what you pay.
+
+The first is Amazon itself, when it acts as the retailer. When a product page says "Ships from and sold by Amazon," Amazon bought that product and sets its price. Amazon uses sophisticated software to decide those prices, watching competitors, demand, and its own costs.
+
+The second group is third-party sellers. Remember, according to Amazon, independent sellers account for roughly sixty percent of the units sold in its store. Each of those sellers sets its own prices. But many of them don't do it by hand. They use automated tools called repricers. A repricer is software that watches the competition and adjusts the seller's price automatically, sometimes by a few cents at a time, according to rules the seller sets. For example: "Always be one cent cheaper than the lowest competitor, but never go below this floor." When dozens of sellers with repricers compete on the same item, prices can bounce around constantly, like a never-ending auction happening in the background.
+
+The third force is the one most people have never heard of, and it has enormous influence over what you pay. It's called the Buy Box.
+
+On many Amazon product pages, several different sellers offer the exact same item. But you don't see all of them at first. You see one price, one seller, and those big yellow and orange buttons: "Add to Cart" and "Buy Now." That box is called the Buy Box, or what Amazon calls the featured offer. Whichever seller wins it gets the sale when you click those buttons. Industry analysts have long estimated that the large majority of Amazon sales go through the Buy Box, because most shoppers simply click the button without checking other offers.
+
+So who decides which seller wins the Buy Box? Amazon does, using its own algorithms. Amazon has said that it considers factors such as price, delivery speed, and the seller's performance and customer service record. Amazon doesn't publish its exact formula. That means a piece of software controlled by Amazon decides which price most shoppers see first, and by extension, which price most shoppers pay.
+
+And here's where the story moves from the business pages to the courtroom.
+
+In September 2023, the Federal Trade Commission, joined by roughly seventeen states, filed a major antitrust lawsuit against Amazon in federal court in Seattle. It's one of the most significant cases the government has brought against a major tech company in years. The complaint alleges that Amazon uses a set of interlocking practices to maintain monopoly power, harming both shoppers and sellers. Amazon strongly disputes the allegations, and the case is scheduled to go to trial in February 2027. Nothing in the complaint has been proven in court. But the allegations go right to the heart of who controls the prices you pay, so let's walk through them carefully.
+
+The first allegation concerns what the FTC calls anti-discounting tactics. According to the complaint, Amazon punishes sellers who offer lower prices for the same product on other websites, including their own sites or other marketplaces. The complaint alleges that if Amazon's systems detect a lower price elsewhere, a seller's product can lose the Buy Box or be buried in search results. The FTC's theory is that this discourages sellers from offering lower prices anywhere else, which could keep prices higher across the internet, not just on Amazon. Amazon has responded that it simply wants to avoid featuring offers that aren't competitively priced for its customers, and that this is what any store would do.
+
+The second allegation concerns fees. The complaint alleges that, when you combine the referral fees, which are often around fifteen percent for many categories, the fulfillment fees sellers pay to qualify for Prime, and the advertising sellers increasingly feel they must buy, Amazon takes close to fifty percent of the revenue of many sellers. If that's accurate, it matters to you, because those costs have to be paid by someone, and the FTC's argument is that much of it ends up in the prices shoppers pay. Amazon disputes this characterization and says sellers choose its services because they deliver value.
+
+And then there's the allegation that made headlines around the country. It involves a pricing algorithm with a code name.
+
+If you're still watching, this is the part of the story you won't want to miss, because it shows just how powerful automated pricing can be, and how much it may matter to the price on your screen.
+
+According to the FTC's complaint, Amazon developed and used an algorithm internally called "Project Nessie." The complaint alleges that Nessie was designed to predict where Amazon could raise its prices and competitors would follow. In simple terms, according to the government, Amazon would raise a price, other online stores whose own pricing software tracked Amazon would match it, and then Amazon could keep the higher price instead of being undercut. If competitors didn't follow, the complaint says, the algorithm would return Amazon's price to normal. The FTC has alleged that this tool generated well over a billion dollars in extra profit for Amazon during the years it was used.
+
+Amazon's response is important to include here. Amazon has said the FTC grossly mischaracterized the tool, that Project Nessie was used to stop price matching from producing unusual results, and that it hasn't been used in years. Amazon says it's committed to low prices and that the lawsuit is misguided. These are competing accounts, and a court has not decided which is true. The trial set for February 2027 is where these questions are expected to be argued.
+
+Whatever the courtroom outcome, the episode reveals something every shopper should understand. Online pricing is increasingly a conversation between algorithms. Amazon's software watches competitors. Competitors' software watches Amazon. Sellers' repricers watch each other. And you, the shopper, see only the final number at the moment you happen to look.
+
+So how do you protect yourself in a world where software is setting prices? The good news is that you have software on your side, too, and some of the best tools are free.
+
+Let me introduce two of the most widely used price trackers: CamelCamelCamel and Keepa. Neither of these is affiliated with Amazon, and neither is affiliated with this channel. They're independent services that have tracked Amazon prices for years.
+
+CamelCamelCamel is a free website. You go to the site, paste in the web address of an Amazon product, or search for it by name, and it shows you a chart of that product's price history over time. You can see whether the price you're looking at is high, low, or average for that item. You can also set up a price alert: tell it the price you're willing to pay, and it can email you if Amazon's price drops to that level.
+
+Keepa does something similar, with even more detail. Keepa offers a website and a browser extension. When the extension is installed in your web browser, it can display a price history chart directly on Amazon product pages, right below the product information. That means while you're shopping, you can glance down and see what that item has cost over the past weeks, months, or even years. Keepa offers a free version and a paid subscription with extra features. For most casual shoppers, the free features are plenty. Features and pricing for both services can change, so check their sites for the current details.
+
+Now, a word of caution for anyone who's careful about installing things on their computer, which is a good instinct. Only install browser extensions from the official extension store for your browser, such as the Chrome Web Store, and make sure you're installing the real one from the actual developer. Check reviews and the number of users. If you're not comfortable installing an extension, just use the CamelCamelCamel website. There's nothing to install.
+
+Here's how to read a price history chart, because once you know how, you'll never look at a "deal" the same way again.
+
+First, look at the overall pattern. Is the line mostly flat, with occasional dips? Or does it bounce up and down constantly? A flat line with occasional dips usually means the item goes on sale from time to time, and you can wait for the next dip. A line that jumps around constantly means repricers are active, and patience can pay off.
+
+Second, look at the lowest price in recent months. If today's price is well above the recent low, there's a good chance it will drop again. If today's price is at or near the lowest point on the chart, it may be a genuinely good time to buy.
+
+Third, watch for the "spike before the sale." Consumer advocates have long warned about a tactic where a price is quietly raised for a while before a big sales event, so that the "discount" looks bigger than it really is. A price history chart makes this easy to spot. If you see a price shoot up two weeks before Prime Day, then come back down to where it was before, that's not a real deal. That's a round trip.
+
+Fourth, compare the different lines. Many trackers show separate lines for the price when Amazon sells the item, the price from third-party sellers new, and sometimes used prices. If Amazon's own price is far lower than third-party prices, you might want to wait for Amazon to come back in stock rather than paying a premium.
+
+Now let's talk about that number with a line through it. You've seen it a thousand times. A product shows a price, and next to it, a higher number crossed out, labeled something like "List Price" or "Typical Price," along with a percentage, like "thirty-two percent off." It looks like a bargain. But what does that crossed-out number really mean?
+
+Amazon has published explanations of these reference prices on its help pages. Generally speaking, a "List Price" is supposed to be a price suggested by the manufacturer or supplier, or a price the item has been sold at recently. A "Typical Price" is generally described as a price based on what the item has recently sold for on Amazon over a period of time. Amazon's exact definitions and rules have changed over the years, so check its current help pages.
+
+Here's the problem for shoppers. A manufacturer's suggested price may be a price almost nobody actually pays. If an item has always sold for about forty dollars, and the list price says sixty, then "thirty-three percent off" at forty dollars isn't really a discount. It's just the normal price, dressed up to look like a sale. Regulators have paid attention to this kind of thing for a long time. The FTC has had guides against deceptive pricing for decades, which warn against advertising a fake "former price" that wasn't really charged, and there have been lawsuits over reference prices against many retailers, both online and in physical stores.
+
+So the lesson is simple: don't trust the crossed-out number. Trust the price history. If the price history chart shows the item has been selling for forty dollars for six months, the real discount at forty dollars is zero, no matter what the strikethrough says.
+
+Let's also clear up the question many people ask: does Amazon show different people different prices? This is a sensitive topic, and it's important to be precise. Back in 2000, Amazon faced a public backlash after customers discovered they were being shown different prices on certain DVDs, and the company said it was a random test, apologized, and offered refunds. Since then, Amazon has said it does not set prices based on customers' demographic information. What is true is that prices change over time, the seller shown in the Buy Box can change, shipping options can vary by location, and you may see different deals or coupons depending on factors like membership status. So two people looking at the same product at different times or in different places can see different prices. That's another reason to check price history before you buy.
+
+Let's pull all of this together into a practical price-protection checklist you can use every time you shop. You may want to write this down.
+
+Number one. Before you buy anything over about twenty-five dollars, check the price history. Use CamelCamelCamel's website or the Keepa extension. It takes thirty seconds.
+
+Number two. Ignore the strikethrough "List Price" and the big percentage. Compare today's price with what the item has actually sold for over the past few months.
+
+Number three. Set price alerts on items you don't need right away. Tell the tracker your target price, and let it watch for you. Patience is one of the most powerful money-saving tools you have.
+
+Number four. Check who holds the Buy Box. Look at the "Ships from" and "Sold by" line. Then look for the link that shows other sellers, often labeled something like "Other sellers on Amazon" or "Compare other offers." Sometimes a better price, or a more trustworthy seller, is just one click away.
+
+Number five. Be skeptical of big sales events. Prime Day, Black Friday, and other events can have genuine deals, but price history often shows that some "sale" prices have appeared before, or were matched at other times of year. Check the chart before you get swept up in a countdown clock.
+
+Number six. Compare outside of Amazon. Check one or two other major retailers, and the manufacturer's own website. If the FTC's allegations about anti-discounting are correct, sellers may have been discouraged from listing lower prices elsewhere, but it still costs nothing to look, and sometimes other stores do come in lower.
+
+Number seven. Watch out for "Subscribe and Save" price changes. Subscriptions can save money, but the price of a subscribed item can change before each delivery. Amazon generally sends a reminder email before a scheduled delivery. Read it, and check that the price is still acceptable.
+
+Number eight. Look at the price per unit. Amazon often shows a unit price, such as price per ounce or per count, in small print near the main price. A bigger package isn't always cheaper per unit, and the unit price makes it easy to compare.
+
+Number nine. Remember that your time has value too. You don't need to track the price of a two-dollar item. Save your energy for bigger purchases, where a price swing of twenty or fifty dollars really matters.
+
+Number ten. Stay informed about the FTC case. The trial scheduled for February 2027 may bring more information to light about how Amazon's pricing and Buy Box systems work. Whatever happens, the outcome could affect how prices are set on the world's largest online store.
+
+Let's step back one more time. So who really controls the price you pay on Amazon? The honest answer is: a combination of algorithms. Amazon's own pricing software, when Amazon is the seller. Thousands of repricing programs run by third-party sellers. And Amazon's Buy Box algorithm, which decides which of those prices most shoppers see first. On top of that, the government alleges that Amazon's policies and fees push prices higher, both on Amazon and across the internet, and that a program called Project Nessie was used to test whether competitors would follow Amazon's price increases. Amazon denies wrongdoing and says it works hard to keep prices low. A federal court will hear those arguments.
+
+But here's the part that's entirely in your control. You don't have to accept the first price you see. With a free price tracker, a quick look at who's selling the item, and a healthy skepticism of crossed-out numbers, you can shop on Amazon with the same kind of information the algorithms have. In a world where software sets prices, the smartest shoppers use software to check them.
+
+A quick reminder: this channel is independent and is not affiliated with, sponsored by, or endorsed by Amazon, CamelCamelCamel, or Keepa. The FTC's claims are allegations that Amazon disputes, and prices and policies change, so always check current information before you buy.
+
+If this video helped you, please share it with someone who shops online, especially a friend or family member who might be paying more than they need to. And if you want more plain-English investigations into how big companies really work, and how to protect your money, subscribe to the channel and turn on notifications so you never miss a new video. Thanks for watching, and stay smart out there.
