@@ -1,0 +1,111 @@
+Every year, tens of millions of Americans hand Amazon one hundred thirty-nine dollars for Prime, or about fifteen dollars a month if they pay monthly. Most think they're paying for free shipping. But that fee is only the beginning of the story. The real money Amazon makes from you as a Prime member may come from somewhere you never see. In the next few minutes, we'll follow your Prime dollars step by step, show you who really benefits, and give you a simple test to decide whether Prime is paying for you, or you're paying for Prime.
+
+Let's start with the number itself. In the United States, Amazon Prime currently costs one hundred thirty-nine dollars a year, or fourteen ninety-nine a month if you pay month to month. That monthly option adds up to almost one hundred eighty dollars over a full year, which is something many people don't notice. There are discounted versions for students and for people who receive certain government benefits, such as SNAP or Medicaid, which Amazon has offered at a reduced monthly price. Prices change over time, and Amazon has raised the Prime fee several times over the years. When Prime launched in 2005, it cost seventy-nine dollars a year. It went to ninety-nine dollars in 2014, to one hundred nineteen dollars in 2018, and to one hundred thirty-nine dollars in 2022. So if history is any guide, the price you pay today may not be the price you pay a few years from now.
+
+How much money does all of that add up to for Amazon? Amazon reports a line in its financial statements called subscription services. That category includes Prime memberships, along with other subscriptions such as digital music, audiobooks, and similar services. In recent years, that line has been running at more than forty billion dollars a year. Amazon doesn't break out exactly how much of that is Prime alone, and it doesn't publish an official count of U.S. Prime members on a regular basis. Outside research firms, such as Consumer Intelligence Research Partners, have estimated that there are well over one hundred and fifty million Prime members in the United States when you count people living in Prime households. Amazon itself said years ago that it had passed two hundred million paid Prime members worldwide. Treat those numbers as estimates, but the scale is clear: Prime is one of the largest subscription programs on the planet.
+
+Now here's where the story gets interesting. If you're Amazon, forty billion dollars in subscription revenue sounds enormous. But in many ways, the fee isn't the main point. The fee is the hook. What Amazon really wants is what you do after you pay it.
+
+Think about the psychology for a moment. Once you've paid one hundred thirty-nine dollars for Prime, you want to get your money's worth. So when you need a new toaster, a pack of batteries, or a birthday gift, where do you look first? For many Prime members, the answer is Amazon, and often only Amazon. The fee you paid makes every future Amazon purchase feel a little cheaper, because shipping feels free. Retail analysts call this a lock-in effect. You've already paid, so you stop comparison shopping.
+
+And the research backs that up. Consumer Intelligence Research Partners and other analysts have estimated for years that Prime members spend far more on Amazon than non-members, with many estimates suggesting roughly double, or in the range of a thousand dollars or more per year compared with several hundred for non-members. The exact figures vary by survey and by year, so take any single number with a grain of salt. But the direction is consistent. Prime members shop on Amazon more often, they buy more items, and they're less likely to check other stores first.
+
+That's the first big reason the fee matters less than you think. The real value of a Prime member to Amazon isn't the one hundred thirty-nine dollars. It's the extra spending that one hundred thirty-nine dollars helps unlock.
+
+This is part of what's often called the Amazon flywheel. The idea goes back to the company's early days, and it's been described many times by Amazon leadership and business writers. It works like this. Lower prices and a better customer experience bring in more customers. More customers attract more third-party sellers who want to reach them. More sellers mean more selection and more competition, which can push prices down further. And the bigger the business gets, the more Amazon can spread its costs for warehouses, delivery, and technology across more orders. Then the wheel spins again, a little faster each time.
+
+Prime is like a motor attached to that wheel. Every Prime member is a loyal, high-spending customer. Loyal customers make Amazon more attractive to sellers. And sellers, as we covered in our previous video, pay Amazon fees on every sale.
+
+Here's a simple way to picture it. Imagine a neighborhood warehouse club that charges a membership fee at the door. The club doesn't mind if it barely breaks even on the fee, because members come back every week and fill their carts. Now imagine that same club also charges every supplier on its shelves a cut of each sale, charges them again to store and ship their products, and charges them a third time to put their products at eye level. That's much closer to how Amazon's model works. The membership fee is real money, but it's the doorway into a much larger business, and every time you walk through that doorway, several other meters start running.
+
+Let's follow the money one level deeper. When you buy something on Amazon from a third-party seller, which happens with roughly sixty percent of the units sold on the site, according to Amazon, the seller pays Amazon a referral fee, often around fifteen percent of the price for many categories. If the seller uses Fulfillment by Amazon, so that the item ships with Prime, the seller also pays fulfillment fees and storage fees. In other words, the fast Prime shipping you think you're paying for with your membership is, in many cases, also being paid for by the seller, who in turn builds those costs into the price you see.
+
+Read that again, because it's one of the most surprising parts of this whole story. The Prime badge is a big selling point for sellers, because shoppers love fast, free shipping. To get that badge, many sellers use Amazon's fulfillment service and pay Amazon for it. So Amazon may be collecting from you through the Prime fee, and from the seller through fulfillment fees, for the same package.
+
+In September 2023, the Federal Trade Commission and roughly seventeen states filed an antitrust lawsuit against Amazon. Among other things, the complaint alleges that Amazon effectively pressures sellers to use its fulfillment service to qualify for Prime eligibility, and that when you add up the referral fees, fulfillment fees, and advertising costs, Amazon takes close to half of the revenue of many sellers. Amazon disputes these allegations and says sellers are free to choose how they sell and ship. The case is set for trial in February 2027, and no court has ruled that those allegations are true. But if the government's theory is correct, at least part of those seller costs may be showing up in the prices Prime members pay.
+
+If you've made it this far, stay with me, because the next part is where most people's jaws drop. Your Prime fee isn't just connected to shopping and shipping. It's connected to two of the most profitable businesses Amazon runs, and you probably interact with one of them every single day without realizing it.
+
+The first is advertising. When you search for something on Amazon, have you noticed how many of the results at the top say "Sponsored"? Those are ads. Sellers and brands pay Amazon to place their products in front of you. Amazon's advertising business has grown into one of the largest digital ad businesses in the world, bringing in tens of billions of dollars a year, according to the company's own financial reports. That puts it in the same league as some of the biggest names in online advertising.
+
+Why does that matter to a Prime member? Because Prime members are exactly the audience advertisers want. They shop often, they spend more, and they're already signed in, so Amazon knows what they've bought before. That makes every Prime member's search results extremely valuable advertising real estate.
+
+And it doesn't stop at the store. Prime Video, which is included with your membership, began showing ads by default in early 2024. If you want to watch without most ads, Amazon offers an ad-free option for an additional monthly charge, which at launch was two ninety-nine a month in the U.S. So the streaming service that's bundled into your fee has itself become another advertising platform. Prices and options can change, so check Amazon's current terms.
+
+Now, the second big profit engine. This one surprises almost everyone. It's called Amazon Web Services, or AWS. AWS rents computing power, data storage, and software tools to businesses, governments, and organizations of every size. Many of the apps and websites you use every day run on AWS behind the scenes. And while AWS makes up a minority of Amazon's total sales, it has consistently produced a very large share of Amazon's operating profit. In many recent years, AWS has generated more than half of the company's total operating income, and in some years, a lot more than half.
+
+So what does AWS have to do with your Prime fee? Not directly. Your membership dollars don't go to AWS. But here's the connection. Amazon's retail business, which includes Prime and its enormous delivery network, operates on relatively thin margins compared with AWS and advertising. The fees, the ads, and the cloud profits together give Amazon enormous financial strength. That strength lets Amazon keep investing heavily in warehouses, trucks, airplanes, and delivery speed, which in turn makes Prime more attractive, which brings in more members, more spending, more sellers, and more ad revenue. The flywheel keeps turning.
+
+So who really profits from your Prime fee? The honest answer is: Amazon, in several ways at once. Directly, through the fee itself. Indirectly, through the extra shopping Prime members tend to do. Indirectly again, through the fees sellers pay to get Prime eligibility. And once more, through the advertising that targets Prime members both in the store and on Prime Video. Your one hundred thirty-nine dollars is the visible part. The rest is mostly invisible.
+
+None of that means Prime is a bad deal. For plenty of people, it's a very good deal. It simply means you should judge it the way Amazon does: by the numbers.
+
+So let's talk about what the fee actually buys you. Amazon updates its Prime benefits from time to time, so always check the current list on Amazon's website. But in general, a U.S. Prime membership has included the following.
+
+Fast shipping at no extra charge on eligible items, including many items with one-day or same-day delivery in certain areas. Without Prime, Amazon generally offers free standard shipping only on qualifying orders over a minimum amount, and that minimum has changed over the years. Delivery is slower.
+
+Prime Video, a streaming service with movies and TV shows, now with ads by default unless you pay extra.
+
+Amazon Music Prime, which gives access to a large music and podcast library, with some limits compared with the paid Music Unlimited tier.
+
+Prime Reading, a rotating selection of e-books and magazines.
+
+Amazon Photos, which offers unlimited full-resolution photo storage, plus a limited amount of video storage. For people with large family photo collections, this can be a genuinely valuable benefit.
+
+Prime Gaming, mostly of interest to younger gamers.
+
+Discounts at Whole Foods Market for Prime members, plus grocery delivery options in many areas, sometimes for an additional fee or subscription.
+
+Access to Prime Day and other members-only deals.
+
+And in some cases, extras like discounts on prescriptions through Amazon Pharmacy's RxPass program, which has offered eligible Prime members a flat monthly fee for certain generic medications. Note that availability and eligibility rules have varied, including for Medicare beneficiaries, so check the current terms carefully.
+
+That's a long list. But here's the key question. How many of those benefits do you actually use? Because a benefit you never use is worth exactly zero dollars to you, no matter what Amazon says it's worth.
+
+Before we get to the test, there's one more part of the story you deserve to know. For years, critics said it was far too easy to join Prime and far too hard to leave. In 2023, the Federal Trade Commission sued Amazon, alleging that the company used what are called "dark patterns," which are design tricks that steer people into signing up for Prime without clearly realizing it, and made canceling unnecessarily complicated. Internally, the FTC said, Amazon's cancellation process had a name inspired by an epic Greek poem about a long journey home: "Iliad." Amazon disputed the claims. In September 2025, just as the case was going to trial, Amazon agreed to a settlement valued at two and a half billion dollars, including a civil penalty and money set aside for refunds to certain affected customers, and committed to making the sign-up and cancellation process clearer. Amazon did not admit wrongdoing as part of that settlement. If you think you may have been signed up for Prime without meaning to, or had trouble canceling during the period covered, it's worth checking official FTC announcements about refund eligibility, and be wary of anyone who contacts you claiming to help you collect a refund for a fee.
+
+So now, let's put Prime to the test. Here's a simple way to figure out whether Prime is paying for you, or you're paying for Prime. Grab a pencil and a piece of paper.
+
+Step one. Count your Amazon orders. Go to "Your Orders" in your Amazon account and look at the last twelve months. Many shoppers are surprised. Some find they ordered fifty or a hundred times. Others find they ordered only eight or ten.
+
+Step two. Estimate your shipping savings. For each order, ask yourself: would I have paid for shipping without Prime? If your orders are usually small, say under the free-shipping minimum, Prime may be saving you several dollars per order. If most of your orders are large anyway, or you're happy to bundle items together and wait a few extra days, your shipping savings may be much lower than you think.
+
+Step three. Put a fair value on the extras you actually use. Do you watch Prime Video every week? If you'd otherwise pay for another streaming service, that has real value. Do you use Amazon Photos to back up your pictures? Compare it with what a separate cloud storage plan would cost. Do you shop at Whole Foods regularly? Add up the member discounts. But be honest. If you haven't opened Prime Video in six months, give it a value of zero.
+
+Step four. Add it up. If your shipping savings plus the honest value of the extras you use comes to more than one hundred thirty-nine dollars, Prime is probably paying for itself. If it comes to much less, Prime may be quietly costing you money.
+
+Step five. And this one is important. Ask yourself whether Prime is making you spend more than you would otherwise. Remember the research showing Prime members spend far more on Amazon. Some of that is convenience. Some of it is impulse buying that wouldn't happen without "free" shipping. If you find yourself buying small things you don't really need just because shipping is free, Prime might be costing you more than the fee.
+
+Now, if you decide to keep Prime, here's how to make it pay for you.
+
+First, pay annually instead of monthly, if you're sure you'll keep it all year. One hundred thirty-nine dollars a year is meaningfully less than twelve payments of fourteen ninety-nine.
+
+Second, check whether you qualify for a discounted membership. If you receive certain government assistance, Amazon has offered a reduced monthly Prime price for qualifying customers. Check Amazon's current eligibility rules.
+
+Third, share the benefits with your household. Amazon has allowed Prime members to share certain benefits with another adult in the same household through a feature called Amazon Household. The rules on who qualifies and which benefits can be shared have changed over time, so check before you rely on it. Splitting one membership across two adults can effectively cut the cost in half.
+
+Fourth, actually use the benefits you're paying for. Back up your photos to Amazon Photos. Use Prime Reading if you enjoy books. Use the Whole Foods discounts if there's a store nearby.
+
+Fifth, don't stop comparison shopping. Prime only saves you money if Amazon's price is competitive. Before a big purchase, check one or two other retailers. Free shipping doesn't help if the item costs twenty dollars more.
+
+Sixth, consider the "no-rush" shipping option when it's offered at checkout. Amazon has at times offered small credits or rewards for choosing slower delivery. That rewards you for not needing it tomorrow.
+
+And if you decide to drop Prime, here's how to do it calmly and safely.
+
+First, go directly to your Amazon account, not through a link someone sends you. Find the section for your Prime membership, usually under "Account" and then "Prime Membership," and look for the option to end your membership. Amazon may show you several screens offering reminders, discounts, or a chance to pause instead. Read each screen carefully, and keep going until you see confirmation that your membership is canceled.
+
+Second, check the timing. Depending on how much of the membership you've used, Amazon may offer a full or partial refund, or let your benefits continue until the end of the paid period. Check the terms shown during cancellation.
+
+Third, plan your shopping without Prime. You can still shop on Amazon without Prime. Bundle your orders to reach the free-shipping minimum, wait a few extra days, and use other retailers that offer free shipping or free in-store pickup. Many big-box stores and pharmacies offer free pickup or their own shipping programs.
+
+Fourth, use your calendar. If you only need Prime for a few months, such as during the holiday season, you can sign up for a month, use it, and cancel. Monthly costs more per month, but paying for two or three months may be far cheaper than a full year you barely use.
+
+Fifth, watch out for scams. Criminals know that people are canceling Prime and searching for refunds. They send fake emails and make fake phone calls pretending to be Amazon, claiming your Prime membership will auto-renew for a large sum, or that you're owed a refund. Amazon has said it will never ask you to pay with gift cards or install software to resolve a problem. When in doubt, hang up and go to Amazon directly.
+
+Let's take one last look at the big picture. Prime is one of the most successful subscription programs ever created. For Amazon, the fee is valuable, but the habit the fee creates is even more valuable. Prime keeps you coming back. It keeps sellers paying for fulfillment. It makes you an ideal target for advertising. And it helps power a company whose biggest profits often come from cloud computing and ads, not from the packages on your doorstep.
+
+For you, Prime can be a great deal, or a quiet drain on your budget. The difference comes down to one question: are you using it, or is it using you? Now you have the tools to find out.
+
+A quick reminder: this channel is independent and is not affiliated with, sponsored by, or endorsed by Amazon. Prices, benefits, and policies change, so always check Amazon's official pages for current details.
+
+If this video gave you something to think about, please share it with a friend, a spouse, or a family member who pays for Prime. And if you want more plain-English investigations into where your money really goes, subscribe to the channel and turn on notifications. In our next video, we'll look at who really controls the price you pay on Amazon, from algorithms to a federal antitrust case, and the answer may surprise you. Thanks for watching, and stay smart out there.
