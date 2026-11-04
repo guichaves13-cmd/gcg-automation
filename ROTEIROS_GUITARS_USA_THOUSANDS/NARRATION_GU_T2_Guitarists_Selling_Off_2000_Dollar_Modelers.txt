@@ -1,0 +1,119 @@
+Thousands of guitarists are quietly selling off their two-thousand-dollar modelers in 2026. Not because the units are bad. Most of them are incredible. The Line 6 Helix, the Neural DSP Quad Cortex, the Fractal units. These are some of the most impressive pieces of guitar technology ever made. And yet, if you look at the used listings this year, you'll see more of them for sale than ever, and the people selling them are not leaving digital. They're just leaving the big expensive floor unit behind.
+
+I'm a bench tech, and these days a bench tech sees modelers too. People bring me their rigs, their pedalboards, their floor units with broken footswitches and dead jacks. And over the last year, the conversation has shifted. Players used to ask me which flagship modeler to buy. Now they ask me if they still need one at all.
+
+So today we're doing it the honest way. No sponsors. Nobody sent me a free modeler. I'll count down six real reasons guitarists are selling off their flagship floor units in 2026. Then I'll give the fair side, because these units still have serious strengths. And at the end, a straight verdict: keep it, sell it, or buy one.
+
+Let's start with number six.
+
+Reason number six: the flagship prices kept climbing.
+
+The original Line 6 Helix Floor launched back in 2015, and for years it was the benchmark. Then Line 6 announced the new Helix Stadium line. According to Line 6's launch pricing reported by the gear press, the Helix Stadium XL Floor launched at about two thousand two hundred dollars, twenty-one ninety-nine ninety-nine, and the smaller Helix Stadium Floor at about eighteen hundred dollars, seventeen ninety-nine ninety-nine. The Stadium XL shipped in late 2025, with the smaller unit following in 2026.
+
+The Neural DSP Quad Cortex, depending on when and where you check, has sat in the general range of eighteen to nineteen hundred dollars in the US. And the Fractal Audio flagship units go higher than that.
+
+Now, those prices buy you an enormous amount of technology. But the market around them changed. When a flagship modeler costs about the same as a decent used tube amp plus a couple of pedals, or more than many players spend on their guitar, a lot of people start doing math. And when they do the math, some of them realize they're using a small fraction of what the unit can do.
+
+Reason number five: most players only use a few patches.
+
+This is the dirty secret of modelers, and every tech and every gigging player knows it. These units come with hundreds of amps, cabinets, effects and routing options. But the average player I talk to uses maybe three to five presets. A clean sound, a crunch sound, a lead sound, maybe an ambient patch with a big reverb. That's it.
+
+I've had people bring me a flagship floor unit with a sticky footswitch and, when we power it up, there are maybe four presets they actually use. The rest of the presets are untouched factory sounds. They paid for an entire guitar store of gear and they use a corner of it.
+
+Once players realize that, the question becomes obvious. If I only need a few sounds, why am I carrying a large, heavy, expensive floor unit to every rehearsal? Why not something smaller and cheaper that does exactly what I use?
+
+Reason number four: the small units got good enough.
+
+This is where the market really moved. A few years ago, the small modelers were clearly a step down from the flagships. Today, the gap for the average player in a bedroom, a church, or a bar band is much smaller.
+
+IK Multimedia's ToneX line is a good example. The ToneX One, a tiny pedal-sized unit, made amp capture technology available at a price far below a flagship floor unit. Line 6 has its smaller HX units. And at NAMM 2026, Neural DSP announced the Quad Cortex Mini, a smaller version of the Quad Cortex. A European retail listing put it at around thirteen hundred euros, and US press reports suggested a price somewhere in the thousand-dollar range. Check the manufacturer's site for current pricing before you buy, because those early numbers vary.
+
+When even the flagship makers are building smaller, cheaper versions of their flagships, that tells you something about where the demand is. Players want the sound in a smaller box, at a smaller price. And if a small unit gives you your four favorite sounds at a fraction of the cost and weight, selling the big one starts to make sense.
+
+Reason number three: free and open-source amp modeling changed the conversation.
+
+This is the reason that would have sounded crazy a few years ago. There's a project called Neural Amp Modeler, or NAM, created by Steven Atkinson. It's open source and free to use. It uses machine learning to capture the sound of real amps and pedals, and a huge community of players has shared thousands of captures online. You can run it as a plugin on a computer, and it's also found its way into some hardware.
+
+Then there's Tone3000, a community site for sharing captures, which this year pushed a new model called A2. Their own claim is that A2 outperforms Neural DSP's captures, IK's ToneX and Line 6's Proxy in blind listening tests and measurements. Now, that's the makers' claim, and I'd treat it as a claim until more independent testing is in. But the point is the conversation. When the free and community-driven side of modeling is being openly compared to the flagship hardware, the flagship hardware has a harder time justifying its price.
+
+One writer who owns a Helix Stadium XL put it pretty directly in an article in August 2026: he loves his Stadium XL, but NAM A2 is making it look expensive. That's not someone who hates Line 6. That's someone who bought the flagship and still feels the price pressure. And I think a lot of players feel the same way.
+
+Reason number two: computers, phones, and interfaces are already in the room.
+
+Here's something people forget. A lot of guitarists already own a laptop, a phone or tablet, and an audio interface. For home recording and practice, that setup can run amp sims and captures with very low latency. Plugins from many companies, plus free tools like NAM, can give a home player a huge range of tones without buying dedicated hardware.
+
+So for a home player, the floor modeler starts to look redundant. You record into the computer anyway. You practice with headphones anyway. Why do you need a two-thousand-dollar box sitting in the corner when your computer can do it?
+
+That's why many of the people selling their flagship units aren't gigging players. They're home players who bought the flagship during a gear-buying surge, realized they mostly record and practice at home, and moved to plugins. For them, selling the floor unit frees up a lot of cash with very little loss in tone.
+
+And reason number one: the used market made selling easy, and upgrading cheap.
+
+This is the biggest reason, and it's about money. Because so many of these units were sold over the last decade, the used market for modelers is deep. Sweetwater's used gear exchange and Reverb have plenty of them listed. Used original Helix Floors in the US have been listed starting around nine hundred dollars at Sweetwater's Gear Exchange, and some reviewers suggest eight to nine hundred dollars as a fair used price.
+
+That works in two directions. For the seller, it means there's a buyer. You can sell your flagship modeler, recover a good part of the price, and put that money into a smaller unit, a better guitar, a good tube amp, or just keep it. For the buyer, it means the flagships of a few years ago are now available at a fraction of their original price.
+
+And here's the twist. The flagship of five years ago still sounds great. Firmware updates kept improving those units long after launch. A used original Helix or an earlier Quad Cortex at a used price is one of the best deals in guitar right now. So the people quietly selling their flagships aren't just leaving. They're feeding a used market that makes great tone cheaper for everyone else.
+
+Now let's be fair, because if I stopped here you'd think flagship modelers are a bad buy. They're not.
+
+First, reliability on stage. A flagship floor unit is built to be stomped on, night after night. It has plenty of footswitches, solid jacks, and a big screen you can read on a dark stage. A laptop on a stage is a different story. Laptops crash. Interfaces drop out. A tiny pedal-sized unit doesn't give you the same control. For a working player who gigs every weekend, the flagship's physical build and its stage-friendly design are worth a lot.
+
+Second, the routing and the I/O. Flagship units can handle complex rigs. Multiple outputs, effects loops, four cable method with your amp, MIDI control of other gear, separate signals to front of house and your in-ear monitors. Small units and laptop setups usually can't match that. If you need that flexibility, a flagship is still the right tool.
+
+Third, support and updates. Line 6, Neural DSP and Fractal have long track records of firmware updates that add features and new models for free. That's real value. When you buy a flagship, you're buying years of future improvements, not just what's in the box on day one.
+
+Fourth, the community and the preset ecosystem. These platforms have big user communities, shared presets, and plenty of tutorials. That helps you get good tones quickly, and it helps you fix problems. A brand-new, cheaper option often doesn't have that support yet.
+
+And fifth, a reminder about the claims. When a newer technology claims it beats the flagships, that's a claim, often from the people who make the new thing. Blind tests are useful, but your ears, your guitar, your speakers, and your playing matter more. A flagship modeler that you already know how to use and that sounds good to you is worth more than a theoretically better capture you never dial in.
+
+So here's the verdict.
+
+If you're a gigging player and your flagship unit is the center of your rig, keep it. It's doing exactly what it was designed to do. The reliability, the footswitches, the routing, and the support are worth the money for you. Spend your time learning the unit deeper instead of shopping.
+
+If you're a home player and your flagship unit mostly sits there while you use three presets through headphones, this is a smart time to sell it. Used demand is strong, and you can move to a smaller unit or a plugin setup with very little real loss. Put the money into a better guitar, a professional setup, good studio monitors, or lessons. Those will improve your sound more than another floor unit.
+
+If you're thinking about buying, my honest advice is to buy used, or buy small. A used previous-generation flagship, checked carefully, gives you most of the modern experience at a fraction of the price. Or buy a small capture unit and see if it covers your needs before spending more. Only buy a brand-new flagship at full price if you need the stage features, the I/O, or a specific feature only that unit has.
+
+Modelers aren't going anywhere. Digital is winning, and honestly, it already won for a lot of players. What's changing is the size and the price of the box. Players aren't walking away from digital. They're walking away from paying flagship prices for features they never use.
+
+That's my honest take from the bench. No sponsors, no free guitars, no affiliate links. Tell us in the comments what you paid for yours, new or used, and which unit it is. I want to see how fast these prices are moving.
+
+Now let me go a little deeper, because if you're going to buy or sell, I want you to do it right.
+
+Let's start with how to check a used modeler, since I'm telling you to buy one. The first thing I check is the footswitches. Press every one of them, several times. Most floor modelers use switches that can wear out or get sticky after years of stomping. A sticky or double-triggering switch is often repairable, but it's a cost, so factor it into the price.
+
+Second, the jacks. Plug a cable into every input and output, and wiggle it gently while the unit is on. If you hear crackling or the signal cuts out, the jack may be loose or the solder joint may be cracked. That's a common repair on gear that's been gigged a lot. Again, fixable, but it should come off the price.
+
+Third, the screen and the knobs. Turn every knob and look at the screen in different light. Some units have encoders that skip or jump after heavy use. Some screens get dead pixels or scratches. Neither is a dealbreaker on its own, but you want to know.
+
+Fourth, the firmware and the registration. Ask the seller to update to the latest firmware before you buy, or check it yourself. Make sure the unit can be updated and that there aren't account locks or registration issues. Some companies tie software or extras to an account, so ask the seller to deregister or transfer anything that needs it.
+
+Fifth, the power supply. It sounds obvious, but make sure you get the right power supply. Some units use internal power, some use external adapters, and a wrong adapter can damage gear.
+
+And sixth, the price. Just like with guitars, look at sold listings, not asking prices. Asking prices can be wishful. Sold prices tell you the real market.
+
+Now if you're selling, here's how to get the most money. Reset the unit to factory settings, but back up your presets first so you don't lose your work. Clean it. Take good photos in good light. Include the box and the manual if you have them, because buyers pay more for complete units. Be honest about any issues. A buyer who trusts you will pay more, and you won't have to deal with a return or a bad review.
+
+Let's talk about the small units again, because I don't want you to think small automatically means better. Small units have tradeoffs. Fewer footswitches, smaller screens, fewer outputs, less processing power for complex chains. If you play in a band with lots of song changes, or you need lots of effects at once, a small unit might frustrate you. Try before you buy, or buy from a store with a good return policy.
+
+And let's talk about plugins and laptops, because that's the other big option. For home recording, plugins are fantastic. For live use, a laptop can work, and plenty of professional players use one, but you need a stable setup. A reliable interface, a dedicated laptop that isn't running other software, backups, and a plan for when something goes wrong. If you're not comfortable troubleshooting on a dark stage, a dedicated hardware unit is still the safer choice.
+
+And finally, let's talk about the capture claims one more time. Neural Amp Modeler and the community sites around it have done something remarkable. They've made high-quality amp captures available for free, and they've pushed the whole industry forward. But the quality of a capture depends on the person who made it. A great capture of a great amp sounds great. A sloppy capture sounds sloppy. So don't assume every free capture is better than a flagship preset. Listen, compare, and trust your ears.
+
+Now let's do the real math, because this is where the decision actually gets made.
+
+Say you bought a flagship floor unit new for around eighteen hundred to twenty-two hundred dollars. If it's an older generation flagship, like an original Helix Floor, the used market today is roughly in that eight to nine hundred dollar range, give or take, depending on condition and where you sell. That means the unit has cost you about a thousand dollars over its life. Spread over seven or eight years of use, that's not bad at all. It's actually a very good deal, and it's one of the reasons I don't tell gigging players to panic.
+
+But now look at it from the home player's side. If you bought a newer flagship within the last year or two and you've used it twenty times, the math is different. Every month it sits there, newer and cheaper options keep arriving, and the used price of your unit keeps sliding as more people make the same decision you're thinking about. In the used market, timing matters. The first sellers get the best prices. The last ones compete with everyone else.
+
+Then compare what that money could do somewhere else. A professional setup and fret level on your main guitar is usually a small fraction of a flagship modeler's price, and it changes how the instrument feels every single time you pick it up. A set of decent studio monitors or good headphones changes how every tone sounds, whatever you're running. A few months of lessons can change your playing more than any amp model ever will. I'm a tech, so I'm biased toward setups, but I've seen it again and again: the player who spends money on the guitar and the hands usually sounds better than the player who spends money on another box.
+
+And there's one more option a lot of people overlook: going back to a simple amp. Some of the players selling flagship modelers are buying a small, low-wattage amp and two or three pedals. Not because analog is magic, but because it's simple. You turn it on, you play. No menus, no updates, no presets to manage. For a player who felt overwhelmed by options, that simplicity can be the thing that gets them playing again. I'm not telling you that's better. I'm telling you it's a real choice that people are making, and it's worth considering honestly.
+
+Here's a quick way to decide, and you can do it tonight. Open your modeler and count the presets you've actually used in the last three months. Then ask yourself three questions. Do I play live at least once a month? Do I need more than one output, an effects loop, or MIDI control? Would I miss the big screen and the footswitches on stage? If you answered yes to any of those, keep the flagship. If you answered no to all three, and you're using five presets or fewer, you are exactly the player this video is about, and selling is probably the smart move.
+
+And if you're on the fence, here's the safest path. Buy the small unit or the plugin first. Use it for a month. Rebuild your three to five favorite sounds on it. If you never once reach for the big unit during that month, you have your answer, and you can sell the flagship with no regrets. If you do miss it, you've only spent a little, and you can resell the small unit easily.
+
+Let me leave you with the bench perspective. Last month a customer brought me his flagship modeler because a footswitch was sticking. While I fixed it, we talked about his rig. He said he'd been thinking about selling it, because he only plays at home and only uses a few sounds. I told him exactly what I told you today. If you gig, keep it. If you don't, sell it and put the money into something that will actually make you sound better. He sold it the next week, bought a small capture unit, and used the rest of the money for a good setup on his guitar and some lessons. He came back a month later and told me he's playing more than ever.
+
+That's the real story here. The best rig isn't the most expensive one. It's the one that fits how you actually play. Keep it if you use it, sell it if you don't, and if you're buying, buy used or buy small. See you in the next one.
