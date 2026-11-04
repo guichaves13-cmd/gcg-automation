@@ -94,8 +94,8 @@ Ocupação: 🟢 poucos concorrentes no tema · 🟡 alguns · 🔴 saturado (es
 ### PLAIN COUNTRY LEDGER — 04 — 5 Ohio Road Rules Amish Buggies Must Follow From 2027 — Most Miss #4
 🧬 N2 | 🟢 | Thumb: "BUGGY LAW"
 
-### FARM GATE FILES — 01 — British Farmers Are Getting CRUSHED by the £1 Million Inheritance Tax Line ★
-🧬 B | 🟡 | Thumb: "£1M LINE"
+### FARM GATE FILES — 01 — British Farmers Are Still Getting CRUSHED by the £2.5 Million Inheritance Tax Line ★
+🧬 B | 🟡 | Thumb: "£2.5M LINE"
 ### FARM GATE FILES — 02 — Who Really Makes Supermarket "British" Butter — The Answer May Surprise You
 🧬 E | 🟢 | Thumb: "BRITISH?"
 ### FARM GATE FILES — 03 — Young Farmers Are Quietly Leaving Cornwall for These 5 Scottish Estates
@@ -130,7 +130,7 @@ Ocupação: 🟢 poucos concorrentes no tema · 🟡 alguns · 🔴 saturado (es
 ### COSTCO WATCH — 04 — 6 New Costco Rules Members Must Follow This Holiday Season — Most Miss #4
 🧬 N2 | 🟡 | Thumb: "RULE #4"
 
-### BRITISH HIFI — 01 — These 10 British HiFi Makers Closing Down or Sold Off RIGHT NOW ★
+### BRITISH HIFI — 01 — These 10 British HiFi Makers Sold Off or Shrinking RIGHT NOW ★
 🧬 D | 🟢 | Thumb: "BRITISH? NOT ANYMORE"
 ### BRITISH HIFI — 02 — The Speakers Engineers Keep Recommending Over Bowers & Wilkins
 🧬 F | 🟡 | Thumb: "BETTER THAN B&W?"
