@@ -1,0 +1,101 @@
+It's a Tuesday afternoon in a small repair shop just outside Nashville, Tennessee. On the bench sits a Gibson Les Paul Standard in a sunburst finish, a guitar that sells new for close to three thousand dollars. The owner bought it eight months ago. He says it won't stay in tune. He says the G string goes sharp, then flat, then sharp again, and he has already replaced the strings four times. The tech doesn't plug it in. He doesn't even look at the pickups. He picks it up, tunes the G string, pushes down on the string behind the nut, and listens. There's a tiny sound. A little ping. And he nods, because he has heard that exact sound on hundreds of Gibsons before this one.
+
+Stay with me, because by the end of this video you're going to know exactly what that tech knew in about ten seconds, and you'll be able to check your own guitar for it tonight, at home, with nothing more than a pencil and your ears. And I'm also going to give you a bonus at the end, the second thing techs look at on almost every Gibson that comes across the bench, the one that can cost you hundreds of dollars if you ignore it.
+
+But first, you need to understand why Gibson guitars, specifically, keep landing on repair benches with the same story. Because this isn't about Gibson being a bad company. It's not. Some of the most important guitars ever built came out of their factories. This is about design, wood, tradition, and a few decisions that were made almost a hundred years ago that still shape the guitar you can buy today.
+
+Let's go back to the beginning. Orville Gibson was building mandolins and guitars in Kalamazoo, Michigan, in the late 1800s. The Gibson Mandolin-Guitar Manufacturing Company was formed in 1902, in that same city. For most of the twentieth century, if you owned a Gibson, it came out of Kalamazoo. The Les Paul arrived in 1952. The ES-335 followed in 1958. The Flying V and the Explorer came out around the same time. The SG replaced the original Les Paul body in 1961. Picture that old brick factory on Parsons Street in Kalamazoo, the workers carving mahogany, gluing maple caps, spraying nitrocellulose lacquer by hand. That's the image a lot of people have when they think of Gibson.
+
+In the 1970s, Gibson opened a plant in Nashville, Tennessee, and by the mid-1980s, the Kalamazoo factory was closed. Today, Gibson electric guitars are built in Nashville, and Gibson acoustics are built in Bozeman, Montana. Those are the two cities you need to know. Nashville for the Les Paul, the SG, the 335 family and the rest of the electric line. Bozeman for the J-45, the Hummingbird, the Southern Jumbo and the big acoustic flat-tops.
+
+Now here's where it gets interesting. A lot of the features that make a Gibson feel like a Gibson are the same features that create the work that ends up on the bench. Techs know this. They talk about it among themselves. And once you see it, you can't unsee it.
+
+So let's walk through what techs actually see, one piece at a time. And keep in mind, the one problem I promised you, the one in that Les Paul in Nashville, is coming. But you need to see the whole picture first, because the problem doesn't make sense on its own.
+
+Start with the headstock. Look at any Gibson from the side, a Les Paul, an SG, a Firebird, a J-45, and you'll see the headstock tilts back at a sharp angle. For most of Gibson's history, that angle has been around seventeen degrees. Fender, by comparison, uses a flat headstock with string trees. Gibson's angled headstock gives you strong downward pressure on the nut, which a lot of players believe helps sustain and tone.
+
+But here's the thing every tech knows. That angle is cut from one piece of mahogany, which means the wood grain runs straight along the neck and then the headstock bends away from it. Right behind the nut, there's also a cavity routed out for the truss rod adjustment. So at the exact spot where the grain runs out and the wood is thinnest, there's a hole. If a Les Paul falls backward off a guitar stand, or tips over in its case, or gets knocked off an amp, that is where it breaks. Headstock breaks on Gibsons are so common that many repair shops can tell you how many they glue in a typical month. A clean break can often be glued and reinforced, and it can be repaired well, but it's real work, and it shows up again and again.
+
+So that's the first thing. But it's not the problem on that bench in Nashville. That headstock was fine. Remember that ping? We're getting closer.
+
+Before we go further, I want to hear from you. Drop a comment right now and tell me which Gibson you play, or which one you wish you played. Les Paul, SG, 335, J-45, Explorer, Flying V, or maybe an Epiphone version. I read these, and I'm curious how many of you have already been through what I'm about to describe.
+
+Now let's talk about the fingerboard. Most Gibson electrics use rosewood fingerboards, and higher-end models like the Les Paul Custom have traditionally used ebony. Gibson has, at various points over the years, also used other woods, like richlite on certain models, and baked maple for a period. But rosewood is the classic Gibson fingerboard.
+
+Rosewood is a natural material. It takes on moisture and gives it up depending on the air around it. In a humid summer in Tennessee or Florida, the wood swells a little. In a dry winter in Minnesota or Colorado, with the heat running indoors, the wood gives up moisture and shrinks. The frets, though, are metal. They don't shrink. So when the fingerboard dries out, it gets slightly narrower, and the ends of the frets start sticking out past the edge of the neck. Techs call this fret sprout. You feel it when you slide your hand up the neck and it catches on sharp little metal edges.
+
+Now here's a detail that's very specific to Gibson. On many Gibson models with bound fingerboards, the frets don't run over the binding. Instead, the binding is left a little higher at the end of each fret, forming what people call binding nibs. It's a beautiful, traditional detail, and it takes skill to do. But when the wood shrinks and the binding ages, those nibs can crack, chip, or separate. And when it's time for a refret, a guitar with nibs takes more time and more skill to do correctly, which often means a higher bill at the shop. A full refret on a bound Gibson neck can easily run into the hundreds of dollars depending on where you live.
+
+The fix for most dry-board problems is preventive. Keep the guitar in its case in winter. Use a humidifier pack. Oil the fingerboard lightly with a proper fingerboard conditioner once or twice a year. Simple. But a lot of people don't, especially with a guitar that hangs on a wall all year.
+
+Still not the one problem, though. That Les Paul's frets were fine. So what was the ping?
+
+Let's look at the finish next, because this one surprises people. Gibson has long used nitrocellulose lacquer on most of its American-made guitars. Nitro is thin, it ages beautifully, it yellows a little over time, and it develops fine cracks called checking when the guitar goes through fast temperature changes. Take a Les Paul from a freezing car in Chicago in January straight into a warm club, open the case right away, and you might see those fine lines show up across the top.
+
+There's another nitro issue techs see all the time. Certain rubber and foam materials, like the padding on some cheaper guitar stands and wall hangers, can react chemically with nitrocellulose lacquer. Leave a nitro-finished guitar sitting on the wrong stand for weeks, and you can find the finish has softened, discolored, or even melted where it touched the rubber. The marks are usually on the back of the body or the back of the neck. It's a known, well-documented issue, and it's why Gibson and many stand makers specifically sell nitro-safe stands. Once that finish is damaged, the repair usually means a refinish or a touch-up, and on a vintage-style guitar, that affects value.
+
+So now you've got the headstock, the fingerboard, and the finish. Three things that land Gibsons on the bench. But I promised you one problem that techs see on Gibson after Gibson, so often that they can diagnose it by ear. Let's get to it, because it starts at the smallest part of the guitar.
+
+The nut. That small piece at the top of the fingerboard, where the strings cross over from the neck to the headstock. On a Gibson Les Paul, it's a narrow strip about the size of a stick of gum. Over the decades, Gibson has used nuts made of different materials, including Corian, a synthetic material called Tusq, and on some higher-end and reissue models, bone. And in 2015, Gibson famously fitted many of its guitars with an adjustable brass zero-fret nut, which was controversial, and they moved away from it the next year.
+
+Now, why does the nut matter so much on a Gibson in particular? Go back to that seventeen-degree headstock angle. Because the strings bend so sharply over the nut, they press down hard into the nut slots. And look at the way a Gibson headstock is laid out. Three tuners on each side. The strings don't run straight through the nut. They fan out toward the tuners at an angle. The D string and the G string, in particular, take a sharp turn right after leaving the nut, heading out to their tuners on the side.
+
+If the nut slot isn't cut exactly right, if it's too narrow, or too rough, or the angle of the slot doesn't follow the path the string takes toward the tuner, the string gets pinched. It binds. And when a string binds in the nut, here's what happens. You tune up, and the string gets caught in the slot. The tension on the fingerboard side and the tension on the headstock side aren't equal anymore. Then you bend a note, or you play hard, and the string suddenly slips through the slot. And you hear it. Ping. The note jumps. The string goes sharp or flat.
+
+That's it. That's the sound the tech in Nashville was listening for. The G string pinging in the nut. On Gibsons, it's so common that many techs check it first, before anything else, when someone says their Les Paul won't stay in tune.
+
+And notice it's almost always the G string. Why? Because on a Gibson with three-a-side tuners, the G string has one of the longest and most angled runs from the nut to the tuner post. On a set with a plain G string, which most electric sets use, that string is relatively thick for an unwound string, and it sits in a slot that has to be cut just right. If the slot is a hair too tight or the bottom of the slot is shaped wrong, the plain G is the string that tells on it first.
+
+So many players respond to this by blaming the tuners. They buy new locking tuners for a hundred dollars or more. They blame the strings. They blame the bridge. Some even sell the guitar. And in many cases, the real issue is a groove smaller than a grain of rice, at the very top of the neck.
+
+Now, here's where I want you to pause and think about your own guitar. Does your G string drift? Do you hear a little ping when you bend? Tell me in the comments, which guitar you play and whether it does this. Because I guarantee there are people reading the comments right now who thought they were the only one.
+
+Let's keep going, because there's more to this story, and the bonus I promised is still coming.
+
+Why does this happen so often on Gibsons, if it's such a well-known problem? There are a few reasons, and none of them are secrets in the repair world.
+
+First, nut slot cutting is precise handwork. Even in a modern factory, with computer-controlled machines cutting bodies and necks, the nut is often finished by a person with specialized files. Every slot has to have the right width, the right depth, and the right angle. Do that thousands of times a week in a busy factory in Nashville, and some guitars will leave with slots that are just fine, and some will leave with slots that are a little tight. A slot that is perfect at the factory with one gauge of strings can also start binding when the owner switches to a heavier set. Go from a set of tens to a set of elevens, and suddenly that G string might not fit the slot the same way.
+
+Third, the design itself. Again, the sharp break angle and the three-a-side string path put more pressure on the nut than on a straight-pull, flat-headstock design. That doesn't make the design worse. Many players prefer the feel and sound of a Gibson exactly because of it. But it does make the nut more critical. On a Gibson, the nut is not a small part. It's a big deal.
+
+And this is why, when you hear people say Gibson quality is inconsistent, a lot of what they're actually describing is setup and nut work. Things that a good tech can fix in under an hour, with the right tools and experience. A professional nut job, either recutting the slots or replacing the nut entirely with a well-cut bone nut, typically costs somewhere between about fifty and a few hundred dollars, depending on the shop and the work needed. Compare that to the cost of the guitar itself, and you can see why techs say the nut is the single best upgrade most Gibsons can get.
+
+All right. Now let's talk about what the tech in Nashville actually did with that Les Paul, because there's a smart order to it.
+
+He didn't start by cutting anything. First, he loosened the G string and lifted it out of the slot. He looked at the slot under a light. He saw the slot was a bit narrow for the string, and the walls had a slight polish line, a shiny mark where the string had been rubbing and binding. Then he took a sharpened pencil and rubbed graphite into the slot, a classic shop trick that works as a dry lubricant. He put the string back, tuned it, bent it a few times, and listened. The ping was quieter, but still there. So he knew graphite alone wasn't enough.
+
+Next, he used a nut file sized for that string, and opened the slot just slightly, following the angle the string takes toward the tuner post. Not deeper. That's important. If you file too deep, the string sits too low and buzzes against the first fret. He only widened and smoothed it, rounding the back edge so the string could leave the slot cleanly as it turned toward the tuner. Then graphite again. Retune. Bend. Silence. No ping. The guitar held its tuning through a dozen hard bends.
+
+The owner had replaced strings four times and thought about replacing the tuners. The fix was a few minutes of careful filing in a slot most people never even look at.
+
+It also applies to Epiphone. Gibson bought Epiphone back in 1957, and today Epiphone builds Les Pauls, SGs, and 335-style guitars mostly in factories in Asia, at a fraction of the price of a Nashville-built Gibson. An Epiphone Les Paul Standard can cost a few hundred dollars. Because they share the same basic design, the same angled headstock and the same three-a-side layout, Epiphones can have the very same G string nut binding. Many players who buy an Epiphone and then put a bone nut on it say it's the best money they ever spent on that guitar.
+
+So whether you've got a three-thousand-dollar Les Paul Standard from Nashville or a five-hundred-dollar Epiphone, this matters to you.
+
+Now, the at-home check I promised. Get your guitar and tune it carefully. You'll want a clip-on tuner or a pedal tuner. Here's what to do, step by step.
+
+Step one. Tune your G string to pitch. Then, with one hand, press gently down on the string between the nut and the tuner, on the headstock side. Don't pull hard. Just press down a little. Then let go and check the tuner. If the note jumps, especially if it jumps sharp and stays sharp, the string was hung up in the nut slot.
+
+Step two. Tune the G string again. Now play a note at the fifth fret, and bend it up a whole step, nice and slowly, and let it come back down. Listen carefully close to the nut. Do you hear a little ping, or a tick, as the string comes back? Then check your open G on the tuner again. If it's not where you left it, that's another sign the slot is binding.
+
+Step three. Detune the G string down about a half step, then tune it back up to pitch slowly. Watch the tuner as you approach the note. If the needle jumps in steps instead of moving smoothly, if it sits flat and then suddenly hops sharp, the string is sticking in the slot as tension increases.
+
+If your guitar passes all three tests, great. Your nut is doing its job. If it fails, here's the simplest first step you can do yourself. Take a regular pencil, a soft one is best, loosen the string, lift it out of the slot, and rub the pencil tip into the slot so it leaves graphite behind. Put the string back, retune, and do the three tests again. If it improves, the slot was binding. If it helps but doesn't fully fix it, take it to a qualified tech for proper nut work. Don't start filing your nut yourself unless you know what you're doing and have the right files. A nut that's cut too deep has to be replaced, and that costs more than doing it right the first time.
+
+And now, the bonus. The second thing techs look at on almost every Gibson that crosses the bench, the one that can cost you hundreds if you ignore it.
+
+Go back to the headstock. Remember the break problem we talked about? Here's what a lot of owners don't know. Many headstock cracks don't start as a big dramatic break. They start as a hairline crack in the finish behind the nut, right around the volute area, or just below where the headstock bends back. Sometimes it's just a thin line in the lacquer, easy to mistake for finish checking. But sometimes, it's an actual crack in the wood, usually from a minor knock or a fall that the owner didn't think much about.
+
+So here's the bonus check. Take your guitar into good light. Look at the back of the neck, just behind the nut, where the headstock angles back. Tilt the guitar so the light catches the finish. Look for any line that runs across the neck at an angle, especially one that goes from near the truss rod cover toward the back. Then, very gently, with the strings at pitch, press on the front of the headstock and watch that line. If the line opens up even a tiny bit, stop. That's not just the finish. That's a crack in the wood, and you want a tech to look at it before it turns into a full break. A small crack caught early can often be glued in a much simpler repair than a complete break, which is a big difference in time and cost.
+
+Let's bring it all together, because now you know what that tech in Nashville knew when he heard that ping.
+
+The Gibson Les Paul, the SG, the 335, the J-45 from Bozeman, all of them carry a design tradition that goes back more than a century to Kalamazoo, Michigan. The angled headstock, the three-a-side tuners, the rosewood fingerboards, the binding nibs, the nitrocellulose finish. These are the things that make a Gibson look, sound, and feel the way it does. And they're also the things that create predictable work for repair techs.
+
+But the one problem, the one that shows up so often that techs can hear it before they look, is the G string binding in the nut. It's small. It's cheap to diagnose. It's often affordable to fix. And it's the reason a lot of Gibson owners think their guitar has a tuning problem when it really just needs a well-cut nut.
+
+So tonight, take five minutes. Do the three steps. Press behind the nut. Bend at the fifth fret and listen for the ping. Tune up slowly and watch the needle. Then turn your guitar over and check behind the nut for that hairline line. Two checks, a pencil, and a tuner. That's all it takes to know what every good tech already knows about your Gibson.
+
+And now, I want to hear from you. Comment below which Gibson or Epiphone you play, and tell me whether your G string passed the test. If you've had a headstock break, tell me how it happened and what the repair cost you. Your story might help someone else catch theirs early.
+
+If this was useful, subscribe, because next time we're going inside more of what techs and luthiers see on the bench, the brands they quietly recommend, and the guitars they keep in their own homes. I'll see you in the next one.
