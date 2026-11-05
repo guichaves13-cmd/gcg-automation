@@ -1,0 +1,39 @@
+=== 01 — Qui fabrique vraiment les Squier ? La réponse va surprendre les guitaristes français ===
+🧬 De onde foi modelado: "Who Really Makes [marca]" (PRS SE, Godin — canais de guitarra) · inovação: Squier + público francês, prix en euros · ⚪ VALIDAR
+DESCRIPTION:
+Squier porte le logo Fender, mais l'usine derrière votre guitare raconte une autre histoire. Un technicien guitare sépare ce que Fender confirme de ce que les forums rapportent, et explique ce que ça change pour la jouabilité, le réglage et la revente en France. Non sponsorisé. Prix en euros au moment de l'enregistrement.
+#guitare #squier #fender #guitariste
+THUMB PROMPT 1: Technicien guitare regardant droit vers la caméra, air sceptique, tenant une tête de manche au logo illisible ; carte avec flèche rouge vers l'Asie ; lumière chaude d'atelier, 16:9.
+THUMB PROMPT 2: Guitariste face caméra, sourcils levés, deux guitares étiquetées "250 €" et "1 900 €" ; fond sombre.
+THUMB PROMPT 3: Portrait de face d'un tech, loupe sur les frettes d'une guitare ; éclairage latéral dramatique.
+THUMB TEXT: PAS FENDER ?
+
+=== 02 — Les guitares chinoises que les techs recommandent plutôt qu'une Gibson à 3 000 € ===
+🧬 De onde foi modelado: "The Chinese [produto] Techs Keep Recommending Over a $X [marca]" (Drums USA + Guitars Canada) · inovação: Les Paul chinoises vs Gibson, en euros · ⚪ VALIDAR
+DESCRIPTION:
+Une Gibson Les Paul à 3 000 € vaut-elle vraiment dix fois une chinoise à 300 € ? Contrôles d'établi : frettes, sillet, électronique, collage du manche. Ce qu'on perd, ce qu'on garde, et le verdict par budget. Non sponsorisé.
+#guitare #gibson #lespaul #guitarechinoise
+THUMB PROMPT 1: Tech regardant droit vers la caméra, demi-sourire, entre deux Les Paul étiquetées "300 €" et "3 000 €" ; lumière studio, 16:9.
+THUMB PROMPT 2: Guitariste face caméra, doigt sur les lèvres, guitares sunburst derrière ; lumière bleu/orange.
+THUMB PROMPT 3: Portrait de face, surpris, tenant une guitare chinoise près du visage ; fond sombre.
+THUMB TEXT: 300 € vs 3 000 €
+
+=== 03 — Les luthiers voient le même défaut sur chaque Fender Player — voici ce qu'ils savent ===
+🧬 De onde foi modelado: chaînes de mécanique "Les mécaniciens voient la même panne sur chaque [voiture]" (niche bending) · inovação: insider négatif sur la Fender Player · ⚪ VALIDAR
+DESCRIPTION:
+Bords de frettes qui dépassent en hiver, sillet, réglage d'usine, vibrato : les mêmes défauts reviennent sur l'établi. Ce qui est confirmé, ce qui est rapporté, comment le prévenir et combien ça coûte en France. Non sponsorisé.
+#guitare #fender #fenderplayer #luthier
+THUMB PROMPT 1: Luthier regardant droit vers la caméra, air grave, Stratocaster sur l'établi, doigt sur le bord des frettes ; lumière d'atelier, 16:9.
+THUMB PROMPT 2: Luthier face caméra tenant une lime à frettes ; lueur rouge d'alerte.
+THUMB PROMPT 3: Portrait de face, bras croisés, rangée de guitares avec croix rouges derrière.
+THUMB TEXT: TOUTES. LES. MÊMES.
+
+=== 04 — Pourquoi les luthiers refusent d'acheter des Epiphone d'occasion en 2026 ===
+🧬 De onde foi modelado: "Pourquoi les garagistes refusent d'acheter [voiture] d'occasion" (voiture d'occasion, niche bending) · inovação: contrôle technique d'une Epiphone Leboncoin · ⚪ VALIDAR
+DESCRIPTION:
+Une Epiphone d'occasion à 200 € sur Leboncoin, bonne affaire ou piège ? Tête recollée, frettes usées, contrefaçons, générations d'usines : la checklist d'un luthier et le vrai coût de remise en état. Non sponsorisé.
+#guitare #epiphone #occasion #leboncoin
+THUMB PROMPT 1: Luthier regardant droit vers la caméra, secouant la tête "non", Les Paul avec tête cassée et étiquette "200 €" ; 16:9.
+THUMB PROMPT 2: Luthier face caméra, lampe torche sur une fissure de tête de manche ; lumière de garage.
+THUMB PROMPT 3: Portrait de face, main levée "stop", guitare d'occasion avec croix rouge.
+THUMB TEXT: N'ACHETEZ PAS ÇA

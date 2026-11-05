@@ -1,0 +1,39 @@
+=== 01 — Who Really Makes Zildjian's Cheap Cymbals? The Answer Isn't Massachusetts ===
+🧬 De onde foi modelado: "Who Really Makes [marca]" (Alesis/Ludwig do próprio canal + Who Really Makes PRS SE) · inovação: troca kit por pratos, Zildjian budget vs Norwell MA · ⚪ VALIDAR
+DESCRIPTION:
+Zildjian has made cymbals for four centuries, but the budget lines on the wall of your local shop have a different story. A drum tech separates what Zildjian confirms from what forums only report, explains sheet bronze vs cast B20, and what it means for sound, cracking and resale. Not sponsored. Prices in USD at time of recording.
+#drums #cymbals #zildjian #drummer
+THUMB PROMPT 1: Photorealistic drum tech looking straight into the camera, skeptical expression, holding a gold cymbal with an unreadable logo; behind him a map with a red arrow away from Massachusetts; warm workshop light, high contrast, 16:9.
+THUMB PROMPT 2: Drummer facing the camera head-on, eyebrows raised, two cymbals beside him with price tags "$90" and "$600"; dark background, rim light.
+THUMB PROMPT 3: Close portrait of a tech looking directly at the camera, a cracked cheap cymbal in the foreground, magnifying glass over the bell; dramatic side light.
+THUMB TEXT: NOT MASSACHUSETTS?
+
+=== 02 — The Chinese Cymbals Drum Techs Quietly Recommend Over $600 Zildjian K's ===
+🧬 De onde foi modelado: "The Chinese [produto] Drum Techs Keep Recommending Over a $X [marca]" (snares > Black Beauty, e-kits > Roland do próprio canal) · inovação: categoria pratos + Zildjian K · ⚪ VALIDAR
+DESCRIPTION:
+Is a $600 Zildjian K worth it, or will a hand-hammered Chinese B20 cymbal do the job? A drum tech checks lathing, hammering, keyholes and QC, explains what you lose and what you keep, and gives a verdict by budget. Not sponsored. Prices in USD at time of recording.
+#drums #cymbals #zildjiank #drumgear
+THUMB PROMPT 1: Drum tech looking straight into the camera, confident half-smile, holding a dark hammered cymbal next to a pristine K-style cymbal; price tags "$150 vs $600"; studio light, 16:9.
+THUMB PROMPT 2: Drummer facing the camera, finger to lips ("quiet" gesture), stacks of dark cymbals behind; moody blue/orange light.
+THUMB PROMPT 3: Front-facing portrait of a tech, surprised, cymbal held up beside face showing hammer marks; dark background.
+THUMB TEXT: $150 vs $600
+
+=== 03 — Repair Techs Keep Seeing the Same Problem in Every Roland V-Drums Kit ===
+🧬 De onde foi modelado: canais de mecânica "Mechanics Keep Seeing the Same Problem in Every [carro]" (niche bending) + DNA e-kits do canal · inovação: insider negativo, defeito recorrente · ⚪ VALIDAR
+DESCRIPTION:
+Mesh heads, crosstalk, hi-hat calibration, worn jacks: the same faults keep showing up on electronic kits that land on a repair bench. What's confirmed, what's only reported, how to prevent it, and when to repair versus replace. Not sponsored.
+#electronicdrums #roland #vdrums #drumtech
+THUMB PROMPT 1: Repair tech looking straight into the camera, serious expression, opened drum module with exposed circuit board on the bench, soldering iron smoke; 16:9.
+THUMB PROMPT 2: Tech facing the camera holding a torn mesh head up next to his face; red warning glow.
+THUMB PROMPT 3: Front-facing portrait, arms crossed, a pile of electronic drum pads with red X marks behind.
+THUMB TEXT: EVERY. SINGLE. ONE.
+
+=== 04 — Why Drum Repair Techs Refuse to Buy Used Pearl Export Kits Anymore ===
+🧬 De onde foi modelado: "Why Mechanics Refuse to Buy Used [carro]" (mecânica/carro usado, niche bending) · inovação: inspeção de kit usado como inspeção de carro · ⚪ VALIDAR
+DESCRIPTION:
+A cheap used Export looks like a deal until you check the lugs, bearing edges, hardware and shell roundness. A drum tech walks through the real restoration cost, the generations to look for, and a used-kit inspection checklist. Not sponsored. Prices in USD.
+#drums #pearlexport #useddrums #drumtech
+THUMB PROMPT 1: Drum tech looking straight into the camera, shaking head "no", rusty old drum kit behind with a "FOR SALE $200" sign; 16:9.
+THUMB PROMPT 2: Tech facing the camera holding a stripped lug and a flashlight; garage light, gritty.
+THUMB PROMPT 3: Front portrait, raised hand stop gesture, used kit with red X; high contrast.
+THUMB TEXT: DON'T BUY IT
