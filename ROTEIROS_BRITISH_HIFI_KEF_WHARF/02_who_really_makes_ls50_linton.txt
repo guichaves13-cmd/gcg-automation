@@ -63,7 +63,7 @@ Now Wharfedale. And this one surprises more people.
 
 Wharfedale went through several owners in the second half of the twentieth century. At one point it was part of the Rank Organisation — yes, the film company. Later it became part of the Verity Group in Britain, alongside other names like Mission and Quad.
 
-Then, in the mid-2000s, the Wharfedale brand and its sister brands ended up as part of the International Audio Group, IAG. IAG is a Chinese-owned group, and it's huge. It also controls Quad, Mission, Audiolab, Castle and Luxman's distribution in some regions. So a whole family of names that British audiophiles think of as "proper British hi-fi" sits under the same roof.
+Then, in the mid-2000s, the Wharfedale brand and its sister brands ended up as part of the International Audio Group, IAG. IAG is a Chinese-owned group, and it's huge. It also owns Quad, Mission, Audiolab and Castle. So a whole family of names that British audiophiles think of as "proper British hi-fi" sits under the same roof.
 
 And IAG doesn't just own the brands. It owns the factories. IAG has its own large manufacturing operation in Shenzhen, in southern China. That's where most Wharfedale speakers — the Diamonds, the Evos, and yes, the Linton — are built.
 
@@ -114,6 +114,54 @@ The first is longevity. A passive speaker like the Linton can be repaired by alm
 An active wireless speaker like the LS50 Wireless is different. If the electronics fail out of warranty, you're relying on the manufacturer having spare boards, and on the software being supported. That's not a criticism of KEF specifically — it's true of every wireless speaker from every brand.
 
 The second place it matters is value. Part of what you pay for with a British heritage brand is the story. And if the story is only partly true, then part of what you're paying for is, well, a feeling.
+
+[SECTION 7B — WHY THE LS50 EXISTS AT ALL]
+
+There's a piece of this story I think most people miss, and it makes the "who really makes it" question even more interesting.
+
+The original LS50 — the passive one, before the wireless version — was launched in 2012 for KEF's fiftieth anniversary. And it was designed as a tribute. A tribute to the LS3/5a, the little BBC monitor from the 1970s.
+
+The LS3/5a is the holy grail of British hi-fi. It was designed by the BBC's own engineers for checking sound in outside broadcast vans. Tiny box, honest sound, especially brilliant with voices. And inside the original, the drivers were made by KEF, in Britain.
+
+So when KEF launched the LS50, the whole idea was: here's the spirit of the BBC monitor, reborn with modern technology. The name even nods to it.
+
+Think about that for a second. A speaker built to celebrate a British broadcasting legend, whose drivers were made in Kent — and the tribute version is built in China, by a company owned from Hong Kong, and the wireless edition depends on software and chips from all over the world.
+
+That, to me, is the perfect picture of what British hi-fi has become. The idea is British. The memory is British. The engineering intent is British. Almost everything else is global.
+
+And again — I'm not saying that's wrong. I'm saying it's worth knowing.
+
+[SECTION 7C — WHAT A MODERN SPEAKER FACTORY ACTUALLY LOOKS LIKE]
+
+When people hear "made in China", a lot of them still picture something from the 1990s. Cheap plastic, rushed assembly, no checks.
+
+That isn't what a serious speaker factory looks like in 2026.
+
+A modern speaker plant is closer to a laboratory than a workshop. Cabinets are cut by computer-controlled machines to fractions of a millimetre. Drivers are measured individually and matched in pairs, so the left and right speakers sound as close to identical as possible. There are anechoic chambers — rooms with no echo at all — where finished speakers are tested against a reference. Electronics are checked by automated systems before they go anywhere near a box.
+
+Many of the people working there are highly trained. Some of the engineers have worked on speakers for multiple world-famous brands. And that's the uncomfortable bit for British pride. In a lot of cases, the manufacturing expertise for "British" speakers now genuinely lives in southern China. Not because anyone wanted it there, but because that's where the investment went over the last thirty years.
+
+When I talk to people in the trade, they'll often say the same thing quietly: the factories in China are better equipped than most British factories ever were.
+
+So the question isn't really "is it built well?" It usually is. The question is "what am I paying the premium for?" And that brings us back to the story.
+
+[SECTION 7D — A QUICK BUYER'S CHECKLIST]
+
+Before we get to the final verdict, let me give you a quick checklist. Screenshot this if you're shopping.
+
+If you're buying an LS50 Wireless, new or used:
+One — check which generation it is. The second generation is newer and has better streaming support.
+Two — if it's used, ask the seller to show you the app working, on video, before you travel.
+Three — ask whether it's had firmware updates, and whether there have ever been connection drop-outs.
+Four — check the warranty status. With active speakers, warranty is worth real money.
+
+If you're buying a Linton:
+One — check the stands are included, because they're part of the sound and the look.
+Two — check the veneer for knocks. Real wood looks lovely, but it shows damage.
+Three — remember they're heavy. Bring a friend, and a car with room.
+Four — and this is the big one — budget for a decent amplifier. The Linton rewards a good one.
+
+And for both: look at the label. Know what you're buying. Then decide if it's worth it to you.
 
 [SECTION 8 — THE REAL "BRITISH" SPEAKER TEST]
 
