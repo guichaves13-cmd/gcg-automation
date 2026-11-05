@@ -37,3 +37,30 @@ Regras: números entre 5 e 12; ano 2026 ou 2027 no título; sempre um parêntese
 
 ## 3. Por canal
 
+| Canal | # | Título | len |
+|---|---|---|---|
+| AMAZON_COSTCO_WATCH | 01 | Amazon Returns Just Hit a BREAKING POINT — New Rules Are Catching Millions of Seniors Out | 89 |
+| AMAZON_COSTCO_WATCH | 02 | Costco Shelves Are FULL of These 10 Items — Nobody Wants Them Anymore (Shocking Markdowns) | 90 |
+| BRITISH_HIFI | 01 | 12 Hi-Fi Boxes That Lost Up to 80% of Their Value in the UK — Nobody Wants Them Now | 83 |
+| BRITISH_HIFI | 02 | 7 Dirt-Cheap British Amps Everyone Ignores in the UK (These Are Absolute Goldmines) | 83 |
+| CARAVANS_AU | 01 | Dealer Yards Are FULL of These 10 Caravans in Australia — Nobody Wants Them in 2026 | 83 |
+| CARAVANS_AU | 02 | Never Buy These 7 Used Caravans in Australia (A 2027 Warning for Grey Nomads) | 77 |
+| DRUMS_USA | 01 | Drum Shops Are FULL of These 10 Kits in 2026 — Nobody Wants Them (Shocking Reasons) | 83 |
+| DRUMS_USA | 02 | Drummers CAN'T AFFORD Cymbals Anymore in 2026 — And It's Getting Ugly! | 70 |
+| GITARREN_DE | 01 | 8 Edel-Gitarren, die bis zu 60 % verloren haben – und 2026 will sie KEINER mehr | 79 |
+| GITARREN_DE | 02 | Kauf diese 7 gebrauchten Gitarren NIEMALS (Eine Warnung für 2027) | 65 |
+| GUITARES_FR | 01 | 9 Guitares Qui Ont Perdu Jusqu'à 60 % de Leur Valeur — Personne N'en Veut sur Leboncoin | 87 |
+| GUITARES_FR | 02 | Les Guitaristes Français N'ont PLUS les Moyens de Jouer — Et Ça Devient Grave | 77 |
+| GUITARS_AUSTRALIA | 01 | 9 Guitars Rotting on Aussie Shop Walls — Nobody Wants Them in 2026 (Shocking Prices) | 84 |
+| GUITARS_AUSTRALIA | 02 | 7 Dirt-Cheap Guitars Aussies Ignore (But These Are Absolute Goldmines) | 70 |
+| GUITARS_CANADA | 01 | 12 Used Guitars Rotting on Canadian Shop Walls in 2026 — Nobody Wants Them (Shocking Prices) | 92 |
+| GUITARS_CANADA | 02 | Canadians CAN'T AFFORD Guitars Anymore — The 2026 Gear Market Is Getting Ugly | 77 |
+| GUITARS_USA | 01 | Music Stores Are FULL of These 10 Guitars Nobody Wants in 2026 (Shocking Numbers) | 81 |
+| GUITARS_USA | 02 | 7 Dirt-Cheap Acoustic Guitars Everyone Ignores (But They're Absolute Goldmines) | 79 |
+| PARK_HOME_UK_PENSIONERS | 01 | Park Homes Just Hit a BREAKING POINT in the UK — And It's Getting Ugly for Pensioners | 85 |
+| PARK_HOME_UK_PENSIONERS | 02 | New 2027 Rules Are Catching Millions of UK Pensioners Out — Here's WHY (Number One Hurts) | 89 |
+| SNOWBIRD_RV | 01 | RV Dealer Lots Are FULL of These 10 Rigs — Nobody Wants Them in 2026 (Shocking Numbers) | 87 |
+| SNOWBIRD_RV | 02 | 7 Dirt-Cheap Used RVs Retirees Ignore (But These Are Absolute Goldmines) | 72 |
+
+**Validação:** youtube.com bloqueado na sessão (DNS) → demanda apoiada em views dos moldes de carros + notícias/dados de mercado; ocupação no YouTube NÃO verificada. Checar busca no YouTube antes de publicar. Sujeitos conferidos contra todos os `ROTEIROS_*` (sem repetição).
+**Atenção:** ângulo "FULL / Nobody Wants" usado em 5 canais e "Dirt-Cheap Goldmines" em 4 — escalonar publicação. Roteiros ~3.300–3.400 palavras.
