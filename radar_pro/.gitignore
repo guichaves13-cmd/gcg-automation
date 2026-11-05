@@ -5,3 +5,5 @@ radar.db-wal
 radar.db-shm
 *.tmp
 # radar.db É versionado (snapshot pronto com os canais mapeados)
+cache_em_alta/
+!tests/test_*.py

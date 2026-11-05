@@ -12,6 +12,9 @@ Endpoints:
   GET  /api/similar/<id>?live= -> canais similares (banco ou ao vivo)
   POST /api/favorite           -> marca/desmarca favorito
   POST /api/crawl              -> dispara varredura (SSE de log)
+  GET  /em-alta                -> aba 🔥 Em alta agora (24 h / 2-3 d / 4-6 d)
+  GET  /api/em_alta            -> último scan + canais monitorados
+  POST /api/em_alta/scan       -> roda o scan (yt-dlp primeiro, API só completa)
 ================================================================================
 """
 import json
@@ -22,6 +25,7 @@ import sys
 from flask import Flask, Response, jsonify, render_template, request
 
 import db
+import em_alta
 import scoring
 import similar as similar_mod
 
@@ -363,6 +367,51 @@ def api_crawl():
             line = line.rstrip()
             if line:
                 yield f"data: {json.dumps({'text': line})}\n\n"
+        p.wait()
+        yield f"data: {json.dumps({'text': '__DONE__'})}\n\n"
+
+    return Response(gen(), mimetype="text/event-stream")
+
+
+# ------------------------------------------------------------------ 🔥 Em alta agora
+@app.route("/em-alta")
+def em_alta_page():
+    return render_template("em_alta.html")
+
+
+@app.route("/api/em_alta")
+def api_em_alta():
+    res = em_alta.load_last_scan() or {"ts": None, "total": 0, "windows": {}, "novos": []}
+    nicho = request.args.get("nicho")
+    only_out = request.args.get("outliers") == "1"
+    for k, vids in list(res.get("windows", {}).items()):
+        res["windows"][k] = [v for v in vids if (not nicho or v.get("nicho") == nicho)
+                             and (not only_out or v.get("outlier"))]
+    con = db.connect()
+    res["monitored"] = em_alta.list_monitored(con)
+    con.close()
+    nichos, _cfg = em_alta.load_nichos()
+    res["nichos"] = [{"key": n["key"], "label": n.get("label", n["key"]),
+                      "adjacente": bool(n.get("adjacente"))} for n in nichos]
+    res["window_labels"] = [[k, lbl] for k, lbl, *_ in em_alta.WINDOWS]
+    return jsonify(res)
+
+
+@app.route("/api/em_alta/scan", methods=["POST"])
+def api_em_alta_scan():
+    data = request.json or {}
+    cmd = [sys.executable or "python", os.path.join(HERE, "em_alta.py"), "scan"]
+    if data.get("no_api"):
+        cmd.append("--no-api")
+
+    def gen():
+        env = os.environ.copy()
+        env["PYTHONIOENCODING"] = "utf-8"
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                             text=True, cwd=HERE, encoding="utf-8", env=env)
+        for line in iter(p.stdout.readline, ""):
+            if line.strip():
+                yield f"data: {json.dumps({'text': line.rstrip()})}\n\n"
         p.wait()
         yield f"data: {json.dumps({'text': '__DONE__'})}\n\n"
 

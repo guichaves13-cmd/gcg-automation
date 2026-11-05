@@ -79,3 +79,24 @@ Persistido no banco (`collections` + `collection_items`). Endpoints `/api/collec
 
 ## Extras que o Radar Club NÃO tem
 ⚡ **VPH** (por vídeo/hit/médio) · 🔗 **Canais similares** · 📊 **Raio-X do nicho**.
+
+---
+
+## 🔥 Em alta agora (alta extrema: 24 h · 2-3 d · 4-6 d)
+Botão **🔥 Em alta agora** no topo (ou http://127.0.0.1:5051/em-alta).
+- Varre os nichos de **`nichos_em_alta.json`** (guitarra, bateria, hi-fi UK, caravans AU, aposentados UK,
+  snowbird/RV, Amazon/Costco, rural, moda 60+ e adjacentes: carros UK/EUA, custo de vida, marcas colapsando,
+  luxo/relógios, imóveis/mudança). Edite o JSON para mudar nichos, queries e limiares.
+- Ranqueia por **VPH** por janela; 🚨 = outlier (VPH ≥ 3× a mediana do canal, ou da busca do nicho).
+- **Cota mínima:** yt-dlp primeiro (busca "esta semana", zero cota) → API só `videos.list` para completar
+  (1 unidade/50 vídeos, nunca `search`) → cache em `cache_em_alta/` (6 h).
+- **Canais monitorados** (tabela `monitored_channels`): auto-adiciona canal com ≤40 vídeos e VPH ≥2000;
+  marca 🧊 "esfriou" após 7 dias sem pico.
+- Exporta `ESTRATEGIAS_PAINEIS/radar/EM_ALTA_HOJE.md` (Top 24 h, Top 2-3 d, canais novos explodindo).
+
+```bash
+python em_alta.py scan            # diário (rotina na nuvem): scan + canais + MD
+python em_alta.py scan --no-api   # cota zero
+python em_alta.py export          # reexporta o MD do último scan
+python -m unittest discover -s tests
+```

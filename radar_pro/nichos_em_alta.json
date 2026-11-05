@@ -1,0 +1,27 @@
+{
+  "_doc": "Nichos varridos pelo '🔥 Em alta agora'. Edite à vontade: cada nicho tem label + queries (buscas no YouTube). 'adjacente': true marca nichos vizinhos.",
+  "nichos": [
+    {"key": "guitarra", "label": "🎸 Guitarra", "queries": ["guitar gear", "vintage guitar story", "guitar legend"]},
+    {"key": "bateria", "label": "🥁 Bateria", "queries": ["drummer story", "drum kit history", "greatest drummers"]},
+    {"key": "hifi_uk", "label": "🔊 Hi-fi UK", "queries": ["hi-fi audio uk", "vintage hifi", "british speakers"]},
+    {"key": "caravans_au", "label": "🚐 Caravans AU", "queries": ["caravan australia", "grey nomads", "caravan park australia"]},
+    {"key": "aposentados_uk", "label": "👴 Aposentados UK", "queries": ["uk pensioners", "state pension uk", "retirement uk"]},
+    {"key": "snowbird_rv", "label": "🏕️ Snowbird / RV", "queries": ["snowbird rv", "rv living", "full time rv"]},
+    {"key": "amazon_costco", "label": "🛒 Amazon / Costco", "queries": ["costco finds", "amazon must haves", "costco deals"]},
+    {"key": "rural", "label": "🌾 Rural", "queries": ["rural life", "homestead", "small town america"]},
+    {"key": "moda_60", "label": "👗 Moda 60+", "queries": ["fashion over 60", "style over 60", "older women fashion"]},
+    {"key": "carros_uk_eua", "label": "🚗 Carros UK/EUA", "adjacente": true, "queries": ["car buying uk", "car dealer usa", "worst cars"]},
+    {"key": "custo_vida", "label": "💸 Custo de vida", "adjacente": true, "queries": ["cost of living crisis", "prices rising", "grocery prices"]},
+    {"key": "marcas_colapso", "label": "📉 Marcas colapsando", "adjacente": true, "queries": ["brand collapse", "store closing", "company bankrupt"]},
+    {"key": "luxo_relogios", "label": "⌚ Luxo / Relógios", "adjacente": true, "queries": ["luxury watches", "rolex market", "luxury brand"]},
+    {"key": "imoveis_mudanca", "label": "🏠 Imóveis / Mudança de país", "adjacente": true, "queries": ["moving abroad", "housing market", "leaving the uk"]}
+  ],
+  "config": {
+    "por_query": 25,
+    "outlier_mult": 3.0,
+    "cache_horas": 6,
+    "auto_add_max_videos": 40,
+    "auto_add_min_vph": 2000,
+    "esfriou_dias": 7
+  }
+}

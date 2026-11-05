@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Radar Pro — Em alta agora</title>
+<style>
+:root{--bg:#0d0f13;--card:#181b22;--card2:#1f2430;--line:#282e39;--txt:#e8eaed;--mut:#8b94a3;
+--accent:#ff4d2e;--green:#30d158;--amber:#ffb020;--brand:#7c5cff;--brand2:#22d3ee}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 -apple-system,Segoe UI,Roboto,Arial,sans-serif}
+a{color:inherit;text-decoration:none}
+.wrap{max-width:1400px;margin:0 auto;padding:18px 20px 80px}
+.top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:14px}
+h1{font-size:20px;margin:0}.mut{color:var(--mut);font-size:12px}
+.btn{background:var(--card2);border:1px solid var(--line);color:var(--txt);border-radius:9px;padding:8px 14px;font-size:13px;cursor:pointer;font-weight:600}
+.btn.pri{background:linear-gradient(135deg,var(--brand),var(--brand2));border-color:transparent;color:#fff}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0 8px}
+.tab{background:var(--card);border:1px solid var(--line);color:var(--mut);border-radius:11px;padding:8px 14px;cursor:pointer;font-weight:600}
+.tab.on{background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;border-color:transparent}
+select,label{background:var(--card);border:1px solid var(--line);color:var(--txt);border-radius:9px;padding:7px 10px;font-size:13px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-top:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.card.out{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.card img{width:100%;aspect-ratio:16/9;object-fit:cover;display:block}
+.card .b{padding:10px 12px}.card .t{font-weight:600;font-size:13px;margin-bottom:6px}
+.vph{font-size:20px;font-weight:800;color:var(--amber)}.tag{background:var(--accent);color:#fff;border-radius:6px;padding:1px 7px;font-size:11px;font-weight:700;margin-left:6px}
+table{width:100%;border-collapse:collapse;margin-top:10px}td,th{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;font-size:13px}
+.esfriou{opacity:.5}
+#log{white-space:pre-wrap;font:12px monospace;color:var(--mut);max-height:200px;overflow:auto}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <a class="btn" href="/">← Radar</a>
+    <h1>🔥 Em alta agora</h1>
+    <span class="mut" id="meta"></span>
+    <span style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
+      <select id="nicho" onchange="load()"><option value="">Todos os nichos</option></select>
+      <label><input type="checkbox" id="outliers" onchange="load()"> só outliers (≥3×)</label>
+      <button class="btn" onclick="scan(true)" title="cota zero">↻ Scan (só yt-dlp)</button>
+      <button class="btn pri" onclick="scan(false)">↻ Scan + completar via API</button>
+    </span>
+  </div>
+  <div id="log"></div>
+  <div class="tabs" id="tabs"></div>
+  <div class="grid" id="grid"></div>
+  <h2 style="margin-top:30px">📡 Canais monitorados</h2>
+  <div class="mut">Auto-adicionados quando entram e viralizam (poucos vídeos + VPH alto). Esmaecidos = esfriaram.</div>
+  <table id="mon"></table>
+</div>
+<script>
+let WIN="24h",DATA=null,NICHOS_OK=false;
+const $=id=>document.getElementById(id);
+const fmt=n=>{n=+n||0;if(n>=1e6)return(n/1e6).toFixed(1)+"M";if(n>=1e3)return(n/1e3).toFixed(1)+"K";return""+Math.round(n)};
+const esc=s=>(s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+async function load(){
+  const p=new URLSearchParams();
+  if($("nicho").value)p.set("nicho",$("nicho").value);
+  if($("outliers").checked)p.set("outliers","1");
+  DATA=await(await fetch("/api/em_alta?"+p)).json();
+  if(!NICHOS_OK){$("nicho").innerHTML+=DATA.nichos.map(n=>`<option value="${n.key}">${esc(n.label)}${n.adjacente?" (adj.)":""}</option>`).join("");NICHOS_OK=true;}
+  $("meta").textContent=DATA.ts?`último scan ${DATA.ts} · ${DATA.total} vídeos · API ${DATA.api_units||0} un.`:"nenhum scan ainda — clique em Scan";
+  render();
+}
+function render(){
+  $("tabs").innerHTML=DATA.window_labels.map(([k,l])=>`<div class="tab ${k===WIN?'on':''}" onclick="WIN='${k}';render()">${l} (${(DATA.windows[k]||[]).length})</div>`).join("");
+  $("grid").innerHTML=(DATA.windows[WIN]||[]).map(v=>`<a class="card ${v.outlier?'out':''}" href="https://youtu.be/${v.video_id}" target="_blank">
+    <img src="${v.thumb}" loading="lazy"><div class="b"><div class="t">${esc(v.title)}</div>
+    <span class="vph">${fmt(v.vph)} VPH</span>${v.outlier?`<span class="tag">🚨 ${v.outlier_x}×</span>`:""}
+    <div class="mut">${fmt(v.views)} views · ${Math.round(v.hours)} h · ${esc(v.channel)}<br>${esc(v.nicho_label)}</div></div></a>`).join("")||'<div class="mut">Nada nesta janela.</div>';
+  $("mon").innerHTML="<tr><th>Canal</th><th>Nicho</th><th>Vídeos</th><th>Melhor VPH</th><th>Status</th><th>Último pico</th></tr>"+
+    DATA.monitored.map(c=>`<tr class="${c.status}"><td><a href="https://youtube.com/channel/${c.channel_id}" target="_blank">${esc(c.name)}</a></td><td>${esc(c.nicho)}</td><td>${c.video_count??"?"}</td><td>${fmt(c.best_vph)}</td><td>${c.status==="quente"?"🔥 quente":"🧊 esfriou"}</td><td>${(c.last_hot||"").slice(0,10)}</td></tr>`).join("");
+}
+function scan(noApi){
+  $("log").textContent="";
+  fetch("/api/em_alta/scan",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({no_api:noApi})}).then(async r=>{
+    const rd=r.body.getReader(),dec=new TextDecoder();let buf="";
+    while(true){const{done,value}=await rd.read();if(done)break;buf+=dec.decode(value,{stream:true});
+      const parts=buf.split("\n\n");buf=parts.pop();
+      for(const p of parts){const t=JSON.parse(p.slice(6)).text;if(t==="__DONE__"){load();}else{$("log").textContent+=t+"\n";}}}
+  });
+}
+load();
+</script>
+</body>
+</html>
