@@ -1,0 +1,29 @@
+=== 01 — 9 Guitares Qui Ont Perdu Jusqu'à 60 % de Leur Valeur — Personne N'en Veut sur Leboncoin ===
+🧬 Modeled on "12 Luxury Cars That Lost Up to 80% of Their Value in the UK — Nobody Wants Them Now" (7,1K) + Leboncoin saturé d'annonces guitares qui traînent; guides revente 2026 parlent de décote, peu de vidéos FR sur ce classement
+DESCRIPTION
+Certaines guitares perdent la moitié de leur valeur dès la sortie du magasin et finissent par traîner des mois sur Leboncoin. Voici les 9 profils de guitares qui fondent le plus sur le marché de l'occasion en France, et le numéro un va vous surprendre. À la fin, 5 règles simples pour ne plus perdre d'argent.
+Quelle guitare avez-vous revendue en perdant plus de la moitié de son prix ?
+#guitare #leboncoin #guitareoccasion
+
+THUMB PROMPTS
+1. Photorealistic French guitarist in his 40s holding an electric guitar with a red "-60%" price tag hanging from the headstock, worried expression, looking straight into the camera, cluttered used-gear shop background, 16:9.
+2. Photorealistic man sitting on a sofa holding a smartphone showing a classified ad, a sunburst guitar beside him, frustrated face, facing the camera, warm living room light, 16:9.
+3. Photorealistic wall of used guitars with price tags slashed in red marker, a shop owner in front with arms crossed looking directly at the camera, dramatic lighting, 16:9.
+
+THUMB TEXT
+PERSONNE N'EN VEUT
+
+=== 02 — Les Guitaristes Français N'ont PLUS les Moyens de Jouer — Et Ça Devient Grave ===
+🧬 Modeled on "Brits CAN'T AFFORD Their Cars Anymore — It's Getting Ugly!" (5,1K / 1d) + hausse des prix guitares/cordes/réglages et ventes "cause besoin d'argent" sur Leboncoin; angle "pouvoir d'achat du guitariste" quasi absent en FR
+DESCRIPTION
+Guitares neuves, cordes, luthier, locaux de répétition, cours : jouer de la guitare en France coûte de plus en plus cher. Voici les 7 signes que la guitare devient un loisir de privilégiés, et le numéro un menace toute la prochaine génération. À la fin, des solutions concrètes pour continuer à jouer sans se ruiner.
+Qu'avez-vous arrêté de payer pour votre guitare à cause des prix ?
+#guitare #guitariste #musique
+
+THUMB PROMPTS
+1. Photorealistic tired French guitarist in his 30s holding an empty wallet next to his acoustic guitar, looking straight into the camera, dim apartment light, 16:9.
+2. Photorealistic teenager holding a cheap guitar with a "VENDU" sign, sad expression, facing the camera, bedroom background, 16:9.
+3. Photorealistic rehearsal studio with a closed sign on the door, a bassist and guitarist standing in front, looking directly at the camera, gritty urban light, 16:9.
+
+THUMB TEXT
+PLUS LES MOYENS
