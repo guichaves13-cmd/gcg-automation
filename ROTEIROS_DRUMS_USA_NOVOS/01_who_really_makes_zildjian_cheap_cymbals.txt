@@ -1,0 +1,103 @@
+There is a cymbal sitting on my bench right now with a logo that most American drummers have seen their whole lives. The block letters, the little Turkish script, the name that goes back four centuries. Zildjian. And when you see that name, your brain probably goes straight to one place. Norwell, Massachusetts. The big foundry south of Boston. Molten bronze, rotary lathes, guys in leather aprons hammering away. That is the picture the brand has built, and for a lot of their cymbals that picture is real. But this cymbal on my bench cost a fraction of what a K Custom costs. It came out of a box set. And the question I want to answer today is simple. Who really makes Zildjian's cheap cymbals? Because the honest answer is that it is not always Massachusetts, it is not always the same alloy, and it is definitely not always made the way the marketing photos make you imagine.
+
+So that is what we are doing today. We are going to walk through the budget and entry level Zildjian lines, the ones most of us actually bought first. Planet Z, the ZBT series, the I Family, and the S Family. And for each one I am going to separate what Zildjian itself confirms from what dealers, forums, and the occasional teardown only report. Then I am going to tell you what any of it actually changes for you. For the sound, for the risk of cracking, and for what you get back when you sell.
+
+Quick note before we start. This video is not sponsored. Zildjian did not send me anything, and neither did Sabian or Meinl, which we will also talk about. Prices are in US dollars and they move constantly, so treat any number I say as a rough ballpark at the time of recording. And please, as always, listen to a cymbal before you buy it. Two cymbals from the same line can sound different, and that is even more true at the cheap end.
+
+Let's start with the company, because you cannot understand the budget lines without understanding why they exist.
+
+Zildjian is one of the oldest family businesses in the world. The company traces its roots back to Constantinople in the sixteen hundreds, and the American operation has been in the Boston area for about a century. Today the headquarters and the main manufacturing are in Norwell, Massachusetts. That part is confirmed, it is public, and it is printed all over their own materials. The A series, the A Customs, the K series, the K Customs, a lot of their professional cast bronze cymbals, those are associated with the Norwell factory.
+
+And here is the key word. Cast. When people talk about professional cymbals, they usually mean cast bronze. You melt copper and tin together, you pour it, you get a casting, and then you roll it, heat it, roll it again, press it into shape, hammer it, lathe it. It is a slow, labor heavy process, and the alloy most often used for that is called B twenty. Roughly eighty percent copper, twenty percent tin, plus a tiny trace of silver in Zildjian's case, according to the company's own descriptions over the years. That B twenty cast process is the reason a pro ride can cost three, four, five hundred dollars or more.
+
+Now, the problem for any cymbal company is that a twelve year old kid who just got a drum kit for Christmas is not going to spend two thousand dollars on a set of cymbals. Neither is a church volunteer, a school band program, or a guy who just wants to play along with records in his garage. So every major cymbal brand has the same problem, and they all solved it in a similar way. They built cheaper lines. And to make those lines cheaper, you have three levers you can pull. You can change the alloy. You can change the process. Or you can change where it is made. Sometimes you pull all three.
+
+So let's go through the lines one by one, starting at the very bottom.
+
+Planet Z.
+
+Planet Z is the cheapest Zildjian most people will ever touch. It typically showed up in box sets, sometimes bundled with entry level drum kits, often at a price for a full pack that was less than what a single A Custom crash costs. When I first got into repair work, Planet Z was everywhere. Pawn shops, school band rooms, the back of every used kit on the local marketplace.
+
+What is the alloy? Planet Z is not B twenty, and as far as I know it is not even B eight in the classic sense. It has generally been described as a brass type alloy, which is a copper and zinc blend instead of copper and tin. Zildjian's own descriptions over time have been fairly vague about the exact metal, using words like brass or bronze in marketing copy depending on the year, so I am going to be careful here. What I can tell you from the bench is that Planet Z cymbals look, feel, and sound like what most techs would call a sheet brass entry cymbal. Thin, bright, a bit clangy, not a lot of complexity.
+
+Where is it made? This is where it gets interesting. Planet Z has widely been reported as being made outside the United States, and many owners and dealers have mentioned seeing markings or packaging that point to production in China. I want to be clear that I am treating that as reported, not confirmed by a public Zildjian statement that I can point you to. But it would not be surprising at all. At that price, building a stamped sheet cymbal in Massachusetts would make very little financial sense, and almost every major brand has gone to overseas production at the very bottom of their range.
+
+So for Planet Z, the honest summary is this. Confirmed, it is a Zildjian branded entry line. Confirmed, it is not the B twenty cast process of the pro lines. Reported, it is a brass type alloy, and reported, it is made overseas. And if you think about it for half a second, none of that should shock you. Nobody is building a pro cymbal for the price of a pizza.
+
+Next up, ZBT.
+
+ZBT is where a lot of us actually started. ZBT stands for Zildjian Bronze Technology, at least that is the explanation that has floated around for years, and the line sits a step above Planet Z. The cymbals in the ZBT range are made from what is usually described as B eight bronze. That means roughly ninety two percent copper and eight percent tin. Same family as the sheet bronze that Sabian uses in its B eight line and that Meinl uses in several of its entry series.
+
+And here is the critical difference between B eight and B twenty that nobody explains to beginners. B eight is almost always sheet bronze. You do not cast each cymbal individually. Instead, a mill produces big sheets of bronze, already rolled to a set thickness. The cymbal maker then cuts circles out of that sheet, presses them into shape, adds a bell, lathes them, maybe adds some machine hammering, and finishes them. It is much faster, much more consistent, and much cheaper than casting.
+
+So where are ZBT cymbals made? This is where I have to give you a nuanced answer. Over the years, ZBT has been described by Zildjian and by many dealers as being made in the United States, using sheet bronze that is sourced and then pressed and finished. Other owners and some retailers have reported that certain ZBT pieces, particularly in box sets during certain years, had origin markings pointing elsewhere. I do not have a confirmed, current, line by line breakdown from Zildjian that tells me which piece in which year came from which plant. So here is how I would frame it. The ZBT idea, from the start, was a Zildjian made sheet bronze line, and the company has presented it that way. But the sheet bronze itself comes from a mill, not from Zildjian pouring its own alloy, and there are reports from owners that some ZBT production may have been sourced. If the country of origin matters to you, the answer is simple. Turn the cymbal over, look for a stamp, and check the box.
+
+Now the I Family.
+
+The I Family is newer, and it is a bit of a different animal. When Zildjian introduced it, the company presented it as a B twenty line at an entry level price. That is a big deal, because historically B twenty was reserved for the more expensive series. Zildjian described the I Family as B twenty and, as I understand the company's own messaging, as being made in the USA. That is the important part. So here you have a cymbal that, according to the brand, uses the same alloy family as the pro stuff, made in the same country, at a price that sits well below the A series.
+
+So how do they do it? Remember those three levers. The alloy stays B twenty in this case, and the country stays the USA according to Zildjian. So the lever that moves is the process. The I Family uses a simpler, more automated finishing approach, fewer hand hammering steps, more uniform lathing, fewer models, fewer weights, fewer special finishes. When you simplify the process and the catalog, you can cut a lot of cost without changing the metal. That is a smart move, and honestly it is one of the better values in the Zildjian lineup for a lot of players.
+
+Then we have the S Family.
+
+The S Family sits above ZBT and below the A series. And this is where the alloy question gets really interesting. Zildjian has described the S Family as being made from B twelve bronze. That is roughly eighty eight percent copper and twelve percent tin. B twelve is not common across the industry, and Zildjian talked about it as a kind of middle ground between the brightness and affordability of B eight and the warmth and complexity people associate with B twenty. As far as I know from the company's own materials, the S Family is presented as being made in the USA, and like ZBT it is generally understood to be a sheet bronze line rather than individually cast.
+
+So the S Family is Zildjian's attempt to squeeze more character out of sheet bronze by bumping up the tin content. More tin generally means a cymbal that can be darker and more complex, but it also makes the metal harder to work, which is part of why higher tin alloys usually cost more. Whether you hear a big difference between B eight and B twelve in a blind test, that is something people argue about endlessly online. In my own experience on the bench, the S Family pieces I have handled do tend to sound a little smoother and less harsh than ZBT, but the step is not as dramatic as going from sheet to cast.
+
+So let me put the whole Zildjian picture together in plain language.
+
+At the very bottom, Planet Z, reportedly brass, reportedly made overseas, very cheap, very basic. Above that, ZBT, B eight sheet bronze, presented as a Zildjian made line, with some owner reports of sourced production over the years. Above that, S Family, B twelve sheet bronze, presented as made in the USA. And then the I Family, which is a bit of a curveball, B twenty, presented as made in the USA, with a simplified process. And above all of that, the A series, the K series, and the rest of the pro lines, cast B twenty out of Norwell.
+
+So when someone says every Zildjian is made in Massachusetts, they are oversimplifying. And when someone says cheap Zildjians are all made in China, they are also oversimplifying. The real answer depends on the line, the year, and in a couple of cases, honestly, on things that the brand has not spelled out publicly in a way I can confirm for you today.
+
+Now let's talk about the competition, because this is where it gets fun.
+
+Sabian is the other giant in the room, and for a lot of American drummers it is the natural comparison. Sabian is based in Meductic, New Brunswick, Canada, and that is confirmed and public. Their famous budget line has long been the SBR series, and above that the B eight X, and then the XSR series, which they present as a step up. Sabian has been fairly open that its entry lines use sheet bronze. The SBR, for example, has commonly been described as brass in some years and bronze in others, depending on the generation and the region, so again I am going to hedge. The B eight X is, as the name suggests, B eight sheet bronze. XSR has been described by Sabian as B twenty, and that is an interesting parallel to what Zildjian did with the I Family. Both companies basically realized at some point that younger players wanted to say they owned a B twenty cymbal, and both found a way to sell one at a lower price by simplifying the process.
+
+And then there is Meinl, the German brand that has grown enormously in the US over the last couple of decades. Meinl is based in Gutenstetten, Germany, and Meinl has been quite transparent about the fact that some of its lines are made in Germany and others are made in Turkey, and some of the entry lines are made elsewhere. Their HCS line, which is the classic beginner pack, is described by Meinl as brass. Their BCS line is B eight bronze. Their Classics Custom line is B ten bronze according to the company. And then their Byzance line is hand made B twenty from Turkey. So Meinl is actually a nice example of a brand that tends to print the alloy and the origin pretty clearly, and that makes my job easier.
+
+Now let's get to the part you actually care about. What does all of this mean for you?
+
+First, sound.
+
+The biggest single jump in sound is not from one brand to another. It is from brass to bronze. A brass cymbal tends to sound thin, clangy, and a little toy like, especially at louder volumes. It has a short, harsh decay, and it does not blend well with other instruments. A B eight sheet bronze cymbal is a real step up. It is brighter and more cutting, it has more sustain, and it actually sounds like a cymbal in a mix. That is why ZBT, B eight X, and BCS are so popular for rock and for beginners who play loud. They cut through.
+
+The next jump, from sheet bronze to cast B twenty, is real but it is more subtle. Cast B twenty cymbals tend to be warmer, more complex, with more of that washy, shimmering decay that people describe as musical. But here is the thing. A cheap, simplified B twenty cymbal like the I Family or XSR is not going to sound exactly like a hand hammered pro cymbal. It is going to land somewhere in between. Some players will hear a big difference from B eight. Some will not hear much at all, especially once you are in a loud room with a bass player and a guitar amp.
+
+So my practical advice on sound is this. If you are starting out and you are going to play loud rock or pop in a garage, a B eight sheet line is honestly fine. If you are going to record, play jazz, play in church with a soft mix, or play anything where the cymbals are really exposed, it is worth stretching for at least the simplified B twenty lines, and ideally saving up for a pro cast cymbal for your ride.
+
+Second, cracking.
+
+This is the one I see the most on my bench, and this is where the cheap cymbal conversation gets real. Every cymbal can crack. I have seen expensive hand hammered cymbals crack, and I have seen beat up box set cymbals survive years of abuse. But there are patterns.
+
+Brass cymbals, like Planet Z or other brass entry lines, are generally softer and can bend or warp more easily. They tend to keyhole, which means the center hole wears into an oval, and they can develop dents and edge damage if they are hit hard. Sheet bronze cymbals, like ZBT, are tougher. They often handle a lot of abuse. But because sheet cymbals are pressed from a uniform sheet, they can sometimes crack in a more sudden way when they do fail, often starting from the edge or near the bell. Cast B twenty cymbals tend to be more flexible and more forgiving, which is one reason they are often described as more durable over the long run. But again, technique matters far more than the alloy.
+
+And honestly, that is the biggest point I want to make. The single most common cause of cracked cymbals that I see is not the brand or the alloy. It is how the cymbal is set up and how it is played. Cymbals tightened down too hard on the stand, with no felt, or with metal touching metal around the hole. Cymbals angled flat and hit straight into the edge with the shoulder of the stick, over and over, as hard as possible. Cymbals that are bigger and thinner than the player needs for the music they play. If you fix those three things, your cheap cymbals will last a lot longer, and so will your expensive ones.
+
+So my practical advice on cracking is this. Use felts and a sleeve on every cymbal stand. Do not crank the wingnut down. Let the cymbal move. Angle your crashes slightly toward you, and hit with a glancing blow instead of driving straight through. And if you are a hard hitter, choose medium or heavier weights instead of the thinnest crashes. That alone will save you more money than any brand decision.
+
+Third, resale.
+
+This is where the country of origin and the alloy really matter, and this is where a lot of beginners lose money without realizing it.
+
+The resale market for cymbals is very simple. Pro cast B twenty cymbals from the big brands hold their value well. A clean A Custom, K series, HHX, AAX, or Byzance can often sell used for a solid portion of what you paid, sometimes more if it is a discontinued or particularly loved model. Mid tier lines like the S Family, B eight X, or Classics Custom tend to resell for a much smaller amount. And the bottom tier, Planet Z, SBR, HCS, and similar brass packs, often resell for very little. Sometimes you will see a full box set go for less than the price of one decent used crash.
+
+Why? Because the used market knows the ladder. Experienced buyers know that a brass box set is a starter product, and they know that most players will eventually want to upgrade. So the demand for used entry cymbals is low, and the supply is huge, because every kid who quit drums has a set sitting in a closet.
+
+So my practical advice on resale is this. If you are buying cymbals as an investment in your playing, and you already know you are going to stick with drums, it can actually be cheaper in the long run to buy one or two used pro cast cymbals than to buy a brand new budget pack. A used A Custom crash and a used ride can often be found for a reasonable price, and if you ever sell them, you will get a good chunk of your money back. A brand new budget pack, on the other hand, starts losing value the moment you open the box.
+
+Now, let me give you my overall verdict, because I know some of you skipped straight to this part.
+
+Are Zildjian's cheap cymbals made in Massachusetts? Some of them, according to Zildjian, yes. The I Family and S Family, for example, are presented by the company as made in the USA. ZBT has long been presented as a Zildjian made sheet bronze line, with some reports of sourced production over the years. Planet Z is widely reported as being made overseas, though I cannot point you to a public confirmation from the brand about every year of production. And all of the sheet bronze lines rely on sheet metal that is rolled by a mill, which is completely normal across the industry.
+
+Does it matter? For your sound, the alloy and the process matter far more than the country. A brass cymbal from anywhere is going to sound like a brass cymbal. A B eight sheet cymbal from Massachusetts and a B eight sheet cymbal from Germany or Canada are going to sound more alike than different. And a cast B twenty cymbal is going to sound different from both, no matter where it was made.
+
+For cracking, technique and setup matter more than anything else, but brass tends to be the most fragile over the long term.
+
+And for resale, the higher up the ladder you go, the more value you keep.
+
+So here is what I would actually tell a friend who walked into my shop today. If you are a total beginner and your budget is tight, skip the brass packs if you can. Look for at least a B eight sheet bronze line. ZBT, B eight X, or BCS are all reasonable options. If you have a little more money, look at the simplified B twenty lines like the I Family or XSR. And if you know you are in this for the long haul, consider buying a single used pro cast ride and a single used pro crash, and building from there. You will probably end up spending a similar amount of money over time, and you will end up with cymbals you actually want to keep.
+
+If this kind of breakdown is useful to you, consider subscribing, because we are going to keep doing this for every major brand. Who really makes the drums, who really makes the hardware, who really makes the cymbals, and what any of it actually means for you when you are standing in the store with your wallet in your hand.
+
+Thanks for watching, play what you love, and I will see you in the next one.
